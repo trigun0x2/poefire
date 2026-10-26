@@ -1,0 +1,26 @@
+2024/07/27 20:00:00 ***** LOG FILE OPENING *****
+2024/07/27 20:00:01 1000 2caa1679 [INFO Client 4242] [ENGINE] Init
+2024/07/27 20:00:10 10000 cdb3d1e2 [DEBUG Client 4242] Generating level 1 area "HideoutFelled" with seed 1
+2024/07/27 20:00:12 12000 cffb0719 [INFO Client 4242] : You have entered Felled Hideout.
+2024/07/27 20:01:00 60000 cdb3d1e2 [DEBUG Client 4242] Generating level 83 area "MapWorldsStrand" with seed 2918734501
+2024/07/27 20:01:05 65000 cffb0719 [INFO Client 4242] : You have entered Strand.
+2024/07/27 20:03:00 180000 cffb0719 [INFO Client 4242] : TestWitch has been slain.
+2024/07/27 20:04:00 240000 cdb3d1e2 [DEBUG Client 4242] Generating level 83 area "MapSideArea_Vaal" with seed 77
+2024/07/27 20:04:03 243000 cffb0719 [INFO Client 4242] : You have entered Vaal Side Area.
+2024/07/27 20:05:00 300000 cdb3d1e2 [DEBUG Client 4242] Generating level 83 area "MapWorldsStrand" with seed 2918734501
+2024/07/27 20:05:03 303000 cffb0719 [INFO Client 4242] : You have entered Strand.
+2024/07/27 20:06:00 360000 cdb3d1e2 [DEBUG Client 4242] Generating level 1 area "HideoutFelled" with seed 1
+2024/07/27 20:06:02 362000 cffb0719 [INFO Client 4242] : You have entered Felled Hideout.
+2024/07/27 20:06:30 390000 a1b2c3d4 [INFO Client 4242] @From <TRADE> Buyer_One: Hi, I would like to buy your Mageblood
+2024/07/27 20:06:40 400000 a1b2c3d4 [INFO Client 4242] @To Buyer_One: sure, inviting
+2024/07/27 20:07:00 420000 cffb0719 [INFO Client 4242] : AFK mode is now ON. Autoreply "This player is AFK."
+2024/07/27 20:08:00 480000 cffb0719 [INFO Client 4242] : AFK mode is now OFF.
+2024/07/27 20:08:30 510000 cffb0719 [INFO Client 4242] : TestWitch (Witch) is now level 92
+2024/07/27 20:09:00 540000 cdb3d1e2 [DEBUG Client 4242] Generating level 83 area "MapWorldsStrand" with seed 2918734501
+2024/07/27 20:09:02 542000 cffb0719 [INFO Client 4242] : You have entered Strand.
+2024/07/27 20:09:58 598000 cdb3d1e2 [DEBUG Client 4242] Generating level 1 area "HideoutFelled" with seed 1
+2024/07/27 20:10:00 600000 cffb0719 [INFO Client 4242] : You have entered Felled Hideout.
+2024/07/27 20:10:00 600000 cdb3d1e2 [DEBUG Client 4242] Generating level 83 area "MapWorldsCemetery" with seed 1234
+2024/07/27 20:10:05 605000 cffb0719 [INFO Client 4242] : You have entered Cemetery.
+2024/07/27 20:14:00 840000 cdb3d1e2 [DEBUG Client 4242] Generating level 1 area "HideoutFelled" with seed 1
+2024/07/27 20:14:02 842000 cffb0719 [INFO Client 4242] : You have entered Felled Hideout.
