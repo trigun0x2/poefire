@@ -8,6 +8,13 @@ Example `config.toml`:
     extra_map_prefixes = ["Heist"]
     extra_town_ids = []
     excluded_area_ids = []
+
+    # Loot tracking (official API)
+    oauth_client_id = "myregisteredclient"
+    contact = "me@example.com"           # goes into the User-Agent, as GGG requires
+    league = "Settlers"
+    character = "MyWitch"                # default: the account's current character
+    stash_tabs = ["Dump", "Currency"]    # names or ids of tabs to include in snapshots
 """
 
 from __future__ import annotations
@@ -15,10 +22,11 @@ from __future__ import annotations
 import os
 import sys
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from poefire.api.oauth import DEFAULT_REDIRECT_URI
 from poefire.zones import ZoneRules
 
 WINDOWS_LOG_CANDIDATES: tuple[Path, ...] = (
@@ -45,6 +53,17 @@ class Config:
     extra_map_prefixes: list[str] = field(default_factory=list)
     extra_town_ids: list[str] = field(default_factory=list)
     excluded_area_ids: list[str] = field(default_factory=list)
+    # --- loot tracking via the official API ---
+    oauth_client_id: str | None = None
+    oauth_redirect_uri: str = DEFAULT_REDIRECT_URI
+    contact: str | None = None
+    token_path: Path = field(default_factory=lambda: default_data_dir() / "token.json")
+    league: str | None = None
+    realm: str = "pc"
+    character: str | None = None
+    stash_tabs: list[str] = field(default_factory=list)
+    snapshot_delay: float = 3.0
+    snapshot_on_run_start: bool = True
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
@@ -57,15 +76,22 @@ class Config:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Config:
         cfg = cls()
-        if "log_path" in d:
-            cfg.log_path = Path(d["log_path"])
-        if "db_path" in d:
-            cfg.db_path = Path(d["db_path"])
-        if "poll_interval" in d:
-            cfg.poll_interval = float(d["poll_interval"])
-        for key in ("characters", "extra_map_prefixes", "extra_town_ids", "excluded_area_ids"):
-            if key in d:
-                setattr(cfg, key, [str(x) for x in d[key]])
+        for f in fields(cls):
+            if f.name not in d:
+                continue
+            value = d[f.name]
+            current = getattr(cfg, f.name)
+            if f.name.endswith("_path"):
+                value = Path(value)
+            elif isinstance(current, list):
+                value = [str(x) for x in value]
+            elif isinstance(current, bool):
+                value = bool(value)
+            elif isinstance(current, float):
+                value = float(value)
+            else:
+                value = str(value)
+            setattr(cfg, f.name, value)
         return cfg
 
     def zone_rules(self) -> ZoneRules:

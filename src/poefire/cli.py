@@ -6,11 +6,17 @@ import argparse
 import signal
 import sys
 import threading
+import webbrowser
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
+from poefire import wiring
+from poefire.api.client import ApiError
+from poefire.api.oauth import NotLoggedInError, OAuthError, TokenStore, login
 from poefire.config import Config
+from poefire.loot.diff import ItemDelta
+from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.service import TrackerService
 from poefire.store import Store
 from poefire.tracker import Notice, Run, RunNotice, SafeZoneEntered
@@ -62,20 +68,135 @@ def _config(args: argparse.Namespace) -> Config:
     return cfg
 
 
+def _print_deltas(deltas: Sequence[ItemDelta], indent: str = "  ") -> None:
+    if not deltas:
+        print(f"{indent}(no change)")
+    for d in deltas:
+        print(f"{indent}{d.quantity:+6d}  {d.name}")
+
+
+def _print_loot(r: LootResult) -> None:
+    if not r.complete:
+        print(f"[    loot] snapshot failed: {r.error}", flush=True)
+    elif r.baseline:
+        print(f"[    loot] baseline snapshot taken ({r.trigger.value})", flush=True)
+    else:
+        print(f"[    loot] {r.kind} delta ({r.trigger.value}):", flush=True)
+        _print_deltas(r.deltas)
+
+
+def _loot_recorder(cfg: Config) -> LootRecorder | None:
+    """None (with a message) when loot tracking isn't set up; run tracking still works."""
+    try:
+        poe = wiring.api(cfg)
+        if not poe.tokens.logged_in:
+            print("loot tracking off: not logged in (run `poefire login`)")
+            return None
+        return wiring.recorder(cfg, poe)
+    except wiring.ConfigError as e:
+        print(f"loot tracking off: {e}")
+        return None
+
+
 def cmd_track(args: argparse.Namespace) -> int:
     cfg = _config(args)
     log_path = cfg.resolve_log_path()
     if log_path is None:
         print("Client.txt not found; pass --log or set log_path in config.toml", file=sys.stderr)
         return 2
+    rec = _loot_recorder(cfg)
     with Store(cfg.db_path) as store:
         service = TrackerService(store, log_path, cfg.zone_rules(), cfg.characters)
         service.handlers.append(_print_notice)
+        if rec is not None:
+            rec.handlers.append(_print_loot)
+            service.handlers.append(rec.on_notice)
+            rec.start()
+            print("loot tracking on: snapshots on map entry and on return to hideout")
         service.start()
         print(f"tailing {log_path} -> {cfg.db_path} (Ctrl+C to stop)", flush=True)
         stop = threading.Event()
         signal.signal(signal.SIGINT, lambda *_: stop.set())
-        service.run_forever(stop, cfg.poll_interval)
+        try:
+            service.run_forever(stop, cfg.poll_interval)
+        finally:
+            if rec is not None:
+                rec.stop()
+    return 0
+
+
+def cmd_login(args: argparse.Namespace) -> int:
+    cfg = _config(args)
+    try:
+        tokens = wiring.token_manager(cfg)
+
+        def open_browser(url: str) -> None:
+            print(f"Opening your browser to log in. If it doesn't open, visit:\n{url}")
+            webbrowser.open(url)
+
+        result = login(tokens.oauth, open_browser)
+    except (wiring.ConfigError, OAuthError) as e:
+        print(f"login failed: {e}", file=sys.stderr)
+        return 1
+    tokens.set_tokens(result)
+    print(f"logged in as {result.username or '?'} (scopes: {result.scope})")
+    return 0
+
+
+def cmd_logout(args: argparse.Namespace) -> int:
+    cfg = _config(args)
+    TokenStore(cfg.token_path).clear()
+    print("logged out (local token deleted)")
+    return 0
+
+
+def cmd_tabs(args: argparse.Namespace) -> int:
+    cfg = _config(args)
+    try:
+        poe = wiring.api(cfg)
+        if not cfg.league:
+            raise wiring.ConfigError("set league in config.toml")
+        tabs = poe.list_stashes(cfg.league)
+    except (wiring.ConfigError, NotLoggedInError, ApiError) as e:
+        print(e, file=sys.stderr)
+        return 1
+
+    def show(tab: dict[str, object], depth: int = 0) -> None:
+        print(f"{'  ' * depth}{tab.get('name', '')!s:<30} {tab.get('type', '')!s:<20} {tab['id']}")
+        for child in tab.get("children") or []:  # type: ignore[attr-defined]
+            show(child, depth + 1)
+
+    for tab in tabs:
+        show(tab)
+    return 0
+
+
+def cmd_snapshot(args: argparse.Namespace) -> int:
+    cfg = _config(args)
+    try:
+        poe = wiring.api(cfg)
+        with Store(cfg.db_path) as store:
+            rec = LootRecorder(wiring.snapshotter(cfg, poe), lambda: store)
+            result = rec.record(Trigger.MANUAL)
+    except (wiring.ConfigError, NotLoggedInError) as e:
+        print(e, file=sys.stderr)
+        return 1
+    _print_loot(result)
+    return 0 if result.complete else 1
+
+
+def cmd_loot(args: argparse.Namespace) -> int:
+    cfg = _config(args)
+    with Store(cfg.db_path) as store:
+        runs = [store.get_run(args.run)] if args.run else store.list_runs(limit=args.limit)
+        for run in reversed([r for r in runs if r is not None]):
+            print(_fmt_run(run))
+            between = store.run_loot(run.id, kind="between")
+            if between:
+                print("  before the run (hideout):")
+                _print_deltas(between, "    ")
+            print("  loot:")
+            _print_deltas(store.run_loot(run.id), "    ")
     return 0
 
 
@@ -129,6 +250,19 @@ def build_parser() -> argparse.ArgumentParser:
     lp.set_defaults(fn=cmd_runs)
 
     sub.add_parser("paths", help="show resolved paths").set_defaults(fn=cmd_paths)
+
+    sub.add_parser("login", help="log in with your PoE account (OAuth)").set_defaults(fn=cmd_login)
+    sub.add_parser("logout", help="forget the saved token").set_defaults(fn=cmd_logout)
+    sub.add_parser("tabs", help="list stash tabs in the configured league").set_defaults(
+        fn=cmd_tabs
+    )
+    sub.add_parser("snapshot", help="take a snapshot now and show the change").set_defaults(
+        fn=cmd_snapshot
+    )
+    lt = sub.add_parser("loot", help="show loot per run")
+    lt.add_argument("--run", help="run id (default: recent runs)")
+    lt.add_argument("--limit", type=int, default=10)
+    lt.set_defaults(fn=cmd_loot)
     return p
 
 

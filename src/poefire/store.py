@@ -11,11 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from poefire.events import LogEvent, event_kind, event_payload_json
+from poefire.loot.diff import ItemDelta
+from poefire.loot.items import ItemEntry
+from poefire.loot.snapshot import Snapshot
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-_SCHEMA = """
+_SCHEMA_V1 = """
 CREATE TABLE runs (
     id             TEXT PRIMARY KEY,
     area_id        TEXT NOT NULL,
@@ -54,6 +57,49 @@ CREATE TABLE kv (
 );
 """
 
+_SCHEMA_V2 = """
+CREATE TABLE snapshots (
+    id         INTEGER PRIMARY KEY,
+    taken_at   TEXT NOT NULL,
+    trigger    TEXT NOT NULL,
+    run_id     TEXT,
+    complete   INTEGER NOT NULL,
+    item_count INTEGER NOT NULL,
+    error      TEXT
+);
+
+-- Only the latest complete snapshots keep their items (needed for the next diff).
+CREATE TABLE snapshot_items (
+    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
+    item_id     TEXT,
+    key         TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    frame_type  INTEGER NOT NULL,
+    quantity    INTEGER NOT NULL,
+    stackable   INTEGER NOT NULL,
+    source      TEXT NOT NULL,
+    raw         TEXT NOT NULL
+);
+CREATE INDEX snapshot_items_snapshot ON snapshot_items(snapshot_id);
+
+-- kind: 'run' (loot of run_id), 'between' (hideout activity before run_id), 'manual'
+CREATE TABLE loot (
+    id            INTEGER PRIMARY KEY,
+    run_id        TEXT,
+    kind          TEXT NOT NULL,
+    from_snapshot INTEGER NOT NULL REFERENCES snapshots(id),
+    to_snapshot   INTEGER NOT NULL REFERENCES snapshots(id),
+    key           TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    frame_type    INTEGER NOT NULL,
+    quantity      INTEGER NOT NULL,
+    sample        TEXT NOT NULL
+);
+CREATE INDEX loot_run ON loot(run_id);
+"""
+
+_MIGRATIONS = (_SCHEMA_V1, _SCHEMA_V2)  # index i upgrades schema version i -> i + 1
+
 
 def _dt(v: datetime | None) -> str | None:
     return v.isoformat() if v else None
@@ -73,15 +119,15 @@ class Store:
 
     def _migrate(self) -> None:
         (version,) = self.conn.execute("PRAGMA user_version").fetchone()
-        if version == 0:
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(f"database schema v{version} is newer than this app")
+        for v in range(version, SCHEMA_VERSION):
             # executescript() would commit implicitly; run statements inside one transaction.
             with self.transaction():
-                for stmt in _SCHEMA.split(";"):
+                for stmt in _MIGRATIONS[v].split(";"):
                     if stmt.strip():
                         self.conn.execute(stmt)
-                self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        elif version > SCHEMA_VERSION:
-            raise RuntimeError(f"database schema v{version} is newer than this app")
+                self.conn.execute(f"PRAGMA user_version = {v + 1}")
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
@@ -181,6 +227,93 @@ class Store:
             {"ts": r["ts"], "kind": r["kind"], "run_id": r["run_id"], **json.loads(r["payload"])}
             for r in rows
         ]
+
+    # --- snapshots and loot ---
+
+    def add_snapshot(self, snap: Snapshot, trigger: str, run_id: str | None) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO snapshots (taken_at, trigger, run_id, complete, item_count, error) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (snap.taken_at.isoformat(), trigger, run_id, int(snap.complete),
+             len(snap.items), snap.error),
+        )  # fmt: skip
+        snapshot_id = cur.lastrowid
+        assert snapshot_id is not None
+        if snap.complete:
+            self.conn.executemany(
+                "INSERT INTO snapshot_items (snapshot_id, item_id, key, name, frame_type, "
+                "quantity, stackable, source, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (snapshot_id, e.item_id, e.key, e.name, e.frame_type, e.quantity,
+                     int(e.stackable), e.source, json.dumps(e.raw, ensure_ascii=False))
+                    for e in snap.items
+                ],
+            )  # fmt: skip
+        return snapshot_id
+
+    def last_complete_snapshot(self) -> tuple[int, datetime, list[ItemEntry]] | None:
+        row = self.conn.execute(
+            "SELECT id, taken_at FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        items = [
+            ItemEntry(
+                item_id=r["item_id"], key=r["key"], name=r["name"], frame_type=r["frame_type"],
+                quantity=r["quantity"], stackable=bool(r["stackable"]), source=r["source"],
+                raw=json.loads(r["raw"]),
+            )
+            for r in self.conn.execute(
+                "SELECT * FROM snapshot_items WHERE snapshot_id = ?", (row["id"],)
+            )
+        ]  # fmt: skip
+        return row["id"], datetime.fromisoformat(row["taken_at"]), items
+
+    def prune_snapshot_items(self, keep: int = 2) -> None:
+        self.conn.execute(
+            "DELETE FROM snapshot_items WHERE snapshot_id NOT IN "
+            "(SELECT id FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT ?)",
+            (keep,),
+        )
+
+    def add_loot(
+        self,
+        run_id: str | None,
+        kind: str,
+        from_snapshot: int,
+        to_snapshot: int,
+        deltas: list[ItemDelta],
+    ) -> None:
+        self.conn.executemany(
+            "INSERT INTO loot (run_id, kind, from_snapshot, to_snapshot, key, name, frame_type, "
+            "quantity, sample) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (run_id, kind, from_snapshot, to_snapshot, d.key, d.name, d.frame_type,
+                 d.quantity, json.dumps(d.sample, ensure_ascii=False))
+                for d in deltas
+            ],
+        )  # fmt: skip
+
+    def run_loot(self, run_id: str, kind: str = "run") -> list[ItemDelta]:
+        """Net loot of a run, summed over all its hideout returns."""
+        rows = self.conn.execute(
+            "SELECT key, name, frame_type, SUM(quantity) AS quantity, "
+            "(SELECT l2.sample FROM loot l2 WHERE l2.run_id = loot.run_id AND l2.kind = loot.kind "
+            " AND l2.key = loot.key ORDER BY l2.id DESC LIMIT 1) AS sample "
+            "FROM loot WHERE run_id = ? AND kind = ? GROUP BY key HAVING SUM(quantity) != 0 "
+            "ORDER BY SUM(quantity) DESC, name",
+            (run_id, kind),
+        ).fetchall()
+        return [
+            ItemDelta(r["key"], r["name"], r["frame_type"], r["quantity"], json.loads(r["sample"]))
+            for r in rows
+        ]
+
+    def list_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM snapshots ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # --- key/value (log cursor, tracker state) ---
 

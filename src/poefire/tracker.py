@@ -108,6 +108,7 @@ class SafeZoneEntered:
     zone: str
     kind: ZoneKind
     run_id: str | None
+    left_run: bool = False  # came straight from the run (not e.g. town -> hideout)
 
 
 type Notice = RunNotice | SafeZoneEntered
@@ -199,8 +200,9 @@ class RunTracker:
                 self._close_segment(run, e.ts)
                 run.status = RunStatus.PAUSED
                 out.append(self._notice(NoticeKind.PAUSED, run))
+            left_run = self.state.in_run and run is not None
             self.state.in_run = False
-            out.append(SafeZoneEntered(e.ts, e.zone, area.kind, run.id if run else None))
+            out.append(SafeZoneEntered(e.ts, e.zone, area.kind, run.id if run else None, left_run))
         elif run is not None and (self.state.in_run or run.is_instance(area.area_id, area.seed)):
             self._resume(run, e.ts, out)  # back into the run, or a side area of it
         elif area.kind is ZoneKind.MAP:

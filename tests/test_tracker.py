@@ -192,6 +192,21 @@ def test_safe_zone_notice_carries_run_id() -> None:
     t = tracker()
     safe = [n for e in s.events for n in t.handle(e) if isinstance(n, SafeZoneEntered)]
     assert len(safe) == 1 and safe[0].run_id == "run1" and safe[0].zone == "Felled Hideout"
+    assert safe[0].left_run
+
+
+def test_safe_zone_from_town_did_not_leave_run() -> None:
+    s = (
+        Script()
+        .go("MapWorldsStrand", "Strand", 111).wait(5)
+        .hideout()
+        .go("1_1_town", "Lioneye's Watch", 2, level=1)
+        .hideout()
+    )  # fmt: skip
+    t = tracker()
+    safe = [n for e in s.events for n in t.handle(e) if isinstance(n, SafeZoneEntered)]
+    assert [n.left_run for n in safe] == [True, False, False]
+    assert all(n.run_id == "run1" for n in safe)
 
 
 def test_zone_entered_without_generation_uses_name_fallback() -> None:

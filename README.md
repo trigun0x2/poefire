@@ -9,7 +9,7 @@ official OAuth API. No memory reading, packet sniffing or input automation.
 ## Status
 
 - [x] Phase 1: log parser and map-run tracker (CLI)
-- [ ] Phase 2: loot via stash/inventory snapshots (OAuth API)
+- [x] Phase 2: loot via stash/inventory snapshots (OAuth API)
 - [ ] Phase 3: poe.ninja pricing and web UI
 
 ## Usage
@@ -22,6 +22,10 @@ uv run poefire paths                  # show the resolved Client.txt and databas
 uv run poefire track                  # tail Client.txt live and record runs
 uv run poefire runs                   # list recorded runs
 uv run poefire replay path/to/Client.txt   # parse a whole log into a throwaway DB, list runs
+uv run poefire login                  # connect your PoE account (browser, OAuth)
+uv run poefire tabs                   # list stash tabs, to choose which ones to watch
+uv run poefire snapshot               # take a snapshot now and show what changed
+uv run poefire loot                   # loot per recent run
 ```
 
 `--log`, `--db` and `--config` work with every command. Without `--log`, the tracker uses
@@ -39,7 +43,61 @@ characters = ["MyWitch"]      # only count these characters' deaths (empty = cou
 extra_map_prefixes = []       # extra area-ID prefixes that start a run, e.g. ["Heist"]
 extra_town_ids = []           # extra area IDs that pause a run
 excluded_area_ids = []        # IDs matching a map prefix that should not start a run
+
+# Loot tracking
+oauth_client_id = "yourclientid"     # from registering an app with GGG
+contact = "you@example.com"          # required by GGG in the User-Agent
+league = "Settlers"
+character = "MyWitch"                # default: the account's current character in the league
+stash_tabs = ["Dump", "Currency"]    # tab names or ids to include in snapshots
+snapshot_delay = 3.0                 # seconds to wait after reaching the hideout
+snapshot_on_run_start = true         # also snapshot on map entry (see below)
+# realm = "pc"                       # or "xbox" / "sony"
+# oauth_redirect_uri = "http://127.0.0.1:8462/oauth/callback"   # must match your app
 ```
+
+## Loot tracking
+
+poefire uses GGG's official API with OAuth 2.1 (authorization code + PKCE, as a public client)
+and only the `account:stashes` and `account:characters` scopes.
+
+**Setup.** The API requires an application registered with GGG (email
+`oauth@grindinggear.com`; registration can be paused at times). Register it as a public
+client with the redirect URI above, put the client ID in `config.toml`, then run
+`poefire login`. The token is stored in `token.json` next to the database, readable only by
+you. If unused for about a week, the refresh token expires and you need to log in again.
+
+**How it works.** Each snapshot holds your character's inventory plus the watched stash tabs.
+Equipped gear is not included. Snapshots form one chain, and each change is labelled by what
+triggered the snapshot that closed it:
+
+| Snapshot taken when | Change since the previous snapshot is |
+| --- | --- |
+| you return to hideout/town from a map | that map's **loot** |
+| you enter a new map | hideout activity before it (trades, crafting, the map used) |
+| `poefire snapshot` | a manual change, not attached to a run |
+
+The snapshot on map entry keeps trading and crafting out of the loot figures. Several hideout
+trips during one map add up into that map's loot.
+
+Stackable items are compared by total quantity per item kind, so stack merges and splits don't
+count as changes. Other items are compared by their unique item id, so moving loot from your
+inventory into a watched tab nets to zero.
+
+**Caveats**
+
+- Watch every tab your loot lands in, including ones that Ctrl+click affinities send it to.
+  Moving an item into an unwatched tab counts as losing it.
+- Every watched tab costs one API request per snapshot. Special tabs (map, unique) cost one
+  request per section.
+- The API shows current state only. Map runs replayed from the log after a restart get no
+  snapshots, and a snapshot more than 2 hours after the previous one starts a fresh baseline.
+- A failed snapshot (rate limit, network) is skipped. The next good snapshot then covers both
+  periods.
+
+**Rate limits** are read from the `X-Rate-Limit-*` headers on every response, never
+hard-coded. poefire keeps one hit of headroom under each window, counts hits made by other
+tools on the same account, and on HTTP 429 waits for `Retry-After`.
 
 ## Design
 
@@ -53,6 +111,9 @@ src/poefire/
   store.py    SQLite persistence
   service.py  tailer -> parser -> tracker -> store
   config.py   TOML config and default paths
+  api/        OAuth (PKCE + loopback redirect), rate limiter, API client
+  loot/       item identity, snapshots, diffing, run attribution (recorder)
+  wiring.py   builds API/loot objects from the config
   cli.py      `poefire` command
 ```
 
@@ -86,7 +147,9 @@ Every event carries `ts`, the client's local time as logged. System messages mus
 ### Persistence
 
 SQLite tables: `runs`, `run_segments` (active intervals), `events` (every parsed event, tagged
-with the run it happened in), and `kv` (log cursor and tracker state).
+with the run it happened in), `kv` (log cursor and tracker state), `snapshots` and
+`snapshot_items` (only the latest snapshots keep their items), and `loot` (per-item changes,
+tagged with run and kind).
 
 Each poll commits its events, run updates, byte offset and tracker state in one transaction.
 On restart, the tracker resumes from the saved offset if the log file is unchanged, so
