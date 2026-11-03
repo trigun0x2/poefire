@@ -359,6 +359,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        argv = ["ui", "--window"]  # double-clicked: open the app
     args = build_parser().parse_args(argv)
     code: int = args.fn(args)
     return code

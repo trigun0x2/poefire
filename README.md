@@ -12,6 +12,19 @@ official OAuth API. No memory reading, packet sniffing or input automation.
 - [x] Phase 2: loot via stash/inventory snapshots (OAuth API)
 - [x] Phase 3: poe.ninja pricing and web UI
 
+## Windows download
+
+Download `poefire-<version>-windows-x64.zip` from the
+[Releases](https://github.com/trigun0x2/poefire/releases) page and unzip it anywhere.
+
+- `poefire-ui.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\poefire.log`.
+- `poefire.exe` is the command line, for example `poefire.exe set-session` or `poefire.exe runs`.
+  Run with no arguments, it opens the window too.
+
+The build isn't code-signed, so Windows SmartScreen may warn on first launch ("More info" →
+"Run anyway"). The window uses Microsoft Edge WebView2, which Windows 10 and 11 normally have.
+Without it, poefire opens in your browser instead.
+
 ## Usage
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
@@ -242,6 +255,21 @@ Windows, a held handle would block the user from deleting or renaming `Client.tx
 is one `stat()` call. Offsets always land on line boundaries, and a partial last line waits for
 its newline. A smaller file or a new file identity means the log was truncated or replaced, and
 reading restarts from byte 0.
+
+## Releases
+
+`.github/workflows/ci.yml` runs lint, type checks and tests on Windows and Linux for every push
+and pull request.
+
+`.github/workflows/release.yml` builds the Windows zip. It runs the tests, builds a one-folder
+app with PyInstaller (`packaging/windows/poefire.spec`), starts the built exe to check it
+serves the UI, and uploads the zip with its SHA-256 checksum. To publish a release:
+
+1. Set `__version__` in `src/poefire/__init__.py` and `version` in `pyproject.toml`.
+2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+
+The workflow refuses a tag that doesn't match `__version__`. Running it manually from the
+Actions tab builds the zip as a workflow artifact without publishing a release.
 
 ## Development
 
