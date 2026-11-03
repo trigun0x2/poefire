@@ -1,8 +1,9 @@
 name: Windows release
 
 # Public releases come from `master`: every push there publishes v<major>.<minor+1>.0, counting
-# from the latest public tag (the first one uses __version__ from the code), marked as GitHub's
-# "latest" release. The app's auto-updater installs these.
+# from the latest public tag, marked as GitHub's "latest" release. The app's auto-updater installs
+# these. To pick a version by hand (a patch release, or 1.0), set __version__ in
+# src/poefire/__init__.py higher than that; it is used when it's the higher one.
 #
 # Pushes to `dev` replace the one rolling pre-release, tagged `beta` (its zip is named after the
 # build's version, v<next>-dev.<run number>), so the Releases page shows a single beta entry.
@@ -59,11 +60,17 @@ jobs:
         run: |
           # latest *public* release tag (pre-releases have a "-dev." suffix)
           latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -- '-' | head -n 1 || true)
+          code=$(uv run python -c "import poefire; print(poefire.__version__)")
           if [[ -z "$latest" ]]; then
-            next=$(uv run python -c "import poefire; print(poefire.__version__)")
+            next="$code"
           else
+            # by default the minor version goes up; the major version never changes on its own
             IFS=. read -r major minor _ <<< "${latest#v}"
             next="$major.$((minor + 1)).0"
+            # a higher version set in src/poefire/__init__.py wins (to pick a version by hand)
+            if [[ "$code" != "$next" && "$(printf '%s\n%s\n' "$next" "$code" | sort -V | tail -n 1)" == "$code" ]]; then
+              next="$code"
+            fi
           fi
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "master" ]]; then
             channel=public

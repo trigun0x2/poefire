@@ -1,6 +1,6 @@
 [project]
 name = "poefire"
-version = "0.1.0"
+version = "0.9.1"
 description = "ToS-safe Path of Exile farming tracker (Client.txt + official API)"
 readme = "README.md"
 requires-python = ">=3.12"
