@@ -104,6 +104,8 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "chaos_per_divine": cpd,
             "runs": [r.to_json(cpd) for r in rows],
             "session": views.session_summary(session, cpd, now),
+            "recent": views.recent_maps(rows, cpd),
+            "last_map": views.last_map(rows, cpd),
             "session_run_ids": [r.run.id for r in session],
         }
 

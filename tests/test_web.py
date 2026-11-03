@@ -83,11 +83,14 @@ def test_runs_and_session(app: TestClient) -> None:
     assert names == ["Spider Lair", "Mesa", "Fungal Hollow", "Cells", "Arachnid Nest"]
     mesa = data["runs"][1]
     assert mesa["loot_tracked"] and mesa["chaos"] == 220.0 and mesa["divine"] == 1.1
-    assert mesa["chaos_per_hour"] == round(220 * 3600 / 115)
     assert data["runs"][2]["loot_tracked"] is False and data["runs"][2]["chaos"] is None
     s = data["session"]
     assert s["runs"] == 5 and s["deaths"] == 4 and s["loot_tracked_runs"] == 1
     assert s["chaos"] == 220.0 and s["best_run"]["map_name"] == "Mesa"
+    # the map in progress (Spider Lair) isn't "last map" and isn't averaged
+    assert data["last_map"]["map_name"] == "Mesa" and data["last_map"]["chaos"] == 220.0
+    assert data["recent"] == {"maps": 1, "of": 10, "avg_chaos": 220.0, "avg_divine": 1.1,
+                              "avg_seconds": 115, "avg_deaths": 0.0}  # fmt: skip
 
 
 def test_run_detail(app: TestClient) -> None:
@@ -149,3 +152,28 @@ def test_current_session_splits_on_gap(tmp_path: Path) -> None:
     assert summary["runs"] == 2 and summary["active_seconds"] == 600
     assert summary["wall_seconds"] == 15 * 60
     assert summary["chaos"] is None  # no loot data, not zero
+
+
+def test_recent_maps_uses_last_ten_tracked_finished(tmp_path: Path) -> None:
+    t = datetime(2026, 11, 1, 12)
+    runs = [mkrun(f"r{i}", t - timedelta(minutes=10 * i), 4) for i in range(14)]  # newest first
+    runs[0].status = RunStatus.PAUSED  # in progress: excluded
+    with Store(tmp_path / "db") as s, s.transaction():
+        for i, r in enumerate(runs):
+            s.upsert_run(r)
+            if i == 3:
+                continue  # untracked: excluded
+            a = s.add_snapshot(Snapshot(t), "run_start", r.id)
+            b = s.add_snapshot(Snapshot(t), "run_return", r.id)
+            s.add_loot(r.id, "run", a, b, [ItemDelta(
+                "c", "Chaos Orb", 5, i, {"typeLine": "Chaos Orb", "frameType": 5})])  # fmt: skip
+    with Store(tmp_path / "db") as s:
+        rows = views.run_rows(s, PriceBook([]), runs, t)
+    recent = views.recent_maps(rows, 100.0)
+    used = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11]  # skips r0 (in progress) and r3 (untracked)
+    assert recent["maps"] == 10
+    assert recent["avg_chaos"] == sum(used) / 10
+    assert recent["avg_divine"] == round(sum(used) / 10 / 100, 2)
+    assert recent["avg_seconds"] == 240
+    assert views.last_map(rows, None)["id"] == "r1"  # type: ignore[index]
+    assert views.recent_maps(rows[:1], None) == {"maps": 0, "of": 10}

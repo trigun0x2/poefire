@@ -84,7 +84,11 @@ function renderStatus() {
     st.className = `status ${run.status}`;
     st.textContent = run.status === "active" ? "In map" : run.status === "paused" ? "Paused · hideout" : "Finished";
     $("cur-deaths").textContent = run.deaths;
-    $("cur-loot").innerHTML = run.loot_tracked ? `${chaos(run.chaos)} ${divine(run.divine)}` : '<span class="dim">after hideout</span>';
+    // Loot is only known from snapshots taken in the hideout, never live inside a map.
+    // (In a map, a value only exists if you already dumped loot in the hideout mid-map.)
+    $("cur-loot").innerHTML = !run.loot_tracked
+      ? `<span class="dim">${run.status === "active" ? "counted in hideout" : "—"}</span>`
+      : `${chaos(run.chaos)} ${divine(run.divine)}${run.status === "active" ? ' <span class="dim">so far</span>' : ""}`;
     $("cur-zone").textContent = s.zone ? s.zone.name : "—";
   }
   tickTimer();
@@ -104,8 +108,19 @@ function tile(label, value, sub = "", hero = false) {
     `<div class="value">${value}</div><div class="sub">${sub}</div></div>`;
 }
 
+function renderLastMap() {
+  const m = runsData.last_map;
+  $("last-map").hidden = !m;
+  if (!m) return;
+  $("last-name").textContent = m.map_name;
+  $("last-time").textContent = duration(m.active_seconds);
+  $("last-deaths").innerHTML = m.deaths ? `${m.deaths} death${m.deaths === 1 ? "" : "s"}` : '<span class="dim">no deaths</span>';
+  $("last-loot").innerHTML = m.loot_tracked ? `${chaos(m.chaos)} ${divine(m.divine)}` : '<span class="dim">no loot data</span>';
+}
+
 function renderSession() {
   const s = runsData.session;
+  const r = runsData.recent;
   if (!s.runs) {
     $("tiles").innerHTML = tile("Runs", "0", "Start mapping to see stats");
     $("session-since").textContent = "";
@@ -114,10 +129,12 @@ function renderSession() {
   $("session-since").textContent = `· since ${timeOf(s.started_at)}`;
   const tracked = s.loot_tracked_runs;
   const lootSub = tracked < s.runs ? `${tracked} of ${s.runs} runs with loot data` : "net loot value";
+  const recentSub = !r.maps ? "no maps with loot data yet"
+    : (r.avg_divine == null ? "" : `${nf2.format(r.avg_divine)}d · `) +
+      (r.maps < r.of ? `over ${r.maps} map${r.maps === 1 ? "" : "s"}` : `last ${r.of} maps`);
   $("tiles").innerHTML = [
-    tile("Chaos / hour", s.chaos_per_hour == null ? "—" : nf0.format(s.chaos_per_hour),
-      s.chaos_per_hour_wall == null ? "map time" : `${nf0.format(s.chaos_per_hour_wall)} incl. hideout`, true),
-    tile("Divine / hour", s.divine_per_hour == null ? "—" : nf2.format(s.divine_per_hour), "map time"),
+    tile("Avg chaos / map", r.maps ? `${nf1.format(r.avg_chaos)}c` : "—", recentSub, true),
+    tile("Avg map time", r.maps ? duration(r.avg_seconds) : "—", r.maps ? `${nf1.format(r.avg_deaths)} deaths / map` : ""),
     tile("Total loot", s.chaos == null ? "—" : `${nf0.format(s.chaos)}c`,
       s.divine == null ? lootSub : `${nf2.format(s.divine)}d · ${lootSub}`),
     tile("Best run", s.best_run ? `${nf0.format(s.best_run.chaos)}c` : "—", s.best_run ? esc(s.best_run.map_name) : ""),
@@ -145,7 +162,6 @@ function renderRuns() {
       <td class="num">${r.deaths || '<span class="dim">0</span>'}</td>
       <td class="num">${chaos(r.chaos)}</td>
       <td class="num">${divine(r.divine)}</td>
-      <td class="num">${r.chaos_per_hour == null ? '<span class="dim">—</span>' : nf0.format(r.chaos_per_hour)}</td>
     </tr>`;
   }).join("");
 }
@@ -196,7 +212,8 @@ async function pollStatus() {
     status = await api("/api/status");
     statusAt = performance.now();
     renderStatus();
-    const key = status.run ? `${status.run.id}:${status.run.status}:${status.run.deaths}:${status.run.chaos}` : "";
+    const key = (status.run ? `${status.run.id}:${status.run.status}:${status.run.deaths}:${status.run.chaos}` : "") +
+      `:${status.loot.last?.at}`;
     if (key !== lastRunKey) {
       lastRunKey = key;
       await pollRuns();
@@ -209,6 +226,7 @@ async function pollStatus() {
 async function pollRuns() {
   runsData = await api("/api/runs?limit=100");
   renderSession();
+  renderLastMap();
   renderRuns();
   await renderDetail();
 }

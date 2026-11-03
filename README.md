@@ -143,6 +143,12 @@ Items are matched like this:
   several variants fit, the cheapest one is used, so values err low.
 - **Gems:** by name, closest level and quality, and whether they're corrupted.
 
+Loot is only known from snapshots, and snapshots happen in the hideout. While you're inside
+a map there's no live loot value: the API can't see items until the server has saved them,
+and polling it during the map would waste the rate limit. A map's value appears when you
+return to the hideout. If you go back to the hideout during a map, what you've dumped so far
+shows as "so far".
+
 Rares and magic gear have no poe.ninja price. They're listed as "no price" and left out of
 the totals. Runs are valued at current prices, so past runs change value as the market moves.
 
@@ -151,9 +157,9 @@ the totals. Runs are valued at current prices, so past runs change value as the 
 `poefire ui` runs everything in one process: the log tailer, loot snapshots and price
 refreshes. It serves a local page at `http://127.0.0.1:8460`. The page shows:
 
-- the current run with a live timer
-- the session (runs less than 30 minutes apart): chaos and divine per hour, both per hour of
-  map time and per hour played including hideout time
+- the current run with a live timer, and the last finished map's time, deaths and loot
+- average chaos (and divine) per map over the last 10 finished maps that have loot data
+- the session (runs less than 30 minutes apart): total loot, best run, map time, deaths
 - the run history
 - each run's loot, including what was spent in the hideout before it
 - a league selector

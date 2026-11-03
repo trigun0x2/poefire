@@ -19,10 +19,6 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-def _per_hour(value: float, seconds: float) -> float | None:
-    return value * 3600 / seconds if seconds >= 60 else None
-
-
 @dataclass
 class RunRow:
     run: Run
@@ -45,9 +41,6 @@ class RunRow:
             "loot_tracked": self.tracked,
             "chaos": round(self.value.chaos, 1) if self.tracked else None,
             "divine": _round(self.value.divine(chaos_per_divine)) if self.tracked else None,
-            "chaos_per_hour": _round(_per_hour(self.value.chaos, self.active_seconds), 0)
-            if self.tracked
-            else None,
             "unpriced": self.value.unpriced,
         }
 
@@ -88,7 +81,6 @@ def session_summary(rows: Sequence[RunRow], chaos_per_divine: float | None, now:
     active = sum(r.active_seconds for r in rows)
     tracked = [r for r in rows if r.tracked]
     chaos = sum(r.value.chaos for r in tracked)
-    tracked_seconds = sum(r.active_seconds for r in tracked)
     first = min(r.run.started_at for r in rows)
     newest = rows[0].run
     end = now if newest.status is not RunStatus.FINISHED else (newest.ended_at or now)
@@ -104,15 +96,36 @@ def session_summary(rows: Sequence[RunRow], chaos_per_divine: float | None, now:
         "loot_tracked_runs": len(tracked),
         "chaos": round(chaos, 1) if tracked else None,
         "divine": _round(chaos / chaos_per_divine) if tracked and chaos_per_divine else None,
-        # per hour of map time (tracked runs), and per hour played incl. hideout time
-        "chaos_per_hour": _round(_per_hour(chaos, tracked_seconds), 0) if tracked else None,
-        "chaos_per_hour_wall": _round(_per_hour(chaos, wall), 0) if tracked else None,
-        "divine_per_hour": _round(_per_hour(chaos / chaos_per_divine, tracked_seconds))
-        if tracked and chaos_per_divine
-        else None,
         "best_run": {"id": best.run.id, "map_name": best.run.map_name,
                      "chaos": round(best.value.chaos, 1)} if best else None,
     }  # fmt: skip
+
+
+RECENT_MAPS = 10
+
+
+def recent_maps(rows: Sequence[RunRow], chaos_per_divine: float | None,
+                n: int = RECENT_MAPS) -> Json:  # fmt: skip
+    """Averages over the last `n` finished maps that have loot data (any session). The map in
+    progress is left out: its loot isn't known until you're back in the hideout."""
+    done = [r for r in rows if r.run.status is RunStatus.FINISHED and r.tracked][:n]
+    if not done:
+        return {"maps": 0, "of": n}
+    avg_chaos = sum(r.value.chaos for r in done) / len(done)
+    return {
+        "maps": len(done),
+        "of": n,
+        "avg_chaos": round(avg_chaos, 1),
+        "avg_divine": _round(avg_chaos / chaos_per_divine) if chaos_per_divine else None,
+        "avg_seconds": round(sum(r.active_seconds for r in done) / len(done)),
+        "avg_deaths": round(sum(r.run.deaths for r in done) / len(done), 1),
+    }
+
+
+def last_map(rows: Sequence[RunRow], chaos_per_divine: float | None) -> Json | None:
+    """The most recent finished map: time, deaths and (if tracked) loot."""
+    row = next((r for r in rows if r.run.status is RunStatus.FINISHED), None)
+    return row.to_json(chaos_per_divine) if row else None
 
 
 def valuation_json(v: Valuation, chaos_per_divine: float | None) -> Json:

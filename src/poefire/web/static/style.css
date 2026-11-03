@@ -84,6 +84,10 @@ main {
 .current-stats > div { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .current-stats span:last-child { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .label { font-size: 11.5px; color: var(--muted); }
+.last-map { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.last-map-row { display: flex; align-items: baseline; gap: 14px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.last-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.last-loot { margin-left: auto; font-weight: 600; white-space: nowrap; }
 
 /* --- tiles --- */
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
