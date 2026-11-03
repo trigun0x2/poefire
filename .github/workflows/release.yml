@@ -4,9 +4,8 @@ name: Windows release
 # from the latest public tag (the first one uses __version__ from the code), marked as GitHub's
 # "latest" release. The app's auto-updater installs these.
 #
-# Pushes to the repository's default branch, while that isn't `master`, publish pre-releases
-# (v<next>-dev.<run number>), which only reach users on the beta update channel. Only the 10
-# newest pre-releases are kept.
+# Pushes to `dev` publish pre-releases (v<next>-dev.<run number>), which only reach users on
+# the beta update channel. Only the 10 newest pre-releases are kept.
 #
 # Running the workflow manually (Actions > Windows release > Run workflow) only builds the app
 # as a workflow artifact, versioned <next>-dev.<run number>.
@@ -34,7 +33,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.ref_name == 'master' ||
-      github.ref_name == github.event.repository.default_branch
+      github.ref_name == 'dev'
     runs-on: windows-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -68,7 +67,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "master" ]]; then
             channel=public
             version="$next"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "dev" ]]; then
             channel=prerelease
             version="$next-dev.$GITHUB_RUN_NUMBER"
           else

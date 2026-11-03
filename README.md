@@ -337,9 +337,8 @@ and pull request.
 - **Push to `master`:** a public release. The workflow takes the latest public `vX.Y.Z` tag
   and bumps the minor version (v0.6.0, v0.7.0…), and the release is marked as GitHub's latest.
   This is what the auto-updater installs.
-- **Push to the default branch, while that isn't `master`:** a pre-release,
-  `v<next>-dev.<run number>`. Only installs on the beta update channel see it, and only the 10
-  newest pre-releases are kept.
+- **Push to `dev`:** a pre-release, `v<next>-dev.<run number>`. Only installs on the beta
+  update channel see it, and only the 10 newest pre-releases are kept.
 - **Manual run from the Actions tab:** builds the app as a workflow artifact only.
 
 Each build stamps the version into the app, runs the tests, and builds a one-folder app with
@@ -349,6 +348,9 @@ the UI and that the native window opens, and publishes `poefire-<version>-window
 quick pushes get two versions.
 
 ## Development
+
+Day-to-day work happens on `dev`; merging into `master` (the default branch) publishes a
+public release.
 
 ```sh
 uv run pytest
