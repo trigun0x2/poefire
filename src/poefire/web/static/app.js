@@ -161,11 +161,61 @@ function renderSession() {
   ].join("");
 }
 
+// --- sortable tables ---
+
+function loadSort(name, fallback) {
+  try {
+    const v = JSON.parse(localStorage.getItem(`poefire.sort.${name}`) || "null");
+    if (v && typeof v.key === "string" && (v.dir === 1 || v.dir === -1)) return v;
+  } catch { /* storage unavailable */ }
+  return fallback;
+}
+function saveSort(name, state) {
+  try { localStorage.setItem(`poefire.sort.${name}`, JSON.stringify(state)); } catch { /* ignore */ }
+}
+
+/** Sorted copy: strings A→Z / numbers ascending for dir 1; missing values always last. */
+function sortRows(rows, key, dir) {
+  return rows.slice().sort((a, b) => {
+    const x = a[key], y = b[key];
+    const xm = x == null, ym = y == null;
+    if (xm || ym) return xm === ym ? 0 : xm ? 1 : -1;
+    const c = typeof x === "string" && typeof y === "string"
+      ? x.localeCompare(y, undefined, { sensitivity: "base", numeric: true })
+      : x - y;
+    return c * dir;
+  });
+}
+
+/** Clickable headers: th[data-sort]; first click sorts text A→Z and numbers high→low. */
+function makeSortable(tableId, name, state, rerender) {
+  const table = $(tableId);
+  const paint = () => table.querySelectorAll("th[data-sort]").forEach((th) => {
+    th.setAttribute("aria-sort", th.dataset.sort !== state.key ? "none" : state.dir === 1 ? "ascending" : "descending");
+  });
+  table.querySelector("thead").addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-sort]");
+    if (!th) return;
+    if (state.key === th.dataset.sort) state.dir = -state.dir;
+    else {
+      state.key = th.dataset.sort;
+      state.dir = th.classList.contains("num") ? -1 : 1;
+    }
+    saveSort(name, state);
+    paint();
+    rerender();
+  });
+  paint();
+}
+
+const runsSort = loadSort("runs", { key: "started_at", dir: -1 });
+const itemsSort = loadSort("items", { key: "chaos_total", dir: -1 });
+
 function renderRuns() {
   const inSession = new Set(runsData.session_run_ids);
-  const rows = runsData.runs;
+  const rows = sortRows(runsData.runs, runsSort.key, runsSort.dir);
   $("runs-empty").hidden = rows.length > 0;
-  const current = selectedRun ?? rows[0]?.id;
+  const current = selectedRun ?? runsData.runs[0]?.id; // newest run, whatever the sort
   $("runs-body").innerHTML = rows.map((r) => {
     const live = r.status !== "finished"
       ? `<span class="live-dot ${r.status === "paused" ? "paused" : ""}" title="${r.status}"></span>` : "";
@@ -620,7 +670,7 @@ function renderHoldings() {
   $("ov-items-empty").innerHTML = !d.taken_at
     ? (d.loot_enabled ? "No snapshot yet. Press Snapshot now, or finish a map." : 'Loot tracking is off. Set up your account in <a href="#settings">Settings</a>.')
     : "No items in the selected tabs.";
-  $("ov-items-body").innerHTML = d.items.map((i) => {
+  $("ov-items-body").innerHTML = sortRows(d.items, itemsSort.key, itemsSort.dir).map((i) => {
     const icon = i.icon
       ? `<img src="${esc(i.icon)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noicon'}))">`
       : '<span class="noicon"></span>';
@@ -739,6 +789,9 @@ function route() {
   if (name === "overview") loadOverview().catch(() => {});
 }
 window.addEventListener("hashchange", route);
+
+makeSortable("runs-table", "runs", runsSort, () => { if (runsData) renderRuns(); });
+makeSortable("ov-items-table", "items", itemsSort, () => { if (ovItems) renderHoldings(); });
 
 (async function init() {
   route();

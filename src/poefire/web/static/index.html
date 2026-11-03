@@ -92,9 +92,9 @@
       </div>
       <div class="tab-filter" id="ov-tabs" role="group" aria-label="Filter by tab"></div>
       <div class="table-wrap">
-        <table class="ov-table">
+        <table class="ov-table" id="ov-items-table">
           <thead>
-            <tr><th>Item</th><th class="num">Qty</th><th class="num">Each</th><th class="num">Total</th><th class="num">Share</th></tr>
+            <tr><th data-sort="name" aria-sort="none"><button type="button">Item<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="quantity" aria-sort="none"><button type="button">Qty<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos_each" aria-sort="none"><button type="button">Each<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos_total" aria-sort="none"><button type="button">Total<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="share" aria-sort="none"><button type="button">Share<span class="sort-ind" aria-hidden="true"></span></button></th></tr>
           </thead>
           <tbody id="ov-items-body"></tbody>
         </table>
@@ -230,11 +230,11 @@
     <section class="card runs">
       <div class="card-title">Runs</div>
       <div class="table-wrap">
-        <table>
+        <table id="runs-table">
           <thead>
             <tr>
-              <th>Started</th><th>Map</th><th class="num">Lvl</th><th class="num">Time</th>
-              <th class="num">Deaths</th><th class="num">Chaos</th><th class="num">Divine</th>
+              <th data-sort="started_at" aria-sort="none"><button type="button">Started<span class="sort-ind" aria-hidden="true"></span></button></th><th data-sort="map_name" aria-sort="none"><button type="button">Map<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="area_level" aria-sort="none"><button type="button">Lvl<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="active_seconds" aria-sort="none"><button type="button">Time<span class="sort-ind" aria-hidden="true"></span></button></th>
+              <th class="num" data-sort="deaths" aria-sort="none"><button type="button">Deaths<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos" aria-sort="none"><button type="button">Chaos<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="divine" aria-sort="none"><button type="button">Divine<span class="sort-ind" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody id="runs-body"></tbody>

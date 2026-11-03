@@ -40,7 +40,7 @@ def _round(v: float | None, nd: int = 2) -> float | None:
     return None if v is None else round(v, nd)
 
 
-def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int = 100) -> Json:
+def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int = 500) -> Json:
     """Latest snapshot's items, valued at current prices. `tabs` filters by source id
     (a stash tab id, or "inventory"); empty = everything."""
     latest = store.latest_snapshot_items()
