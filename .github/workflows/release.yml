@@ -59,6 +59,26 @@ jobs:
           curl -fsS http://127.0.0.1:8460/api/status
           taskkill //F //IM poefire.exe
 
+      - name: Smoke test the native window (DLLs marked as downloaded, like an extracted zip)
+        shell: pwsh
+        run: |
+          Get-ChildItem dist/poefire -Recurse -Filter *.dll | ForEach-Object {
+            Set-Content -Path $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          }
+          $env:APPDATA = "$PWD\appdata"
+          $p = Start-Process dist/poefire/poefire.exe -ArgumentList "ui","--window","--port","8461" `
+            -RedirectStandardOutput win.out -RedirectStandardError win.err -PassThru
+          Start-Sleep -Seconds 20
+          Get-Content win.out, win.err
+          $failed = Select-String -Path win.out, win.err -Pattern "native window failed|Traceback" -Quiet
+          $exited = $p.HasExited
+          Invoke-WebRequest http://127.0.0.1:8461/ -UseBasicParsing | Out-Null
+          $marked = Get-Item dist/poefire/_internal/pythonnet/runtime/Python.Runtime.dll -Stream * |
+            Where-Object Stream -eq "Zone.Identifier"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if ($failed -or $exited) { Write-Error "native window did not start"; exit 1 }
+          if ($marked) { Write-Error "Zone.Identifier was not removed"; exit 1 }
+
       - name: Zip
         id: zip
         shell: pwsh

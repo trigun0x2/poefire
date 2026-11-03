@@ -14,6 +14,10 @@ from poefire.cli import main
 from poefire.config import default_data_dir
 
 if __name__ == "__main__":
+    if getattr(sys, "frozen", False) and sys.platform == "win32":
+        from poefire.winfix import unblock_dlls
+
+        unblock_dlls(Path(sys._MEIPASS))  # type: ignore[attr-defined]
     argv = sys.argv[1:]
     if Path(sys.executable).stem.lower() == "poefire-ui":
         log_dir = default_data_dir()

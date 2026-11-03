@@ -293,8 +293,17 @@ def cmd_ui(args: argparse.Namespace) -> int:
             else:
                 thread = threading.Thread(target=server.run, daemon=True)
                 thread.start()
-                webview.create_window("poefire", url, width=1360, height=860, min_size=(900, 600))
-                webview.start()
+                try:
+                    webview.create_window(
+                        "poefire", url, width=1360, height=860, min_size=(900, 600)
+                    )
+                    webview.start()
+                except Exception as e:  # e.g. .NET/WebView2 can't load on this machine
+                    print(f"native window failed ({e!r}); opening the browser instead")
+                    webbrowser.open(url)
+                    while thread.is_alive():  # keep serving; join in steps so Ctrl+C works
+                        thread.join(0.5)
+                    return 0
                 server.should_exit = True
                 thread.join(timeout=5)
                 return 0
