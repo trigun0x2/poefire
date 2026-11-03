@@ -175,5 +175,11 @@ def test_recent_maps_uses_last_ten_tracked_finished(tmp_path: Path) -> None:
     assert recent["avg_chaos"] == sum(used) / 10
     assert recent["avg_divine"] == round(sum(used) / 10 / 100, 2)
     assert recent["avg_seconds"] == 240
-    assert views.last_map(rows, None)["id"] == "r1"  # type: ignore[index]
+    # back in the hideout after r0 (paused): it's the last map, with its top drops
+    last = views.last_map(rows, None)
+    assert last is not None and last["id"] == "r0" and last["top_items"] == []
+    rows[0].run.status = RunStatus.ACTIVE  # went back into r0: last map is the previous one
+    last = views.last_map(rows, None)
+    assert last is not None and last["id"] == "r1"
+    assert last["top_items"][0]["name"] == "Chaos Orb"
     assert views.recent_maps(rows[:1], None) == {"maps": 0, "of": 10}

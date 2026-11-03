@@ -157,7 +157,9 @@ the totals. Runs are valued at current prices, so past runs change value as the 
 `poefire ui` runs everything in one process: the log tailer, loot snapshots and price
 refreshes. It serves a local page at `http://127.0.0.1:8460`. The page shows:
 
-- the current run with a live timer, and the last finished map's time, deaths and loot
+- the last map, front and center: loot value, time, deaths, how it compares with your average
+  map, and its top drops (it updates as soon as you're back in the hideout)
+- the current map and its elapsed time, compact in the top bar
 - average chaos (and divine) per map over the last 10 finished maps that have loot data
 - the session (runs less than 30 minutes apart): total loot, best run, map time, deaths
 - the run history

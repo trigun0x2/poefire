@@ -74,22 +74,14 @@ function renderStatus() {
     : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
   $("loot-pill").title = !l.enabled ? l.reason : l.last?.error || "Take a snapshot now";
 
+  // Current run: just the map and its elapsed time, in the top bar.
   const run = s.run;
-  $("current-empty").hidden = !!run;
-  $("current-body").hidden = !run;
+  $("now").hidden = !run;
   if (run) {
-    $("cur-map").textContent = run.map_name;
-    $("cur-meta").textContent = `Level ${run.area_level} · started ${timeOf(run.started_at)}`;
-    const st = $("cur-status");
-    st.className = `status ${run.status}`;
-    st.textContent = run.status === "active" ? "In map" : run.status === "paused" ? "Paused · hideout" : "Finished";
-    $("cur-deaths").textContent = run.deaths;
-    // Loot is only known from snapshots taken in the hideout, never live inside a map.
-    // (In a map, a value only exists if you already dumped loot in the hideout mid-map.)
-    $("cur-loot").innerHTML = !run.loot_tracked
-      ? `<span class="dim">${run.status === "active" ? "counted in hideout" : "—"}</span>`
-      : `${chaos(run.chaos)} ${divine(run.divine)}${run.status === "active" ? ' <span class="dim">so far</span>' : ""}`;
-    $("cur-zone").textContent = s.zone ? s.zone.name : "—";
+    $("now-name").textContent = run.map_name;
+    $("now").classList.toggle("paused", run.status !== "active");
+    $("now-dot").className = `live-dot${run.status === "active" ? "" : " paused"}`;
+    $("now").title = run.status === "active" ? "In map" : "Paused: in hideout";
   }
   tickTimer();
 }
@@ -98,24 +90,41 @@ function tickTimer() {
   const run = status?.run;
   if (!run) return;
   const extra = run.status === "active" ? (performance.now() - statusAt) / 1000 : 0;
-  const t = $("cur-timer");
-  t.textContent = duration(run.active_seconds + extra);
-  t.classList.toggle("paused", run.status !== "active");
+  $("now-timer").textContent = duration(run.active_seconds + extra);
+}
+
+function renderLastMap() {
+  const m = runsData.last_map;
+  $("last-empty").hidden = !!m;
+  $("last-body").hidden = !m;
+  if (!m) return;
+  $("last-name").textContent = m.map_name;
+  $("last-meta").textContent = `Level ${m.area_level} · ` +
+    (m.status === "finished" ? `finished ${timeOf(m.ended_at)}` : "just now · back in hideout");
+  $("last-value").innerHTML = m.loot_tracked
+    ? `<span class="big">${chaos(m.chaos)}</span><span class="sub">${divine(m.divine)}</span>`
+    : '<span class="dim">No loot data for this map</span>';
+  $("last-time").textContent = duration(m.active_seconds);
+  $("last-deaths").innerHTML = m.deaths || '<span class="dim">0</span>';
+  const r = runsData.recent;
+  if (m.loot_tracked && r.maps) {
+    const d = m.chaos - r.avg_chaos;
+    $("last-vs").innerHTML = `<span class="${d >= 0 ? "good" : "neg"}">${d >= 0 ? "+" : "−"}${nf1.format(Math.abs(d))}c</span>`;
+  } else {
+    $("last-vs").innerHTML = '<span class="dim">—</span>';
+  }
+  $("last-drops").innerHTML = (m.top_items || []).map((i) => `
+    <li>
+      ${i.icon ? `<img src="${esc(i.icon)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noicon'}))">` : '<span class="noicon"></span>'}
+      <span class="name" title="${esc(i.name)}">${esc(i.name)}</span>
+      <span class="qty">+${i.quantity}</span>
+      <span class="val">${chaos(i.chaos_total)}</span>
+    </li>`).join("");
 }
 
 function tile(label, value, sub = "", hero = false) {
   return `<div class="tile${hero ? " hero" : ""}"><div class="label">${label}</div>` +
     `<div class="value">${value}</div><div class="sub">${sub}</div></div>`;
-}
-
-function renderLastMap() {
-  const m = runsData.last_map;
-  $("last-map").hidden = !m;
-  if (!m) return;
-  $("last-name").textContent = m.map_name;
-  $("last-time").textContent = duration(m.active_seconds);
-  $("last-deaths").innerHTML = m.deaths ? `${m.deaths} death${m.deaths === 1 ? "" : "s"}` : '<span class="dim">no deaths</span>';
-  $("last-loot").innerHTML = m.loot_tracked ? `${chaos(m.chaos)} ${divine(m.divine)}` : '<span class="dim">no loot data</span>';
 }
 
 function renderSession() {
@@ -219,7 +228,8 @@ async function pollStatus() {
       await pollRuns();
     }
   } catch (e) {
-    $("prices-text").textContent = "Disconnected";
+    console.error(e);
+    if (e instanceof TypeError) $("prices-text").textContent = "Disconnected"; // fetch failed
   }
 }
 

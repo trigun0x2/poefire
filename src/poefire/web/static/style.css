@@ -69,25 +69,32 @@ main {
 .runs { grid-area: runs; }
 .detail { grid-area: detail; }
 
-/* --- current run --- */
+/* --- current run (top bar) --- */
+.now {
+  display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.now .live-dot { margin-right: 0; }
+.now-name { font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-timer { font-size: 15px; font-weight: 600; min-width: 48px; text-align: right; }
+.now.paused .now-timer { color: var(--muted); }
+
+/* --- last map --- */
+.last-value { display: flex; align-items: baseline; gap: 12px; margin: 10px 0 14px; }
+.last-value .big { font-size: 42px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.last-value .sub { font-size: 18px; }
+.top-drops { margin-top: 12px; }
+.top-drops li:last-child { border-bottom: 0; }
+.good { color: var(--good); }
 .current-empty { color: var(--muted); padding: 26px 0; }
 .current-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .map-name { font-size: 20px; font-weight: 650; }
 .map-meta { color: var(--muted); margin-top: 2px; }
-.status { font-size: 12px; padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
-.status.active { background: rgba(76, 195, 138, 0.15); color: var(--good); }
-.status.paused { background: rgba(230, 180, 80, 0.14); color: var(--warn); }
-.status.finished { background: var(--panel-2); color: var(--muted); }
-.timer { font-size: 54px; font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: 1px; margin: 8px 0 12px; }
-.timer.paused { color: var(--muted); }
 .current-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .current-stats > div { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .current-stats span:last-child { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .label { font-size: 11.5px; color: var(--muted); }
-.last-map { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.last-map-row { display: flex; align-items: baseline; gap: 14px; margin-top: 4px; font-variant-numeric: tabular-nums; }
-.last-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.last-loot { margin-left: auto; font-weight: 600; white-space: nowrap; }
 
 /* --- tiles --- */
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }

@@ -13,6 +13,11 @@
       <span>League</span>
       <select id="league" aria-label="League"></select>
     </label>
+    <div class="now" id="now" hidden title="Current run">
+      <span class="live-dot" id="now-dot"></span>
+      <span class="now-name" id="now-name"></span>
+      <span class="now-timer" id="now-timer">00:00</span>
+    </div>
     <div class="pills">
       <button class="pill" id="prices-pill" title="Refresh prices from poe.ninja">
         <span class="dot"></span><span id="prices-text">Prices…</span>
@@ -24,32 +29,23 @@
   </header>
 
   <main>
-    <section class="card current" id="current">
-      <div class="card-title">Current run</div>
-      <div class="current-empty" id="current-empty">No map yet. Enter a map to start the timer.</div>
-      <div class="current-body" id="current-body" hidden>
+    <section class="card current" id="last">
+      <div class="card-title">Last map</div>
+      <div class="current-empty" id="last-empty">No map finished yet. Stats appear when you're back in your hideout.</div>
+      <div id="last-body" hidden>
         <div class="current-head">
           <div>
-            <div class="map-name" id="cur-map"></div>
-            <div class="map-meta" id="cur-meta"></div>
+            <div class="map-name" id="last-name"></div>
+            <div class="map-meta" id="last-meta"></div>
           </div>
-          <span class="status" id="cur-status"></span>
         </div>
-        <div class="timer" id="cur-timer">00:00</div>
+        <div class="last-value" id="last-value"></div>
         <div class="current-stats">
-          <div><span class="label">Deaths</span><span id="cur-deaths">0</span></div>
-          <div><span class="label">Loot</span><span id="cur-loot">—</span></div>
-          <div><span class="label">Zone</span><span id="cur-zone">—</span></div>
+          <div><span class="label">Time</span><span id="last-time"></span></div>
+          <div><span class="label">Deaths</span><span id="last-deaths"></span></div>
+          <div><span class="label">vs. avg map</span><span id="last-vs"></span></div>
         </div>
-      </div>
-      <div class="last-map" id="last-map" hidden>
-        <div class="label">Last map</div>
-        <div class="last-map-row">
-          <span class="last-name" id="last-name"></span>
-          <span id="last-time"></span>
-          <span id="last-deaths"></span>
-          <span class="last-loot" id="last-loot"></span>
-        </div>
+        <ul class="items top-drops" id="last-drops"></ul>
       </div>
     </section>
 

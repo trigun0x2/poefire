@@ -122,10 +122,21 @@ def recent_maps(rows: Sequence[RunRow], chaos_per_divine: float | None,
     }
 
 
-def last_map(rows: Sequence[RunRow], chaos_per_divine: float | None) -> Json | None:
-    """The most recent finished map: time, deaths and (if tracked) loot."""
-    row = next((r for r in rows if r.run.status is RunStatus.FINISHED), None)
-    return row.to_json(chaos_per_divine) if row else None
+def last_map(rows: Sequence[RunRow], chaos_per_divine: float | None, top: int = 3) -> Json | None:
+    """The most recent map you're not inside: time, deaths, loot and its top drops. A map you
+    just returned from counts (it's paused until the next map starts), unless you go back in."""
+    row = next((r for r in rows if r.run.status is not RunStatus.ACTIVE), None)
+    if row is None:
+        return None
+    drops = [i for i in row.value.items if (i.chaos_total or 0) > 0][:top]
+    return {
+        **row.to_json(chaos_per_divine),
+        "top_items": [
+            {"name": i.name, "quantity": i.quantity, "chaos_total": _round(i.chaos_total, 1),
+             "icon": i.icon}
+            for i in drops
+        ],
+    }  # fmt: skip
 
 
 def valuation_json(v: Valuation, chaos_per_divine: float | None) -> Json:
