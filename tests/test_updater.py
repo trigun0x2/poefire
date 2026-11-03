@@ -265,17 +265,16 @@ def test_apply_update_ends_a_hung_app_and_reports_locked_files(
     src.mkdir()
     (src / "poefire-ui.exe").write_bytes(b"new")
     killed: list[int] = []
-    real_copy = updater.shutil.copy2
 
     def locked(a: Any, b: Any) -> Any:
         raise PermissionError("in use")
 
-    monkeypatch.setattr(updater.shutil, "copy2", locked)
+    monkeypatch.setattr("shutil.copy2", locked)
     restarted: list[Path] = []
     code = updater.apply_update(src, dst, 7, log, wait=2, retries=3, sleep=lambda s: None,
                                 alive=lambda pid: not killed, kill=killed.append,
                                 restart=restarted.append)  # fmt: skip
-    monkeypatch.setattr(updater.shutil, "copy2", real_copy)
+    monkeypatch.undo()
     assert killed == [7] and code == 1 and restarted == [dst]  # the old version still starts
     text = log.read_text()
     assert "still running after 2s" in text and "1 of 1 files not replaced" in text
@@ -291,7 +290,7 @@ def test_start_install_falls_back_to_the_script(
         if args[0].endswith("poefire-ui.exe"):
             raise FileNotFoundError(args[0])
 
-    monkeypatch.setattr(updater.subprocess, "Popen", popen)
+    monkeypatch.setattr("subprocess.Popen", popen)
     staged = tmp_path / "updates" / "0.9.0"
     staged.mkdir(parents=True)
     how = updater.start_install(staged, tmp_path / "app", tmp_path / "updates" / "update.log")

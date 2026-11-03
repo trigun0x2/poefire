@@ -290,7 +290,7 @@ def pid_alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
 
-        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        k32 = ctypes.windll.kernel32
         handle = k32.OpenProcess(0x00100000 | 0x1000, False, pid)  # SYNCHRONIZE | QUERY_LIMITED
         if not handle:
             return False
@@ -311,7 +311,7 @@ def kill_pid(pid: int) -> None:
     if sys.platform == "win32":
         import ctypes
 
-        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        k32 = ctypes.windll.kernel32
         handle = k32.OpenProcess(0x0001, False, pid)  # PROCESS_TERMINATE
         if handle:
             k32.TerminateProcess(handle, 1)
