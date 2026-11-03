@@ -21,8 +21,8 @@ from poefire import __version__
 from poefire.api.session import SessionStore
 from poefire.store import Store
 from poefire.tracker import RunStatus
-from poefire.web import overview, settings, views
-from poefire.web.runtime import SESSION_GAP, AppRuntime
+from poefire.web import overview, sessions, settings, views
+from poefire.web.runtime import AppRuntime
 
 STATIC = Path(__file__).parent / "static"
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
@@ -117,21 +117,51 @@ def create_app(rt: AppRuntime) -> FastAPI:
         }
 
     @app.get("/api/runs")
-    def runs(limit: int = 50) -> dict[str, Any]:
+    def runs(session: int | None = None, limit: int = 500) -> dict[str, Any]:
+        """Runs of one session (default: the current one) with its stats."""
         now = rt.now()
         book = rt.prices.book(rt.price_league)
         cpd = book.chaos_per_divine
         with store() as s:
-            rows = views.run_rows(s, book, s.list_runs(limit=min(limit, 500)), now)
-        session = views.current_session(rows, SESSION_GAP)
+            span = sessions.find(s, session)
+            if span is None:
+                raise HTTPException(404, "no such session")
+            rows = views.run_rows(s, book, sessions.runs_of(s, span), now)
         return {
             "chaos_per_divine": cpd,
-            "runs": [r.to_json(cpd) for r in rows],
-            "session": views.session_summary(session, cpd, now),
-            "recent": views.recent_maps(rows, cpd),
+            "runs": [r.to_json(cpd) for r in rows[: min(limit, 2000)]],
+            "session": {
+                **views.session_summary(rows, cpd, now),
+                **sessions.summary(span, rows, cpd, now),
+            },
+            # the current session: the last 10 maps; a past one: all of its maps
+            "recent": views.recent_maps(
+                rows, cpd, n=views.RECENT_MAPS if span.current else max(len(rows), 1)
+            ),
             "last_map": views.last_map(rows, cpd),
-            "session_run_ids": [r.run.id for r in session],
+            "session_run_ids": [r.run.id for r in rows],
         }
+
+    @app.get("/api/sessions")
+    def session_history() -> dict[str, Any]:
+        book = rt.prices.book(rt.price_league)
+        with store() as s:
+            return {"chaos_per_divine": book.chaos_per_divine,
+                    "sessions": sessions.history(s, book, rt.now())}  # fmt: skip
+
+    @app.post("/api/sessions/new")
+    def new_session() -> dict[str, Any]:
+        return {"id": rt.new_session()}
+
+    @app.post("/api/sessions/{session_id}/delete")
+    def delete_session(session_id: int) -> dict[str, Any]:
+        try:
+            rt.delete_session(session_id)
+        except LookupError:
+            raise HTTPException(404, "no such session") from None
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        return {"ok": True}
 
     @app.get("/api/runs/{run_id}")
     def run(run_id: str) -> dict[str, Any]:

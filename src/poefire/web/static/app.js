@@ -199,11 +199,12 @@ function renderSessionBanner(h) {
 }
 
 function renderSidebarStats() {
-  const m = runsData.last_map, r = runsData.recent;
+  const d = currentRuns || runsData;
+  const m = d.last_map, r = d.recent;
   $("side-last-title").textContent = m ? `Last map · ${m.map_name}` : "Last map";
   $("side-last-loot").innerHTML = m && m.loot_tracked ? chaos(m.chaos) : '<span class="dim">—</span>';
   $("side-avg").innerHTML = r.maps ? chaos(r.avg_chaos) : '<span class="dim">—</span>';
-  $("side-maps").textContent = runsData.session.runs ?? 0;
+  $("side-maps").textContent = d.session.runs ?? 0;
 }
 
 function renderLastMap() {
@@ -243,17 +244,21 @@ function tile(label, value, sub = "", hero = false) {
 function renderSession() {
   const s = runsData.session;
   const r = runsData.recent;
+  const past = viewSession != null;
+  $("session-title").textContent = past ? "Past session" : "This session";
+  $("session-new").hidden = past;
+  $("session-back").hidden = !past;
+  $("session-since").textContent = !s.started_at ? ""
+    : past ? `· ${dateTimeOf(s.started_at)} – ${timeOf(s.ended_at)}` : `· since ${dateTimeOf(s.started_at)}`;
   if (!s.runs) {
-    $("tiles").innerHTML = tile("Runs", "0", "Start mapping to see stats");
-    $("session-since").textContent = "";
+    $("tiles").innerHTML = tile("Maps", "0", "No maps yet");
     return;
   }
-  $("session-since").textContent = `· since ${timeOf(s.started_at)}`;
   const tracked = s.loot_tracked_runs;
   const lootSub = tracked < s.runs ? `${tracked} of ${s.runs} runs with loot data` : "net loot value";
-  const recentSub = !r.maps ? "no maps with loot data yet"
+  const recentSub = !r.maps ? "no finished maps yet"
     : (r.avg_divine == null ? "" : `${nf2.format(r.avg_divine)}d · `) +
-      (r.maps < r.of ? `over ${r.maps} map${r.maps === 1 ? "" : "s"}` : `last ${r.of} maps`);
+      (r.maps < r.of || past ? `over ${r.maps} map${r.maps === 1 ? "" : "s"}` : `last ${r.of} maps`);
   $("tiles").innerHTML = [
     tile("Avg chaos / map", r.maps ? `${nf1.format(r.avg_chaos)}c` : "—", recentSub, true),
     tile("Avg map time", r.maps ? duration(r.avg_seconds) : "—", r.maps ? `${nf1.format(r.avg_deaths)} deaths / map` : ""),
@@ -354,6 +359,7 @@ function itemList(items, limit = 40) {
 async function renderDetail() {
   const id = selectedRun ?? runsData?.runs[0]?.id;
   if (!id) {
+    $("detail-title").textContent = "Run loot";
     $("detail").innerHTML = '<div class="empty">Select a run to see what dropped.</div>';
     return;
   }
@@ -397,14 +403,84 @@ async function pollStatus() {
   }
 }
 
+let viewSession = null; // a past session's id; null = the current session
+let currentRuns = null; // the current session (the sidebar always shows it)
+let sessionsData = null;
+
 async function pollRuns() {
-  runsData = await api("/api/runs?limit=100");
+  currentRuns = await api("/api/runs?limit=200");
+  runsData = viewSession == null ? currentRuns : await api(`/api/runs?session=${viewSession}&limit=500`);
   renderSession();
   renderLastMap();
   renderSidebarStats();
   renderRuns();
   await renderDetail();
+  loadSessions().catch(() => {});
 }
+
+async function loadSessions() {
+  sessionsData = await api("/api/sessions");
+  renderSessions();
+}
+
+const sessionsSort = loadSort("sessions", { key: "started_at", dir: -1 });
+
+function renderSessions() {
+  const rows = sortRows(sessionsData.sessions, sessionsSort.key, sessionsSort.dir);
+  const shown = runsData?.session?.id;
+  $("sessions-empty").hidden = rows.length > 0;
+  $("sessions-body").innerHTML = rows.map((s) => {
+    const live = s.current ? '<span class="live-dot" title="current session"></span>' : "";
+    const avg = s.avg_chaos == null ? '<span class="dim">—</span>'
+      : `${chaos(s.avg_chaos)}${s.avg_divine == null ? "" : ` <span class="dim">· ${nf2.format(s.avg_divine)}d</span>`}`;
+    const total = s.chaos == null ? '<span class="dim">—</span>'
+      : `${chaos(s.chaos)}${s.divine == null ? "" : ` <span class="dim">· ${nf2.format(s.divine)}d</span>`}`;
+    const del = s.current ? "" : `<button type="button" class="del" data-del="${s.id}" title="Delete this session and its maps">✕</button>`;
+    return `<tr data-session="${s.id}" class="${s.id === shown ? "selected" : ""}">
+      <td>${live}${s.current ? "Current · " : ""}${s.started_at ? dateTimeOf(s.started_at) : "—"}</td>
+      <td class="num">${duration(s.wall_seconds)}</td>
+      <td class="num">${s.maps}</td>
+      <td class="num">${s.avg_map_seconds == null ? "—" : duration(s.avg_map_seconds)}</td>
+      <td class="num">${avg}</td>
+      <td class="num">${total}</td>
+      <td class="num">${s.deaths || '<span class="dim">0</span>'}</td>
+      <td class="num">${del}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function showSession(id) {
+  viewSession = id;
+  selectedRun = null;
+  await pollRuns();
+}
+
+$("sessions-body").addEventListener("click", async (e) => {
+  const del = e.target.closest("[data-del]");
+  if (del) {
+    e.stopPropagation();
+    const s = sessionsData.sessions.find((x) => String(x.id) === del.dataset.del);
+    if (!confirm(`Delete the session from ${dateTimeOf(s?.started_at)} and its ${s?.maps ?? 0} maps? This can't be undone.`)) return;
+    try {
+      await api(`/api/sessions/${del.dataset.del}/delete`, { method: "POST" });
+      if (String(viewSession) === del.dataset.del) viewSession = null;
+      await pollRuns();
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  const tr = e.target.closest("tr[data-session]");
+  if (!tr) return;
+  const s = sessionsData.sessions.find((x) => String(x.id) === tr.dataset.session);
+  await showSession(s?.current ? null : Number(tr.dataset.session));
+});
+$("session-back").addEventListener("click", () => showSession(null));
+$("session-new").addEventListener("click", async () => {
+  if (!confirm("Start a new session? Stats start again from zero; this session moves to the Sessions history.")) return;
+  await api("/api/sessions/new", { method: "POST" });
+  viewSession = null;
+  selectedRun = null;
+  await pollRuns();
+});
 
 async function loadLeagues() {
   const l = await api("/api/leagues");
@@ -1161,6 +1237,7 @@ function route() {
 window.addEventListener("hashchange", route);
 
 makeSortable("runs-table", "runs", runsSort, () => { if (runsData) renderRuns(); });
+makeSortable("sessions-table", "sessions", sessionsSort, () => { if (sessionsData) renderSessions(); });
 makeSortable("ov-items-table", "items", itemsSort, () => { if (ovItems) renderHoldings(); });
 
 (async function init() {

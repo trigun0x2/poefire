@@ -18,7 +18,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -144,12 +144,22 @@ CREATE TABLE campaign_runs (
 CREATE INDEX campaign_runs_started ON campaign_runs(started_at);
 """
 
+_SCHEMA_V6 = """
+-- Farming sessions: each starts at started_at and runs until the next one starts.
+CREATE TABLE sessions (
+    id         INTEGER PRIMARY KEY,
+    started_at TEXT NOT NULL
+);
+CREATE INDEX sessions_started ON sessions(started_at);
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
     _SCHEMA_V3,
     _SCHEMA_V4,
     _SCHEMA_V5,
+    _SCHEMA_V6,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -517,3 +527,38 @@ class Store:
     def delete_campaign_run(self, run_id: int) -> bool:
         cur = self.conn.execute("DELETE FROM campaign_runs WHERE id = ?", (run_id,))
         return cur.rowcount > 0
+
+    # --- sessions ---
+
+    def add_session(self, started_at: datetime) -> int:
+        cur = self.conn.execute("INSERT INTO sessions (started_at) VALUES (?)", (_dt(started_at),))
+        return int(cur.lastrowid or 0)
+
+    def list_sessions(self) -> list[tuple[int, datetime]]:
+        """(id, started_at), oldest first."""
+        rows = self.conn.execute("SELECT id, started_at FROM sessions ORDER BY started_at, id")
+        return [(r["id"], datetime.fromisoformat(r["started_at"])) for r in rows]
+
+    def delete_session(self, session_id: int) -> None:
+        self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    def list_runs_between(self, start: datetime | None, end: datetime | None) -> list[Run]:
+        """Runs that started in [start, end), newest first; None = unbounded."""
+        rows = self.conn.execute(
+            "SELECT * FROM runs WHERE (? IS NULL OR started_at >= ?) "
+            "AND (? IS NULL OR started_at < ?) ORDER BY started_at DESC, rowid DESC",
+            (_dt(start), _dt(start), _dt(end), _dt(end)),
+        ).fetchall()
+        return [self._row_to_run(r) for r in rows]
+
+    def delete_runs(self, run_ids: list[str]) -> None:
+        """Remove runs with their loot; their snapshots and log events are kept, unlinked."""
+        for i in range(0, len(run_ids), 500):
+            chunk = run_ids[i : i + 500]
+            marks = ",".join("?" * len(chunk))
+            self.conn.execute(f"DELETE FROM loot WHERE run_id IN ({marks})", chunk)
+            for table in ("snapshots", "events"):
+                self.conn.execute(
+                    f"UPDATE {table} SET run_id = NULL WHERE run_id IN ({marks})", chunk
+                )
+            self.conn.execute(f"DELETE FROM runs WHERE id IN ({marks})", chunk)

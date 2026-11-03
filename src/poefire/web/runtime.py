@@ -27,7 +27,7 @@ from poefire.pricing.service import PriceService
 from poefire.pricing.valuation import value_holdings
 from poefire.service import TrackerService
 from poefire.store import Store
-from poefire.tracker import Notice, TrackerState
+from poefire.tracker import Notice, RunStatus, TrackerState
 from poefire.updater import (
     UpdateError,
     UpdateInfo,
@@ -38,6 +38,7 @@ from poefire.updater import (
     staging_root,
     start_install,
 )
+from poefire.web import sessions
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +123,7 @@ class AppRuntime:
         self._ninja_leagues: list[str] = []
         self._ninja_leagues_at = float("-inf")
         self._account_leagues: list[str] = []
+        sessions.ensure_session(self._store, SESSION_GAP)
         stored = self._store.get_json(LEAGUE_KEY)
         self._league: str = stored or cfg.league or FALLBACK_LEAGUES[0]
 
@@ -275,6 +277,34 @@ class AppRuntime:
             return False
         self.recorder.request(Trigger.MANUAL, None)
         return True
+
+    # --- farming sessions ---
+
+    def new_session(self) -> int:
+        """Start a fresh session: the Session page only counts maps from now on. A map you're
+        inside right now moves to the new session too."""
+        with self._lock:
+            start = self.now()
+            live = self.service.tracker.run if self.service is not None else None
+            if live is not None and live.status is RunStatus.ACTIVE:
+                start = min(start, live.started_at)
+            return self._store.add_session(start)
+
+    def delete_session(self, session_id: int) -> None:
+        """Delete a past session and its maps. Raises LookupError / ValueError."""
+        with self._lock:
+            span = sessions.find(self._store, session_id)
+            if span is None:
+                raise LookupError(session_id)
+            if span.current:
+                raise ValueError("the current session can't be deleted; start a new one first")
+            runs = sessions.runs_of(self._store, span)
+            if any(r.status is not RunStatus.FINISHED for r in runs):
+                raise ValueError("this session has a map in progress")
+            with self._store.transaction():
+                self._store.delete_runs([r.id for r in runs])
+                if span.id:
+                    self._store.delete_session(span.id)
 
     # --- campaign runs (shares the tail thread's connection and lock) ---
 

@@ -331,7 +331,11 @@
     </section>
 
     <section class="card session">
-      <div class="card-title">This session <span class="muted" id="session-since"></span></div>
+      <div class="card-head">
+        <div class="card-title"><span id="session-title">This session</span> <span class="muted" id="session-since"></span></div>
+        <button type="button" class="btn small" id="session-new" title="Start counting from zero; this session moves to the history">New session</button>
+        <button type="button" class="btn link" id="session-back" hidden>Back to current session</button>
+      </div>
       <div class="tiles" id="tiles"></div>
     </section>
 
@@ -354,6 +358,19 @@
     <section class="card detail">
       <div class="card-title" id="detail-title">Run loot</div>
       <div id="detail"></div>
+    </section>
+
+    <section class="card history">
+      <div class="card-title">Sessions</div>
+      <div class="table-wrap">
+        <table id="sessions-table">
+          <thead>
+            <tr><th data-sort="started_at" aria-sort="none"><button type="button">Started<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="wall_seconds" aria-sort="none"><button type="button">Length<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="maps" aria-sort="none"><button type="button">Maps<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_map_seconds" aria-sort="none"><button type="button">Avg map time<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_chaos" aria-sort="none"><button type="button">Avg / map<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos" aria-sort="none"><button type="button">Total loot<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="deaths" aria-sort="none"><button type="button">Deaths<span class="sort-ind" aria-hidden="true"></span></button></th><th><span class="sr-only">Actions</span></th></tr>
+          </thead>
+          <tbody id="sessions-body"></tbody>
+        </table>
+        <div class="empty" id="sessions-empty" hidden>No sessions yet.</div>
+      </div>
     </section>
   </main>
     </div>

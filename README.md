@@ -159,6 +159,16 @@ inventory into a watched tab nets to zero.
 hard-coded. poefire keeps one hit of headroom under each window, counts hits made by other
 tools on the same account, and on HTTP 429 waits for `Retry-After`.
 
+### Sessions
+
+**New session** (Session page) starts counting from zero: the last map, the tiles, the average
+per map, the runs table and the sidebar only cover maps from then on. A map you're inside at
+that moment moves into the new session. Earlier sessions stay in the **Sessions** table with
+their length, maps, average map time, average loot per map (finished maps) and total loot; click
+one to look at its maps again, or delete it (with its maps) with ✕. On the first start with
+sessions, the maps you played in the last sitting (no more than 30 minutes apart) form the
+current session.
+
 ## Campaign tracker
 
 The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit auto-splitter does

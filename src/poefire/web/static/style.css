@@ -113,10 +113,10 @@ select {
 main {
   display: grid; gap: 14px; padding: 14px 18px 18px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-areas: "current current session session session" "runs runs runs detail detail";
+  grid-template-areas: "current current session session session" "runs runs runs detail detail" "history history history history history";
 }
 @media (max-width: 1250px) {
-  main { grid-template-columns: 1fr; grid-template-areas: "current" "session" "runs" "detail"; }
+  main { grid-template-columns: 1fr; grid-template-areas: "current" "session" "runs" "detail" "history"; }
 }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
 .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
@@ -369,3 +369,14 @@ textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--acce
 .cp-zone-list li.lvl { color: var(--divine); }
 .cp-zone-list li.actdone { color: var(--accent); font-weight: 600; }
 #cp-runs-body td.notes { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+/* --- sessions --- */
+.history { grid-area: history; }
+.card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.card-head .card-title { margin-bottom: 0; flex: 1; min-width: 0; }
+.btn.small { padding: 4px 10px; font-size: 12.5px; }
+#sessions-body td { font-variant-numeric: tabular-nums; }
+#sessions-body tr { cursor: pointer; }
+#sessions-body .del { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+#sessions-body .del:hover { color: var(--bad); background: var(--panel-2); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
