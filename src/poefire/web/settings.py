@@ -8,7 +8,7 @@ import os
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -33,6 +33,8 @@ class SettingsIn(BaseModel):
     stash_tabs: list[str] | None = None
     snapshot_on_run_start: bool | None = None
     snapshot_delay: float | None = Field(default=None, ge=0, le=60)
+    check_updates: bool | None = None
+    update_channel: Literal["stable", "beta"] | None = None
 
 
 class SessionIn(BaseModel):
@@ -99,6 +101,9 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "snapshot_on_run_start": cfg.snapshot_on_run_start,
         "snapshot_delay": cfg.snapshot_delay,
         "loot": {"enabled": rt.loot.enabled, "reason": rt.loot.reason},
+        "check_updates": cfg.check_updates,
+        "update_channel": cfg.update_channel,
+        "version": rt.update.current,
     }
 
 
@@ -159,6 +164,10 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["stash_tabs"] = list(dict.fromkeys(t.strip() for t in body.stash_tabs if t.strip()))
     if body.snapshot_on_run_start is not None:
         changes["snapshot_on_run_start"] = body.snapshot_on_run_start
+    if body.check_updates is not None:
+        changes["check_updates"] = body.check_updates
+    if body.update_channel is not None:
+        changes["update_channel"] = body.update_channel
     if body.snapshot_delay is not None:
         changes["snapshot_delay"] = float(body.snapshot_delay)
 

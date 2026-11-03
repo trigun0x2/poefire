@@ -83,6 +83,8 @@ class Config:
     character: str | None = None
     stash_tabs: list[str] = field(default_factory=list)
     snapshot_delay: float = 3.0
+    check_updates: bool = True
+    update_channel: str = "stable"  # "stable": public releases; "beta": also pre-releases
     snapshot_on_run_start: bool = True
 
     @classmethod

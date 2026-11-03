@@ -15,12 +15,22 @@ It does no memory reading, packet sniffing or input automation.
 
 ## Windows download
 
-Download `poefire-<version>-windows-x64.zip` from the
-[Releases](https://github.com/trigun0x2/poefire/releases) page and unzip it anywhere.
+Download `poefire-<version>-windows-x64.zip` from the latest
+[release](https://github.com/trigun0x2/poefire/releases/latest) and unzip it into a folder you
+own, for example `%LOCALAPPDATA%\Programs\poefire`. Avoid `Program Files`: the updater needs
+to write there.
 
 - `poefire-ui.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\poefire.log`.
 - `poefire.exe` is the command line, for example `poefire.exe set-session` or `poefire.exe runs`.
   Run with no arguments, it opens the window too.
+
+**Updates.** poefire checks GitHub for a new release on start and every 6 hours, and shows a
+banner when one is out. **Install and restart** downloads the zip, checks it against its
+published SHA-256, unpacks it, and closes poefire. A small script then copies the new files
+over the old ones and starts poefire again. Your settings, cookie and history live in
+`%APPDATA%\poefire` and aren't touched. The Updates section in Settings turns automatic checks
+on or off and switches between the stable and beta (pre-release) channels. Versions before
+v0.6.0 have no updater, so install v0.6.0 by hand once.
 
 The build isn't code-signed, so Windows SmartScreen may warn on first launch ("More info" →
 "Run anyway"). The window uses Microsoft Edge WebView2, which Windows 10 and 11 normally have.
@@ -322,17 +332,21 @@ reading restarts from byte 0.
 `.github/workflows/ci.yml` runs lint, type checks and tests on Windows and Linux for every push
 and pull request.
 
-`.github/workflows/release.yml` publishes a release on every push to the default branch. It
-takes the latest `vX.Y.Z` tag and bumps the minor version (v0.1.0, v0.2.0, v0.3.0…); the first
-release uses `__version__` from the code. It stamps that version into the build, runs the
-tests, and builds a one-folder app with PyInstaller (`packaging/windows/poefire.spec`). It then
-starts the built exe to check it serves the UI and that the native window opens, and publishes
-`poefire-<version>-windows-x64.zip` with its SHA-256 checksum as a GitHub release. The app
-files sit at the top level of the zip.
+`.github/workflows/release.yml` builds and publishes the Windows app:
 
-Releases run one at a time, so two quick pushes get two versions. Running the workflow
-manually from the Actions tab only builds the app as a workflow artifact (`<next>.devN`),
-without publishing.
+- **Push to `master`:** a public release. The workflow takes the latest public `vX.Y.Z` tag
+  and bumps the minor version (v0.6.0, v0.7.0…), and the release is marked as GitHub's latest.
+  This is what the auto-updater installs.
+- **Push to the default branch, while that isn't `master`:** a pre-release,
+  `v<next>-dev.<run number>`. Only installs on the beta update channel see it, and only the 10
+  newest pre-releases are kept.
+- **Manual run from the Actions tab:** builds the app as a workflow artifact only.
+
+Each build stamps the version into the app, runs the tests, and builds a one-folder app with
+PyInstaller (`packaging/windows/poefire.spec`). It then starts the built exe to check it serves
+the UI and that the native window opens, and publishes `poefire-<version>-windows-x64.zip`
+(app files at the top level) with its SHA-256 checksum. Releases run one at a time, so two
+quick pushes get two versions.
 
 ## Development
 

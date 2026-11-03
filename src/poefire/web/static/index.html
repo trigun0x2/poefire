@@ -58,6 +58,9 @@
 
       <div class="nav-spacer"></div>
       <div class="side-status">
+        <button type="button" class="status-row update-row" id="update-row" hidden>
+          <span class="dot update"></span><span id="update-text">Update available</span>
+        </button>
         <button type="button" class="status-row" id="prices-pill" title="Refresh prices from poe.ninja">
           <span class="dot"></span><span id="prices-text">Prices…</span>
         </button>
@@ -72,6 +75,7 @@
     </nav>
 
     <div class="content" id="content">
+      <div class="banner update" id="update-banner" hidden role="status"></div>
       <div class="banner" id="session-banner" hidden role="alert"></div>
   <section class="view overview" id="overview-view" hidden>
     <section class="card ov-value">
@@ -210,6 +214,28 @@
         <input id="set-deaths" type="text" spellcheck="false">
       </label>
       <div class="name-chips" id="set-deaths-seen"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Updates</div>
+      <div class="row" style="margin-top:0">
+        <span>poefire <b id="set-version"></b></span>
+        <button type="button" class="btn" id="set-update-check">Check for updates</button>
+        <span class="hint" id="set-update-result"></span>
+      </div>
+      <label class="check">
+        <input id="set-check-updates" type="checkbox">
+        <span>Check for updates automatically <span class="muted">— on start and every 6 hours, from GitHub releases</span></span>
+      </label>
+      <label class="field narrow">
+        <span>Channel</span>
+        <select id="set-update-channel">
+          <option value="stable">Stable — public releases</option>
+          <option value="beta">Beta — also development pre-releases</option>
+        </select>
+      </label>
+      <div class="hint">Updates are downloaded from GitHub, checked against their published SHA-256, and
+        installed when poefire restarts. Your settings and history live in %APPDATA%\poefire and are kept.</div>
     </section>
 
     <div class="save-bar">

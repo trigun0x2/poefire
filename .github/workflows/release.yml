@@ -1,10 +1,15 @@
 name: Windows release
 
-# Every push to the default branch publishes a release, bumping the minor version from the
-# latest vX.Y.Z tag (v0.1.0, v0.2.0, ...; the first one uses __version__ from the code).
-# The version is stamped into the build; nothing needs to be bumped by hand.
-# Running it manually (Actions > Windows release > Run workflow) only builds the app as a
-# workflow artifact, versioned <next>.dev<run number>.
+# Public releases come from `master`: every push there publishes v<major>.<minor+1>.0, counting
+# from the latest public tag (the first one uses __version__ from the code), marked as GitHub's
+# "latest" release. The app's auto-updater installs these.
+#
+# Pushes to the repository's default branch, while that isn't `master`, publish pre-releases
+# (v<next>-dev.<run number>), which only reach users on the beta update channel. Only the 10
+# newest pre-releases are kept.
+#
+# Running the workflow manually (Actions > Windows release > Run workflow) only builds the app
+# as a workflow artifact, versioned <next>-dev.<run number>.
 on:
   push:
     branches: ["**"]
@@ -26,11 +31,15 @@ jobs:
   build:
     name: Build Windows x64
     # pushes to other branches are covered by CI
-    if: github.event_name == 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref_name == 'master' ||
+      github.ref_name == github.event.repository.default_branch
     runs-on: windows-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       artifact: ${{ steps.version.outputs.artifact }}
+      channel: ${{ steps.version.outputs.channel }}
     defaults:
       run:
         shell: bash
@@ -48,20 +57,27 @@ jobs:
       - name: Version
         id: version
         run: |
-          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          # latest *public* release tag (pre-releases have a "-dev." suffix)
+          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -- '-' | head -n 1 || true)
           if [[ -z "$latest" ]]; then
             next=$(uv run python -c "import poefire; print(poefire.__version__)")
           else
             IFS=. read -r major minor _ <<< "${latest#v}"
             next="$major.$((minor + 1)).0"
           fi
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "master" ]]; then
+            channel=public
             version="$next"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            channel=prerelease
+            version="$next-dev.$GITHUB_RUN_NUMBER"
           else
-            version="$next.dev$GITHUB_RUN_NUMBER"
+            channel=none
+            version="$next-dev.$GITHUB_RUN_NUMBER"
           fi
-          echo "latest tag: ${latest:-none}, building $version"
+          echo "latest public tag: ${latest:-none}, building $version ($channel)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
           echo "artifact=poefire-$version-windows-x64" >> "$GITHUB_OUTPUT"
 
       - name: Stamp the version into the build
@@ -123,13 +139,14 @@ jobs:
   release:
     name: Publish GitHub release
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       VERSION: ${{ needs.build.outputs.version }}
       NAME: ${{ needs.build.outputs.artifact }}
+      CHANNEL: ${{ needs.build.outputs.channel }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -146,8 +163,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "$CHANNEL" == "public" ]]; then
+            flags=(--latest --title "poefire v$VERSION" --generate-notes)
+          else
+            flags=(--prerelease --latest=false --title "poefire v$VERSION (pre-release)"
+                   --notes "Development build from \`$GITHUB_REF_NAME\` ($GITHUB_SHA). Only installed by the beta update channel.")
+          fi
           gh release create "v$VERSION" "$NAME.zip" "$NAME.zip.sha256" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "poefire v$VERSION" \
-            --generate-notes
+            "${flags[@]}"
+
+      - name: Keep only the 10 newest pre-releases
+        if: needs.build.outputs.channel == 'prerelease'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease)] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |
+          while read -r tag; do
+            echo "deleting old pre-release $tag"
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          done

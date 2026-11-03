@@ -306,11 +306,13 @@ def cmd_ui(args: argparse.Namespace) -> int:
                         js_api=controls, background_color="#111317",
                     )  # fmt: skip
                     controls._attach(window)
+                    rt.request_exit = controls.close  # updater: close the window to install
                     # the packaged exe carries the icon itself; this covers running from source
                     icon = Path(__file__).parent / "web" / "static" / "favicon.ico"
                     webview.start(icon=str(icon))
                 except Exception as e:  # e.g. .NET/WebView2 can't load on this machine
                     print(f"native window failed ({e!r}); opening the browser instead")
+                    rt.request_exit = lambda: setattr(server, "should_exit", True)
                     webbrowser.open(url)
                     while thread.is_alive():  # keep serving; join in steps so Ctrl+C works
                         thread.join(0.5)
@@ -318,6 +320,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
                 server.should_exit = True
                 thread.join(timeout=5)
                 return 0
+        rt.request_exit = lambda: setattr(server, "should_exit", True)
         if not args.no_browser:
             threading.Timer(1.0, webbrowser.open, args=(url,)).start()
         print(f"poefire UI at {url} (Ctrl+C to stop)")

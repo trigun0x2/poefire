@@ -83,6 +83,7 @@ function renderStatus() {
     ? "The website rejected your POESESSID. Click to paste a new one in Settings."
     : !l.enabled ? `${l.reason} (click to open Settings)` : l.last?.error || "Take a snapshot now";
   renderSessionBanner(l.session);
+  renderUpdate(s.update);
   $("last-empty").innerHTML = s.log_path
     ? "No map finished yet. Stats appear when you're back in your hideout."
     : 'Client.txt not found. Set its location in <a href="#settings">Settings</a>.';
@@ -129,6 +130,63 @@ function span(seconds) {
 function dateOf(unix) {
   return new Date(unix * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
+
+// --- updates ---
+
+function dismissedUpdate() {
+  try { return localStorage.getItem("poefire.update.dismissed"); } catch { return null; }
+}
+
+function renderUpdate(u) {
+  const a = u?.available;
+  $("update-row").hidden = !a;
+  if (a) $("update-text").textContent = `Update: v${a.version}${a.prerelease ? " (beta)" : ""}`;
+  const b = $("update-banner");
+  const busy = u && (u.stage === "downloading" || u.stage === "installing");
+  const show = a && (busy || u.stage === "failed" || dismissedUpdate() !== a.version);
+  b.hidden = !show;
+  if (!show) return;
+  const key = `${a.version}:${u.stage}:${u.progress[0]}:${u.error}`;
+  if (b.dataset.key === key) return; // don't rebuild (keeps the notes open) unless it changed
+  b.dataset.key = key;
+  let actions;
+  if (u.stage === "downloading" || u.stage === "installing") {
+    const [done, total] = u.progress;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    actions = u.stage === "installing"
+      ? "<span>Installing… poefire will restart</span>"
+      : `<span class="progress"><i style="width:${pct}%"></i></span><span>${pct}%</span>`;
+  } else if (u.can_install) {
+    actions = '<button type="button" class="btn primary" data-act="install">Install and restart</button>' +
+      '<button type="button" class="btn" data-act="later">Later</button>';
+  } else {
+    actions = `<a class="btn primary" href="${esc(a.page_url)}" target="_blank" rel="noopener">Download</a>` +
+      '<button type="button" class="btn" data-act="later">Later</button>';
+  }
+  const failed = u.stage === "failed" ? `<div class="bad">Update failed: ${esc(u.error || "unknown error")}</div>` : "";
+  const why = !u.can_install && u.cannot_install_reason ? `<div class="hint">${esc(u.cannot_install_reason)}</div>` : "";
+  const notes = a.notes ? `<details><summary>What's new</summary><pre>${esc(a.notes)}</pre></details>` : "";
+  b.innerHTML = `<div><b>poefire v${esc(a.version)} is available</b> <span class="muted">(you have v${esc(u.current)})</span>` +
+    `${failed}${why}${notes}</div><div class="actions">${actions}</div>`;
+}
+
+$("update-banner").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  if (btn.dataset.act === "later") {
+    try { localStorage.setItem("poefire.update.dismissed", status.update.available.version); } catch { /* ignore */ }
+    $("update-banner").hidden = true;
+    return;
+  }
+  btn.disabled = true;
+  await api("/api/update/install", { method: "POST" }).catch((err) => alert(err.message));
+  pollStatus();
+});
+$("update-row").addEventListener("click", () => {
+  try { localStorage.removeItem("poefire.update.dismissed"); } catch { /* ignore */ }
+  $("update-banner").dataset.key = "";
+  renderUpdate(status?.update);
+});
 
 function renderSessionBanner(h) {
   const b = $("session-banner");
@@ -427,6 +485,9 @@ async function loadSettings() {
   $("set-price-options").innerHTML = s.ninja_leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
   renderLeagueHints();
   $("set-run-start").checked = s.snapshot_on_run_start;
+  $("set-version").textContent = `v${s.version}`;
+  $("set-check-updates").checked = s.check_updates;
+  $("set-update-channel").value = s.update_channel;
   $("set-delay").value = s.snapshot_delay;
   $("set-deaths").value = s.characters.join(", ");
   renderDeathNames();
@@ -553,6 +614,19 @@ $("set-session-clear").addEventListener("click", async () => {
 });
 
 $("set-check").addEventListener("click", checkAccount);
+$("set-update-check").addEventListener("click", async () => {
+  setStatus("set-update-result", "Checking…");
+  try {
+    const u = await api("/api/update/check", { method: "POST" });
+    if (u.error) setStatus("set-update-result", `✗ ${u.error}`, "bad");
+    else if (u.available) setStatus("set-update-result", `v${u.available.version} is available, see the banner at the top.`, "ok");
+    else setStatus("set-update-result", "You're on the latest version.", "ok");
+    try { localStorage.removeItem("poefire.update.dismissed"); } catch { /* ignore */ }
+    if (status) { status.update = u; renderUpdate(u); }
+  } catch (e) {
+    setStatus("set-update-result", `✗ ${e.message}`, "bad");
+  }
+});
 $("set-deaths").addEventListener("input", renderDeathNames);
 $("set-deaths-seen").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-name]");
@@ -575,6 +649,8 @@ $("settings-view").addEventListener("submit", async (e) => {
     stash_tabs: [...$("set-tabs").querySelectorAll("input:checked")].map((i) => i.value),
     snapshot_on_run_start: $("set-run-start").checked,
     snapshot_delay: Number($("set-delay").value || 0),
+    check_updates: $("set-check-updates").checked,
+    update_channel: $("set-update-channel").value,
   };
   $("set-save").disabled = true;
   try {

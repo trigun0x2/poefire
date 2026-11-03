@@ -80,6 +80,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "in_run": state.in_run,
             "run": run_json,
             "league_is_private": rt.is_private,
+            "update": rt.update.to_json(),
             "value": value,
             "prices": {
                 "league": rt.price_league,
@@ -175,6 +176,25 @@ def create_app(rt: AppRuntime) -> FastAPI:
                 **overview.holdings(s, book, tabs.split(",")),
                 "loot_enabled": rt.loot.enabled,
             }
+
+    # --- updates ---
+
+    @app.get("/api/update")
+    def update_state() -> dict[str, Any]:
+        return rt.update.to_json()
+
+    @app.post("/api/update/check")
+    def update_check() -> dict[str, Any]:
+        return rt.check_update().to_json()
+
+    @app.post("/api/update/install")
+    def update_install() -> dict[str, Any]:
+        if rt.update.available is None:
+            raise HTTPException(409, "no update available")
+        if not rt.update.can_install:
+            raise HTTPException(409, rt.update.cannot_install_reason or "can't self-update")
+        rt.install_update()
+        return rt.update.to_json()
 
     # --- settings ---
 

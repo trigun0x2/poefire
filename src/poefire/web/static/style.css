@@ -309,3 +309,13 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
 }
 .banner .btn { margin-left: auto; }
 .chip.bad { background: rgba(239, 93, 93, 0.15); color: var(--bad); }
+
+/* update available */
+.banner.update { border-color: rgba(255, 122, 47, 0.45); background: var(--accent-soft); }
+.banner.update .actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.banner.update details { margin-top: 4px; color: var(--muted); }
+.banner.update details pre { white-space: pre-wrap; font: inherit; margin: 6px 0 0; max-height: 180px; overflow: auto; }
+.banner .progress { width: 160px; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.banner .progress i { display: block; height: 100%; background: var(--accent); }
+.dot.update { background: var(--accent); }
+.update-row { color: var(--accent) !important; }

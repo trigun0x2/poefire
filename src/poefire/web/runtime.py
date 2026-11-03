@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from poefire import __version__, wiring
 from poefire.config import Config
@@ -24,12 +25,50 @@ from poefire.pricing.valuation import value_holdings
 from poefire.service import TrackerService
 from poefire.store import Store
 from poefire.tracker import Notice, TrackerState
+from poefire.updater import (
+    UpdateError,
+    UpdateInfo,
+    Updater,
+    can_self_update,
+    install_dir,
+    launch_swap,
+    staging_root,
+)
 
 log = logging.getLogger(__name__)
 
 LEAGUE_KEY = "ui_league"
 SESSION_GAP = timedelta(minutes=30)
 FALLBACK_LEAGUES = ("Standard", "Hardcore")
+
+
+UPDATE_CHECK_EVERY = 6 * 3600
+
+
+@dataclass
+class UpdateState:
+    current: str = __version__
+    checking: bool = False
+    checked_at: datetime | None = None
+    available: UpdateInfo | None = None
+    error: str | None = None
+    stage: str = "idle"  # idle | downloading | installing | failed
+    progress: tuple[int, int] = (0, 0)
+    can_install: bool = False
+    cannot_install_reason: str | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "current": self.current,
+            "checking": self.checking,
+            "checked_at": self.checked_at.isoformat() if self.checked_at else None,
+            "available": self.available.to_json() if self.available else None,
+            "error": self.error,
+            "stage": self.stage,
+            "progress": list(self.progress),
+            "can_install": self.can_install,
+            "cannot_install_reason": self.cannot_install_reason,
+        }
 
 
 @dataclass
@@ -49,6 +88,7 @@ class AppRuntime:
         log_path: Path | None = None,
         now: Callable[[], datetime] = datetime.now,
         config_path: Path | None = None,
+        updater: Updater | None = None,
     ) -> None:
         """`recorder=True` builds one from the config when possible (and again on
         reconfigure); a LootRecorder instance is used as is; None disables loot tracking.
@@ -78,6 +118,14 @@ class AppRuntime:
         self._account_leagues: list[str] = []
         stored = self._store.get_json(LEAGUE_KEY)
         self._league: str = stored or cfg.league or FALLBACK_LEAGUES[0]
+
+        self.updater = updater or Updater(
+            __version__, f"poefire/{__version__} (+{wiring.PROJECT_URL})"
+        )
+        ok, why = can_self_update()
+        self.update = UpdateState(can_install=ok, cannot_install_reason=why)
+        self.request_exit: Callable[[], None] | None = None  # set by the UI host (window/server)
+        self._update_lock = threading.Lock()
 
         self.loot = LootStatus(enabled=False)
         self.recorder: LootRecorder | None = None
@@ -221,6 +269,59 @@ class AppRuntime:
         self.recorder.request(Trigger.MANUAL, None)
         return True
 
+    # --- updates ---
+
+    def check_update(self) -> UpdateState:
+        if not self._update_lock.acquire(blocking=False):
+            return self.update  # a check or install is already running
+        try:
+            self.update.checking = True
+            self.update.error = None
+            beta = self.cfg.update_channel == "beta"
+            self.update.available = self.updater.check(include_prereleases=beta)
+        except UpdateError as e:
+            self.update.error = str(e)
+        finally:
+            self.update.checking = False
+            self.update.checked_at = self.now()
+            self._update_lock.release()
+        return self.update
+
+    def install_update(self) -> None:
+        """Download + verify + stage the available update in the background, then hand over to
+        the swap script and exit."""
+        info = self.update.available
+        if info is None or not self.update.can_install or self.update.stage == "downloading":
+            return
+        self.update.stage, self.update.error = "downloading", None
+
+        def run() -> None:
+            folder = install_dir()
+            try:
+                assert folder is not None
+                staged = self.updater.stage(
+                    info, staging_root(),
+                    progress=lambda done, total: setattr(self.update, "progress", (done, total)),
+                )  # fmt: skip
+                self.update.stage = "installing"
+                launch_swap(staged, folder, staging_root() / "update.log")
+            except (UpdateError, OSError, AssertionError) as e:
+                self.update.stage, self.update.error = "failed", str(e) or type(e).__name__
+                return
+            if self.request_exit is not None:
+                self.request_exit()
+
+        threading.Thread(target=run, name="update", daemon=True).start()
+
+    def _update_loop(self) -> None:
+        if self._stop.wait(10):  # let the app settle first
+            return
+        while True:
+            if self.cfg.check_updates:
+                self.check_update()
+            if self._stop.wait(UPDATE_CHECK_EVERY):
+                return
+
     def refresh_prices(self, force: bool = False) -> None:
         threading.Thread(
             target=self.prices.refresh, args=(self.price_league, force), daemon=True
@@ -238,6 +339,7 @@ class AppRuntime:
         self._spawn(
             "prices", lambda: self.prices.run_forever(lambda: self.price_league, self._stop)
         )
+        self._spawn("updates", self._update_loop)
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)
