@@ -44,7 +44,11 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
     """Latest snapshot's items, valued at current prices. `tabs` filters by source id
     (a stash tab id, or "inventory"); empty = everything."""
     latest = store.latest_snapshot_items()
-    names: dict[str, str] = store.get_json(TAB_NAMES_KEY) or {}
+    saved: dict[str, str] = store.get_json(TAB_NAMES_KEY) or {}
+
+    def name_of(src: str) -> str:
+        return saved.get(src) or ("Inventory" if src == "inventory" else "Unnamed tab")
+
     cpd = book.chaos_per_divine
     if latest is None:
         return {"taken_at": None, "tabs": [], "items": [], "total_chaos": None,
@@ -61,7 +65,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
     }
     order = sorted(tab_values, key=lambda src: (src != "inventory", -tab_values[src]))
     tab_list = [
-        {"id": src, "name": names.get(src, src), "chaos": round(tab_values[src], 1),
+        {"id": src, "name": name_of(src), "chaos": round(tab_values[src], 1),
          "items": len(by_source[src])}
         for src in order
     ]  # fmt: skip
@@ -88,7 +92,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
                 "divine_total": _round(h.chaos_total / cpd, 3) if cpd and h.chaos_total else None,
                 "share": round(h.chaos_total / total, 4) if total and h.chaos_total else 0,
                 "icon": h.icon,
-                "tabs": [names.get(s, s) for s in h.sources],
+                "tabs": [name_of(s) for s in h.sources],
             }
             for h in shown[:limit]
         ],

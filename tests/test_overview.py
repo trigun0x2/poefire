@@ -137,11 +137,24 @@ def test_recorder_values_each_snapshot(env: tuple[TestClient, AppRuntime, Path])
     rec = LootRecorder(OneSnapshot([stack("Divine Orb", 2, "tabA")]),  # type: ignore[arg-type]
                        lambda: Store(db), now=lambda: NOW)  # fmt: skip
     rec.valuer = rt.value_snapshot
+    with Store(db) as s:
+        s.set_json(TAB_NAMES_KEY, {"old": "Old Tab", "tabA": "Renamed later"})
     rec.record(Trigger.MANUAL)
     rec.stop()
     with Store(db) as s:
         assert s.value_history("Keepers") == [(NOW, 400.0, 200.0)]
-        assert s.get_json(TAB_NAMES_KEY) == {"inventory": "Inventory", "tabA": "Currency"}
+        # merged with names saved earlier; the newest name wins
+        assert s.get_json(TAB_NAMES_KEY) == {"old": "Old Tab", "inventory": "Inventory",
+                                             "tabA": "Currency"}  # fmt: skip
+
+
+def test_holdings_never_show_a_raw_tab_id(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    client, _, db = env
+    with Store(db) as s, s.transaction():
+        s.add_snapshot(Snapshot(NOW, [stack("Divine Orb", 1, "9f3a1c77e2")]), "manual", None)
+    d = client.get("/api/overview/items").json()
+    assert [t["name"] for t in d["tabs"]] == ["Unnamed tab"]
+    assert d["items"][0]["tabs"] == ["Unnamed tab"]
 
 
 class FakeWindow:

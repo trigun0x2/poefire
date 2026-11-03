@@ -302,7 +302,8 @@ class SessionApi:
         for t in data.get("tabs") or ():
             tab_id = str(t.get("id") or f"index:{t['i']}")
             self._tab_index[tab_id] = int(t["i"])
-            tabs.append({"id": tab_id, "name": t.get("n", ""), "type": t.get("type", ""),
+            name = t.get("n") or t.get("name") or ""
+            tabs.append({"id": tab_id, "name": name, "type": t.get("type", ""),
                          "index": int(t["i"])})  # fmt: skip
         return tabs
 

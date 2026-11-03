@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -48,6 +49,37 @@ class SnapshotError(Exception):
     pass
 
 
+_TYPE_NAMES = {"MapStash": "Maps", "UniqueStash": "Uniques", "CurrencyStash": "Currency",
+               "FragmentStash": "Fragments", "DivinationCardStash": "Divination Cards",
+               "EssenceStash": "Essences", "Folder": "Folder"}  # fmt: skip
+
+
+def _section_name(section: str) -> str:
+    """GGG's map-section label (`tier16`, `unique`, `special`) -> `Tier 16` / `Unique`."""
+    m = re.fullmatch(r"tier(\d+)", section)
+    return f"Tier {m.group(1)}" if m else section.replace("_", " ").title()
+
+
+def tab_display_name(tab: Json) -> str:
+    """A readable name for a tab or tab section, never the raw tab id. Map-tab sections
+    are named by their `metadata.map.section`; nameless tabs fall back to their type or
+    their position."""
+    meta = tab.get("metadata") or {}
+    section = (meta.get("map") or {}).get("section") if isinstance(meta, dict) else None
+    if isinstance(section, str) and section:
+        return _section_name(section)
+    name = str(tab.get("name") or tab.get("n") or "").strip()
+    if name:
+        return name
+    if tab.get("type") in _TYPE_NAMES:
+        return _TYPE_NAMES[str(tab["type"])]
+    index = tab.get("index", tab.get("i"))
+    if isinstance(index, int):
+        return f"Tab {index + 1}"
+    t = str(tab.get("type") or "").removesuffix("Stash")
+    return f"{t} tab" if t else "Unnamed tab"
+
+
 def _walk(tabs: Iterable[Json], parent: Json | None = None) -> Iterator[tuple[Json, Json | None]]:
     for tab in tabs:
         yield tab, parent
@@ -79,12 +111,14 @@ class Snapshotter:
         self.include_inventory = include_inventory
         self.clock = clock
         self._tabs: list[TabRef] | None = None
+        self._listed_names: dict[str, str] = {}
 
     def set_league(self, league: str) -> None:
         """Switch leagues: tab ids and the auto-picked character are per league."""
         if league != self.league:
             self.league = league
             self._tabs = None
+            self._listed_names = {}
             self.character = self._configured_character
 
     def resolve_character(self) -> str:
@@ -106,6 +140,7 @@ class Snapshotter:
         if self._tabs is not None and not refresh:
             return self._tabs
         listed = list(_walk(self.api.list_stashes(self.league)))
+        self._listed_names = {str(t["id"]): tab_display_name(t) for t, _ in listed if t.get("id")}
         wanted = {w.casefold() for w in self.wanted}
         refs: list[TabRef] = []
         seen: set[str] = set()
@@ -123,9 +158,9 @@ class Snapshotter:
                 return
             seen.add(tab["id"])
             refs.append(
-                TabRef(tab["id"], tab.get("name", ""), tab.get("type", ""),
+                TabRef(tab["id"], tab_display_name(tab), tab.get("type", ""),
                        parent["id"] if parent else None,
-                       parent.get("name") if parent else None)
+                       tab_display_name(parent) if parent else None)
             )  # fmt: skip
 
         for tab, parent in listed:
@@ -148,9 +183,10 @@ class Snapshotter:
         return refs
 
     def tab_names(self) -> dict[str, str]:
-        """Source id -> display name, for the tabs in the last snapshot."""
-        names = {"inventory": "Inventory"}
-        names.update({t.id: t.label or t.id for t in self._tabs or ()})
+        """Source id -> display name: every tab in the league's tab list, plus the
+        watched tabs and sections (labelled `Parent / Section`)."""
+        names = {**self._listed_names, "inventory": "Inventory"}
+        names.update({t.id: t.label for t in self._tabs or ()})
         return names
 
     def take(self) -> Snapshot:

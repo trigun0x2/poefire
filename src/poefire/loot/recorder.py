@@ -165,7 +165,9 @@ class LootRecorder:
     # --- the actual work (synchronous; also used for manual snapshots) ---
 
     def _record_value(self, store: Store, snapshot_id: int, snap: Snapshot) -> None:
-        store.set_json(TAB_NAMES_KEY, self.snapshotter.tab_names())
+        # merged, so tabs dropped from the watch list keep their names in older data
+        names = {**(store.get_json(TAB_NAMES_KEY) or {}), **self.snapshotter.tab_names()}
+        store.set_json(TAB_NAMES_KEY, names)
         if self.valuer is None:
             return
         try:

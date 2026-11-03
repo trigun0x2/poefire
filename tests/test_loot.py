@@ -198,6 +198,28 @@ def test_resolves_tabs_folders_and_special_sections() -> None:
     assert api.calls.count(("list_stashes", "Settlers")) == 1  # cached
 
 
+def test_tab_names_never_fall_back_to_the_tab_id() -> None:
+    api = FakeApi()
+    t16, uniq = {"map": {"section": "tier16"}}, {"map": {"section": "unique"}}
+    api.tabs = [
+        {"id": "a1b2c3", "name": "", "type": "PremiumStash", "index": 4},
+        {"id": "d4e5f6", "name": "", "type": "CurrencyStash", "index": 0},
+        {"id": "m0", "name": "Maps", "type": "MapStash", "children": [
+            {"id": "s1", "name": "1", "type": "MapStash", "metadata": t16},
+            {"id": "s2", "name": "", "type": "MapStash", "metadata": uniq},
+        ]},
+        {"id": "o9", "name": "Other", "type": "PremiumStash"},
+    ]  # fmt: skip
+    api.contents.update({k: [] for k in ("a1b2c3", "d4e5f6", "s1", "s2")})
+    s = make_snapshotter(api, ["a1b2c3", "d4e5f6", "Maps"], character="Me")
+    assert s.take().complete
+    assert s.tab_names() == {
+        "inventory": "Inventory", "a1b2c3": "Tab 5", "d4e5f6": "Currency",
+        "m0": "Maps", "s1": "Maps / Tier 16", "s2": "Maps / Unique",
+        "o9": "Other",  # unwatched tabs are named too
+    }  # fmt: skip
+
+
 def test_snapshot_collects_inventory_and_tabs_but_not_equipment() -> None:
     api = FakeApi()
     api.inventory = [currency("Chaos Orb", 3)]
