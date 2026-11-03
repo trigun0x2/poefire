@@ -12,7 +12,7 @@ from typing import Any
 
 from poefire.events import LogEvent, event_kind, event_payload_json
 from poefire.loot.diff import ItemDelta
-from poefire.loot.items import ItemEntry
+from poefire.loot.items import ItemEntry, is_tracked
 from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
@@ -317,10 +317,12 @@ class Store:
             "ORDER BY SUM(quantity) DESC, name",
             (run_id, kind),
         ).fetchall()
-        return [
+        deltas = [
             ItemDelta(r["key"], r["name"], r["frame_type"], r["quantity"], json.loads(r["sample"]))
             for r in rows
         ]
+        # Gear isn't counted (see is_tracked); also hides it in loot recorded before that rule.
+        return [d for d in deltas if is_tracked(d.sample)]
 
     def runs_with_loot_data(self, run_ids: list[str]) -> set[str]:
         """Runs that have at least one complete return-to-hideout snapshot (so a loot value

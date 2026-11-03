@@ -216,7 +216,7 @@ async function renderDetail() {
       <div class="muted">${duration(d.active_seconds)} · ${d.deaths} death${d.deaths === 1 ? "" : "s"}</div>
     </div>
     ${itemList(d.loot.items)}
-    ${d.loot.unpriced ? `<div class="note">${d.loot.unpriced} item kind${d.loot.unpriced === 1 ? "" : "s"} without a poe.ninja price (rares, magic gear…) not counted.</div>` : ""}
+    ${d.loot.unpriced ? `<div class="note">${d.loot.unpriced} item kind${d.loot.unpriced === 1 ? "" : "s"} without a poe.ninja price, not counted in the value.</div>` : ""}
     ${before}`;
 }
 

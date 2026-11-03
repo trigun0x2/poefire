@@ -40,6 +40,8 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Ap
     cfg = Config(db_path=db, session_path=tmp_path / "session.json", log_path=log,
                  league="Keepers")  # fmt: skip
     rt = AppRuntime(cfg, PriceService(OfflineNinja(), lambda: Store(db)), config_path=cfg_path)
+    # a league change refreshes prices in a background thread; keep tests free of stray threads
+    monkeypatch.setattr(rt, "refresh_prices", lambda force=False: None)
     client = TestClient(create_app(rt))
     client.headers["host"] = "127.0.0.1:8460"
     return client, rt, tmp_path

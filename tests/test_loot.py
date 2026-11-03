@@ -26,8 +26,20 @@ def currency(name: str, n: int, item_id: str | None = None) -> Json:
             "frameType": 5, "stackSize": n, "maxStackSize": 20}  # fmt: skip
 
 
+def frag(name: str, item_id: str, frame: int = 0) -> Json:
+    """A non-stackable item that isn't gear (breachstone, logbook, beast...)."""
+    return {"id": item_id, "typeLine": name, "baseType": name, "frameType": frame}
+
+
 def gear(name: str, base: str, item_id: str, frame: int = 3) -> Json:
-    return {"id": item_id, "name": name, "typeLine": base, "baseType": base, "frameType": frame}
+    return {
+        "id": item_id,
+        "name": name,
+        "typeLine": base,
+        "baseType": base,
+        "frameType": frame,
+        "requirements": [{"name": "Level", "values": [["60", 0]]}],
+    }
 
 
 def entries(items: list[Json], source: str = "inventory") -> list[ItemEntry]:
@@ -77,34 +89,47 @@ def test_stack_merge_with_new_ids_nets_correctly() -> None:
 
 
 def test_moving_loot_into_a_watched_tab_is_not_a_change() -> None:
-    ring = gear("Ruin Loop", "Amethyst Ring", "r1", frame=2)
-    before = entries([ring, currency("Chaos Orb", 4)], "inventory")
-    after = entries([ring], "tab1") + entries([currency("Chaos Orb", 4)], "tab2")
+    stone = frag("Xoph's Breachstone", "x1")
+    before = entries([stone, currency("Chaos Orb", 4)], "inventory")
+    after = entries([stone], "tab1") + entries([currency("Chaos Orb", 4)], "tab2")
     assert summary(before, after) == {}
 
 
 def test_non_stackables_by_id() -> None:
-    a = gear("Ruin Loop", "Amethyst Ring", "r1", frame=2)
-    b = gear("Ruin Loop", "Amethyst Ring", "r2", frame=2)
-    sold = gear("", "Hubris Circlet", "h1", frame=0)
-    deltas = diff_items(entries([a, sold]), entries([a, b]))
+    a = frag("Xoph's Breachstone", "x1")
+    b = frag("Xoph's Breachstone", "x2")
+    used = frag("Expedition Logbook", "l1", frame=2)
+    deltas = diff_items(entries([a, used]), entries([a, b]))
     assert [(d.name, d.quantity) for d in deltas] == [
-        ("Ruin Loop Amethyst Ring", 1),
-        ("Hubris Circlet", -1),
+        ("Xoph's Breachstone", 1),
+        ("Expedition Logbook", -1),
     ]
 
 
 def test_spent_and_gained_and_sample() -> None:
     before = entries([currency("Chaos Orb", 10), {"id": "m1", "typeLine": "Strand Map",
                                                   "frameType": 0}])  # fmt: skip
-    after = entries([currency("Chaos Orb", 4), gear("Headhunter", "Leather Belt", "hh", 3)])
+    after = entries([currency("Chaos Orb", 4), frag("Xoph's Breachstone", "xb")])
     deltas = diff_items(before, after)
     assert {d.name: d.quantity for d in deltas} == {
-        "Headhunter Leather Belt": 1,
+        "Xoph's Breachstone": 1,
         "Chaos Orb": -6,
         "Strand Map": -1,
     }
-    assert deltas[0].sample["id"] == "hh"
+    assert deltas[0].sample["id"] == "xb"
+
+
+def test_gear_is_not_loot() -> None:
+    before = entries([currency("Chaos Orb", 1)])
+    after = entries([
+        currency("Chaos Orb", 1),
+        gear("Headhunter", "Leather Belt", "hh", 3),  # unique
+        gear("Ruin Loop", "Amethyst Ring", "r1", 2),  # rare
+        gear("", "Hubris Circlet", "h1", 0),  # normal
+        {"id": "u", "name": "Maelström of Chaos", "typeLine": "Atoll Map", "frameType": 3,
+         "properties": [{"name": "Map Tier", "values": [["5", 0]]}]},  # unique map
+    ])  # fmt: skip
+    assert diff_items(before, after) == []
 
 
 # --- snapshotter ---
@@ -176,12 +201,12 @@ def test_resolves_tabs_folders_and_special_sections() -> None:
 def test_snapshot_collects_inventory_and_tabs_but_not_equipment() -> None:
     api = FakeApi()
     api.inventory = [currency("Chaos Orb", 3)]
-    api.contents["t1"] = [gear("", "Hubris Circlet", "h1", 0)]
+    api.contents["t1"] = [gear("", "Hubris Circlet", "h1", 0), frag("Xoph's Breachstone", "xb")]
     api.contents["m16"] = [{"id": "map1", "typeLine": "Strand Map", "frameType": 0}]
     api.contents["t3"] = [currency("Mirror of Kalandra", 1)]
     snap = make_snapshotter(api, ["Dump", "Maps"]).take()
     assert snap.complete
-    assert sorted(e.name for e in snap.items) == ["Chaos Orb", "Hubris Circlet", "Strand Map"]
+    assert sorted(e.name for e in snap.items) == ["Chaos Orb", "Strand Map", "Xoph's Breachstone"]
     assert ("get_character", "Me") in api.calls  # picked the current character in the league
     assert {e.source for e in snap.items} == {"inventory", "t1", "m16"}
 
@@ -237,8 +262,8 @@ def test_chain_attributes_hideout_and_run_deltas(tmp_path: Path) -> None:
         [
             snap(0, [currency(c, 10), {"id": "map", "typeLine": "Strand Map", "frameType": 0}]),
             snap(1, [currency(c, 10)]),  # entered map: the map item was used
-            snap(5, [currency(c, 25), gear("", "Divine Orb", "d", 5)]),  # back in hideout
-            snap(6, [currency(c, 40), gear("", "Divine Orb", "d", 5)]),  # mid-map dump trip
+            snap(5, [currency(c, 25), currency("Divine Orb", 1, "d")]),  # back in hideout
+            snap(6, [currency(c, 40), currency("Divine Orb", 1, "d")]),  # mid-map dump trip
         ],
     )
     assert rec.record(Trigger.MANUAL).baseline
@@ -349,7 +374,14 @@ def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
     snaps = [
         snap(0, [currency(c, 5), {"id": "m", "typeLine": "Strand Map", "frameType": 0}]),
         snap(1, [currency(c, 5)]),  # map entry
-        snap(4, [currency(c, 9), gear("Headhunter", "Leather Belt", "hh")]),  # back home
+        snap(
+            4,
+            [
+                currency(c, 9),
+                gear("Headhunter", "Leather Belt", "hh"),  # back home
+                frag("Xoph's Breachstone", "xb"),
+            ],
+        ),
     ]
     rec = LootRecorder(ScriptedSnapshotter(snaps), lambda: Store(db),  # type: ignore[arg-type]
                        return_delay=0, now=lambda: T)  # fmt: skip
@@ -392,6 +424,50 @@ def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
     assert [r.trigger for r in results] == [Trigger.MANUAL, Trigger.RUN_START, Trigger.RUN_RETURN]
     assert {d.name: d.quantity for d in store.run_loot(run_row.id)} == {
         "Chaos Orb": 4,
-        "Headhunter Leather Belt": 1,
+        "Xoph's Breachstone": 1,  # the Headhunter is gear: not counted
     }
     assert {d.name: d.quantity for d in store.run_loot(run_row.id, "between")} == {"Strand Map": -1}
+
+
+ICON_BASE = "https://web.poecdn.com/gen/image/"
+
+
+def icon(path: str) -> str:
+    import base64
+    import json
+
+    seg = base64.urlsafe_b64encode(json.dumps([1, 1, {"f": path, "scale": 1}]).encode())
+    return ICON_BASE + seg.decode().rstrip("=") + "/abc123/x.png"
+
+
+@pytest.mark.parametrize(
+    ("raw", "tracked"),
+    [
+        ({"typeLine": "Vaal Regalia", "frameType": 2,
+          "icon": icon("2DItems/Armours/BodyArmours/BodyInt3")}, False),
+        ({"typeLine": "Opal Ring", "frameType": 1, "icon": icon("2DItems/Rings/Ring9")}, False),
+        ({"typeLine": "Divine Life Flask", "frameType": 0,
+          "icon": icon("2DItems/Flasks/lifeflask11")}, False),
+        ({"typeLine": "Cobalt Jewel", "frameType": 2,
+          "icon": icon("2DItems/Jewels/basicint")}, False),
+        ({"typeLine": "Imbued Wand", "frameType": 0,
+          "icon": "https://web.poecdn.com/image/Art/2DItems/Weapons/OneHandWeapons/Wands/Wand7.png"},
+         False),
+        ({"typeLine": "Xoph's Breachstone", "frameType": 0,
+          "icon": icon("2DItems/Maps/Breachstones/XophBreachstone")}, True),
+        ({"typeLine": "Expedition Logbook", "frameType": 2,
+          "icon": icon("2DItems/Maps/ExpeditionLogbook")}, True),
+        ({"typeLine": "Chaos Orb", "frameType": 5, "stackSize": 3,
+          "icon": icon("2DItems/Currency/CurrencyRerollRare")}, True),
+        ({"typeLine": "Ambush Scarab", "frameType": 0, "stackSize": 2}, True),
+        ({"typeLine": "The Doctor", "frameType": 6, "stackSize": 1}, True),
+        ({"typeLine": "Enlighten Support", "frameType": 4}, True),
+        ({"typeLine": "Strand Map", "frameType": 2,
+          "properties": [{"name": "Map Tier", "values": [["16", 0]]}]}, True),
+        ({"name": "Tabula Rasa", "typeLine": "Simple Robe", "frameType": 3}, False),
+    ],
+)  # fmt: skip
+def test_is_tracked(raw: Json, tracked: bool) -> None:
+    from poefire.loot.items import is_tracked
+
+    assert is_tracked(raw) is tracked

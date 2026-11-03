@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from poefire.loot.items import ItemEntry, Json
+from poefire.loot.items import ItemEntry, Json, is_tracked
 
 log = logging.getLogger(__name__)
 
@@ -153,7 +153,9 @@ class Snapshotter:
                         f"not {self.league}"
                     )
                 snap.items.extend(
-                    ItemEntry.from_api(i, "inventory") for i in char.get("inventory") or ()
+                    ItemEntry.from_api(i, "inventory")
+                    for i in char.get("inventory") or ()
+                    if is_tracked(i)
                 )
             for tab in self.resolve_tabs():
                 if tab.parent_id:
@@ -163,7 +165,9 @@ class Snapshotter:
                     stash = inner[0] if inner else wrapper
                 else:
                     stash = self.api.get_stash(self.league, tab.id)
-                snap.items.extend(ItemEntry.from_api(i, tab.id) for i in collect_items(stash))
+                snap.items.extend(
+                    ItemEntry.from_api(i, tab.id) for i in collect_items(stash) if is_tracked(i)
+                )
         except Exception as e:  # any failure makes the snapshot unusable for diffing
             log.warning("snapshot failed: %s", e)
             snap.complete = False

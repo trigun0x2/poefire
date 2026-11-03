@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from poefire.loot.items import ItemEntry, Json
+from poefire.loot.items import ItemEntry, Json, is_tracked
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,8 @@ class ItemDelta:
 
 
 def diff_items(before: Iterable[ItemEntry], after: Iterable[ItemEntry]) -> list[ItemDelta]:
-    """Gains are positive, losses negative; unchanged keys are omitted.
+    """Gains are positive, losses negative; unchanged keys are omitted. Gear (uniques and
+    normal/magic/rare equipment) is ignored, see `is_tracked`.
 
     Where an item sits (inventory vs. which watched tab) does not matter: moving loot from the
     inventory into a watched tab nets to zero.
@@ -33,6 +34,8 @@ def diff_items(before: Iterable[ItemEntry], after: Iterable[ItemEntry]) -> list[
 
     before_ids: dict[str, ItemEntry] = {}
     after_ids: dict[str, ItemEntry] = {}
+    before = [e for e in before if is_tracked(e.raw)]
+    after = [e for e in after if is_tracked(e.raw)]
     for e in before:
         if e.stackable or e.item_id is None:
             add(e, -e.quantity)

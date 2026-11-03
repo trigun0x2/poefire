@@ -27,7 +27,7 @@ class ValuedItem:
 class Valuation:
     chaos: float = 0.0  # net value of priced items (gains minus losses)
     items: list[ValuedItem] = field(default_factory=list)
-    unpriced: int = 0  # item kinds with no poe.ninja price (rares, magic gear, ...)
+    unpriced: int = 0  # item kinds poe.ninja has no price for
 
     def divine(self, chaos_per_divine: float | None) -> float | None:
         return self.chaos / chaos_per_divine if chaos_per_divine else None

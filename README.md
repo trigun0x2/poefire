@@ -168,8 +168,6 @@ Items are matched like this:
 
 - **Currency, fragments, cards, scarabs and other stackables:** by name.
 - **Maps:** by name and tier.
-- **Uniques:** by name and base type; 5- and 6-link variants are matched by link count. When
-  several variants fit, the cheapest one is used, so values err low.
 - **Gems:** by name, closest level and quality, and whether they're corrupted.
 
 Loot is only known from snapshots, and snapshots happen in the hideout. While you're inside
@@ -178,8 +176,13 @@ and polling it during the map would waste the rate limit. A map's value appears 
 return to the hideout. If you go back to the hideout during a map, what you've dumped so far
 shows as "so far".
 
-Rares and magic gear have no poe.ninja price. They're listed as "no price" and left out of
-the totals. Runs are valued at current prices, so past runs change value as the market moves.
+**Gear isn't loot.** Uniques (unique maps included) and normal, magic and rare equipment
+(weapons, armour, jewellery, flasks, jewels) are ignored between maps, so picking up, selling
+or vendoring gear doesn't change a map's value. Gear is recognized by the category in its icon
+path, or by level requirements and sockets. Everything else is tracked: currency, fragments,
+scarabs, essences, divination cards, gems, maps, breachstones, logbooks, beasts and so on.
+Items poe.ninja has no price for are listed as "no price" and left out of the totals. Runs are
+valued at current prices, so past runs change value as the market moves.
 
 ## UI
 
