@@ -332,6 +332,14 @@ class Store:
         rows = self.conn.execute(sql + " ORDER BY taken_at", args).fetchall()
         return [(datetime.fromisoformat(r[0]), r[1], r[2]) for r in rows]
 
+    def latest_value(self, league: str) -> tuple[datetime, float, float | None] | None:
+        row = self.conn.execute(
+            "SELECT taken_at, chaos, chaos_per_divine FROM snapshot_values WHERE league = ? "
+            "ORDER BY taken_at DESC LIMIT 1",
+            (league,),
+        ).fetchone()
+        return None if row is None else (datetime.fromisoformat(row[0]), row[1], row[2])
+
     def prune_snapshot_items(self, keep: int = 2) -> None:
         self.conn.execute(
             "DELETE FROM snapshot_items WHERE snapshot_id NOT IN "

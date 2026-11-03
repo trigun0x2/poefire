@@ -13,20 +13,7 @@
       <span>League</span>
       <select id="league" aria-label="League"></select>
     </label>
-    <div class="now" id="now" hidden title="Current run">
-      <span class="live-dot" id="now-dot"></span>
-      <span class="now-name" id="now-name"></span>
-      <span class="now-timer" id="now-timer">00:00</span>
-    </div>
     <div class="drag-spacer pywebview-drag-region"></div>
-    <div class="pills">
-      <button class="pill" id="prices-pill" title="Refresh prices from poe.ninja">
-        <span class="dot"></span><span id="prices-text">Prices…</span>
-      </button>
-      <button class="pill" id="loot-pill" title="Take a snapshot now">
-        <span class="dot"></span><span id="loot-text">Loot…</span>
-      </button>
-    </div>
     <div class="win-controls" id="win-controls" hidden>
       <button class="win-btn" id="win-min" title="Minimize" aria-label="Minimize">
         <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5.5h8"/></svg>
@@ -50,7 +37,32 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16h14M5 13l4-4 3 2 4-5"/></svg>
         <span>Overview</span>
       </a>
+
+      <section class="side-block side-now" id="side-now" hidden aria-label="Current map">
+        <div class="label">Now</div>
+        <div class="side-map"><span class="live-dot" id="now-dot"></span><span id="now-name"></span></div>
+        <div class="side-timer" id="now-timer">00:00</div>
+        <div class="label" id="now-meta"></div>
+      </section>
+
+      <section class="side-block" aria-label="Recent stats">
+        <div class="label" id="side-last-title">Last map</div>
+        <div class="side-row"><span>Loot</span><b id="side-last-loot">—</b></div>
+        <div class="side-row"><span>Avg / map (10)</span><b id="side-avg">—</b></div>
+        <div class="side-row"><span>Maps this session</span><b id="side-maps">—</b></div>
+        <div class="side-row"><span>Total value</span><b id="side-value">—</b></div>
+      </section>
+      <button type="button" class="btn side-snap" id="side-snapshot">Snapshot now</button>
+
       <div class="nav-spacer"></div>
+      <div class="side-status">
+        <button type="button" class="status-row" id="prices-pill" title="Refresh prices from poe.ninja">
+          <span class="dot"></span><span id="prices-text">Prices…</span>
+        </button>
+        <button type="button" class="status-row" id="loot-pill" title="Take a snapshot now">
+          <span class="dot"></span><span id="loot-text">Loot…</span>
+        </button>
+      </div>
       <a class="nav-item" id="nav-settings" href="#settings">
         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"/></svg>
         <span>Settings</span>

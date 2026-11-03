@@ -60,6 +60,14 @@ def create_app(rt: AppRuntime) -> FastAPI:
             with store() as s:
                 run_json = views.run_rows(s, book, [state.run], now)[0].to_json(cpd)
         p = rt.prices.status(rt.price_league)
+        with store() as s:
+            latest = s.latest_value(rt.league)
+        value = None
+        if latest is not None:
+            at, value_chaos, rate = latest
+            rate = rate or cpd
+            value = {"at": at.isoformat(), "chaos": round(value_chaos, 1),
+                     "divine": round(value_chaos / rate, 2) if rate else None}  # fmt: skip
         last = rt.loot.last
         return {
             "now": now.isoformat(),
@@ -71,6 +79,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "in_run": state.in_run,
             "run": run_json,
             "league_is_private": rt.is_private,
+            "value": value,
             "prices": {
                 "league": rt.price_league,
                 "entries": p.entries,

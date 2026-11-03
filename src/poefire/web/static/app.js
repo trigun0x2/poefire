@@ -81,15 +81,21 @@ function renderStatus() {
     ? "No map finished yet. Stats appear when you're back in your hideout."
     : 'Client.txt not found. Set its location in <a href="#settings">Settings</a>.';
 
-  // Current run: just the map and its elapsed time, in the top bar.
+  // Current run: map, elapsed time, level and deaths, in the sidebar.
   const run = s.run;
-  $("now").hidden = !run;
+  $("side-now").hidden = !run;
   if (run) {
     $("now-name").textContent = run.map_name;
-    $("now").classList.toggle("paused", run.status !== "active");
+    $("side-now").classList.toggle("paused", run.status !== "active");
+    $("now-meta").textContent = `Level ${run.area_level} · ${run.deaths} death${run.deaths === 1 ? "" : "s"}` +
+      (run.status === "active" ? "" : " · in hideout");
     $("now-dot").className = `live-dot${run.status === "active" ? "" : " paused"}`;
-    $("now").title = run.status === "active" ? "In map" : "Paused: in hideout";
+    $("side-now").title = run.status === "active" ? "In map" : "Paused: in hideout";
   }
+  const v = s.value;
+  $("side-value").innerHTML = !v ? '<span class="dim">—</span>'
+    : v.divine != null ? `<span class="divine">${nf2.format(v.divine)}d</span>` : chaos(v.chaos);
+  $("side-value").title = v ? `${nf0.format(v.chaos)}c at ${timeOf(v.at)}` : "No snapshot yet";
   tickTimer();
 }
 
@@ -98,6 +104,14 @@ function tickTimer() {
   if (!run) return;
   const extra = run.status === "active" ? (performance.now() - statusAt) / 1000 : 0;
   $("now-timer").textContent = duration(run.active_seconds + extra);
+}
+
+function renderSidebarStats() {
+  const m = runsData.last_map, r = runsData.recent;
+  $("side-last-title").textContent = m ? `Last map · ${m.map_name}` : "Last map";
+  $("side-last-loot").innerHTML = m && m.loot_tracked ? chaos(m.chaos) : '<span class="dim">—</span>';
+  $("side-avg").innerHTML = r.maps ? chaos(r.avg_chaos) : '<span class="dim">—</span>';
+  $("side-maps").textContent = runsData.session.runs ?? 0;
 }
 
 function renderLastMap() {
@@ -295,6 +309,7 @@ async function pollRuns() {
   runsData = await api("/api/runs?limit=100");
   renderSession();
   renderLastMap();
+  renderSidebarStats();
   renderRuns();
   await renderDetail();
 }
@@ -709,13 +724,15 @@ $("ov-tabs").addEventListener("click", (e) => {
   else ovTabs.add(id);
   loadOverview().catch(() => {});
 });
-$("ov-snapshot").addEventListener("click", async () => {
+async function requestSnapshot(button) {
   if (!status?.loot.enabled) { location.hash = "#settings"; return; }
-  $("ov-snapshot").disabled = true;
-  $("ov-snapshot").textContent = "Snapshot requested…";
+  button.disabled = true;
+  button.textContent = "Snapshot requested…";
   await api("/api/snapshot", { method: "POST" }).catch(() => {});
-  setTimeout(() => { $("ov-snapshot").disabled = false; $("ov-snapshot").textContent = "Snapshot now"; }, 4000);
-});
+  setTimeout(() => { button.disabled = false; button.textContent = "Snapshot now"; }, 4000);
+}
+$("ov-snapshot").addEventListener("click", () => requestSnapshot($("ov-snapshot")));
+$("side-snapshot").addEventListener("click", () => requestSnapshot($("side-snapshot")));
 new ResizeObserver(() => { if (!$("overview-view").hidden) renderOverview(); }).observe($("ov-chart"));
 
 // --- native window (frameless): title bar buttons, double-click to maximize, edge resizing ---

@@ -1,10 +1,11 @@
 # poefire
 
-A Path of Exile 1 farming tracker (map timing, loot, profit/hour), in the spirit of the
-Torchlight: Infinite "YiHuo ETor" tracker.
+A Path of Exile 1 farming tracker: map timing, loot and value per map, and your stash's value
+over time.
 
-**ToS-safe by design:** it only reads the game's `Client.txt` log and (from Phase 2) uses GGG's
-official OAuth API. No memory reading, packet sniffing or input automation.
+**No game hooks:** poefire reads the game's `Client.txt` log and your own account's
+inventory and stash tabs, through the website with your POESESSID or through GGG's OAuth API.
+It does no memory reading, packet sniffing or input automation.
 
 ## Status
 
@@ -200,8 +201,13 @@ valued at current prices, so past runs change value as the market moves.
 
 `poefire ui` runs everything in one process: the log tailer, loot snapshots and price
 refreshes. It serves a local page at `http://127.0.0.1:8460`. The top bar holds the league
-selector, the current map with its elapsed time, and the price and loot status. The sidebar
-switches between three tabs:
+selector. The sidebar switches between three tabs and stays visible from any tab:
+
+- **Now:** the current map, elapsed time, level and deaths.
+- **Recent stats:** the last map's loot, your average per map (last 10), maps this session and
+  your total value.
+- **Snapshot now**, and the status of prices and the last snapshot. Click either status line
+  to refresh it.
 
 **Session**
 - the last map, front and center: loot value, time, deaths, how it compares with your average
