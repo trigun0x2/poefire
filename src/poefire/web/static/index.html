@@ -39,6 +39,10 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16h14M5 13l4-4 3 2 4-5"/></svg>
         <span>Overview</span>
       </a>
+      <a class="nav-item" id="nav-campaign" href="#campaign">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 17V3M5 4h9l-2 3 2 3H5"/></svg>
+        <span>Campaign</span>
+      </a>
 
       <section class="side-block side-now" id="side-now" hidden aria-label="Current map">
         <div class="label">Now</div>
@@ -119,6 +123,67 @@
         </table>
         <div class="empty" id="ov-items-empty" hidden></div>
       </div>
+    </section>
+  </section>
+
+  <section class="view campaign" id="campaign-view" hidden>
+    <section class="card cp-run">
+      <div class="cp-run-head">
+        <div class="card-title" id="cp-run-title">Campaign run</div>
+        <button type="button" class="btn link" id="cp-follow" hidden>Back to current run</button>
+      </div>
+      <div class="cp-timer" id="cp-timer">—</div>
+      <div class="cp-igt"><span class="label">Without loads</span> <b id="cp-igt">—</b> <span class="muted" id="cp-loads"></span></div>
+      <div class="current-stats cp-stats">
+        <div><span class="label">Character</span><span id="cp-char">—</span></div>
+        <div><span class="label">Class</span><span id="cp-class">—</span></div>
+        <div><span class="label">Level</span><span id="cp-level">—</span></div>
+        <div><span class="label">Act</span><span id="cp-act">—</span></div>
+        <div><span class="label">Deaths</span><span id="cp-deaths">—</span></div>
+      </div>
+      <div class="row cp-controls" id="cp-controls">
+        <input type="text" id="cp-character" placeholder="Character (optional)" title="Leave empty to use the first character that levels up" aria-label="Character name" maxlength="64">
+        <button type="button" class="btn primary" id="cp-start">Start new run</button>
+        <button type="button" class="btn" id="cp-finish" hidden>Finish</button>
+        <button type="button" class="btn" id="cp-stop" hidden>Stop</button>
+      </div>
+      <div class="hint" id="cp-hint">Start a run, then play: splits come from your Client.txt. Entering the epilogue after act 10 finishes the run.</div>
+      <label class="field cp-notes-field" id="cp-notes-field" hidden>
+        <span>Notes <span class="muted" id="cp-notes-status"></span></span>
+        <textarea id="cp-notes" rows="4" maxlength="20000" placeholder="Route, mistakes, RNG, gem setup…"></textarea>
+      </label>
+      <div class="row" id="cp-past-actions" hidden>
+        <button type="button" class="btn danger" id="cp-delete">Delete run</button>
+      </div>
+    </section>
+
+    <section class="card cp-splits">
+      <div class="card-title">Splits <span class="muted" id="cp-pb-label"></span></div>
+      <div class="table-wrap">
+        <table id="cp-acts-table">
+          <thead><tr><th>Act</th><th class="num">Time</th><th class="num">No loads</th><th class="num">vs PB</th><th class="num">Segment</th><th class="num">PB</th></tr></thead>
+          <tbody id="cp-acts-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card cp-history">
+      <div class="card-title">Runs</div>
+      <div class="table-wrap">
+        <table id="cp-runs-table">
+          <thead>
+            <tr><th data-sort="started_at" aria-sort="none"><button type="button">Started<span class="sort-ind" aria-hidden="true"></span></button></th><th data-sort="character" aria-sort="none"><button type="button">Character<span class="sort-ind" aria-hidden="true"></span></button></th><th data-sort="class" aria-sort="none"><button type="button">Class<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="level" aria-sort="none"><button type="button">Lvl<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="act" aria-sort="none"><button type="button">Act<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="rta" aria-sort="none"><button type="button">Time<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="igt" aria-sort="none"><button type="button">No loads<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="deaths" aria-sort="none"><button type="button">Deaths<span class="sort-ind" aria-hidden="true"></span></button></th><th data-sort="notes" aria-sort="none"><button type="button">Notes<span class="sort-ind" aria-hidden="true"></span></button></th></tr>
+          </thead>
+          <tbody id="cp-runs-body"></tbody>
+        </table>
+        <div class="empty" id="cp-runs-empty" hidden>No campaign runs yet.</div>
+      </div>
+    </section>
+
+    <section class="card cp-zones">
+      <div class="card-title">Zones &amp; levels</div>
+      <ol class="cp-zone-list" id="cp-zones"></ol>
+      <div class="empty" id="cp-zones-empty">Zones show up here as you enter them.</div>
     </section>
   </section>
 

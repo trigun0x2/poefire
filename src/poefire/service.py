@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from poefire.events import LogEvent
 from poefire.parser import parse_line
 from poefire.store import Store
 from poefire.tailer import LogTailer, TailLine, find_last_line_offset, head_fingerprint
@@ -28,6 +29,8 @@ CURSOR_KEY = "log_cursor"
 STATE_KEY = "tracker_state"
 
 type NoticeHandler = Callable[[Notice], None]
+# Sees every log line (parsed or not), inside the poll's transaction.
+type LineObserver = Callable[[LogEvent | None, str], None]
 
 
 class TrackerService:
@@ -45,6 +48,7 @@ class TrackerService:
         self.tracker = RunTracker(self.rules, self.characters)
         self.tailer: LogTailer | None = None
         self.handlers: list[NoticeHandler] = []
+        self.line_observers: list[LineObserver] = []
 
     def start(self, from_beginning: bool = False) -> None:
         """Pick the start offset: saved cursor if it still matches this file, else the last
@@ -112,6 +116,8 @@ class TrackerService:
         with self.store.transaction():
             for line in lines:
                 event = parse_line(line.text)
+                for observe in self.line_observers:
+                    observe(event, line.text)
                 if event is None:
                     continue
                 emitted = self.tracker.handle(event)

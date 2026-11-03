@@ -939,9 +939,212 @@ function initWindowControls() {
 }
 window.addEventListener("pywebviewready", initWindowControls);
 
-// --- routing: #session (default), #overview, #settings ---
+// --- campaign ---
 
-const VIEWS = { session: "dashboard", overview: "overview-view", settings: "settings-view" };
+let cpData = null; // /api/campaign
+let cpFetchedAt = 0; // performance.now() when cpData arrived
+let cpSelected = null; // a past run's id; null = the run in progress
+let cpDetail = null; // /api/campaign/runs/<cpSelected>
+let cpNotesFor = null; // run id whose notes are in the textarea
+let cpNotesTimer = 0;
+const cpSort = loadSort("campaign", { key: "started_at", dir: -1 });
+
+function dateTimeOf(iso) {
+  return iso ? new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+}
+function signed(sec) {
+  if (sec == null) return '<span class="dim">—</span>';
+  const cls = sec < 0 ? "ahead" : sec > 0 ? "behind" : "";
+  return `<span class="${cls}">${sec < 0 ? "−" : "+"}${duration(Math.abs(sec))}</span>`;
+}
+function classLabel(r) {
+  if (!r.class) return "—";
+  return r.base_class && r.base_class !== r.class ? `${r.class} <span class="muted">(${esc(r.base_class)})</span>` : esc(r.class);
+}
+function cpShown() {
+  return cpSelected != null ? cpDetail : cpData?.active ?? null;
+}
+function cpLive(r) {
+  // running runs tick locally between polls
+  const extra = r && r.status === "running" ? (performance.now() - cpFetchedAt) / 1000 : 0;
+  return r ? { rta: r.rta + extra, igt: r.igt + extra } : null;
+}
+
+async function loadCampaign() {
+  cpData = await api("/api/campaign");
+  cpFetchedAt = performance.now();
+  if (cpSelected != null && !cpData.runs.some((r) => r.id === cpSelected)) { cpSelected = null; cpDetail = null; }
+  if (cpSelected != null && cpData.active?.id === cpSelected) { cpSelected = null; cpDetail = null; }
+  renderCampaign();
+}
+
+async function selectCampaignRun(id) {
+  if (cpData?.active?.id === id) id = null;
+  cpSelected = id;
+  cpDetail = id == null ? null : await api(`/api/campaign/runs/${id}`);
+  renderCampaign();
+}
+
+function renderCampaign() {
+  if (!cpData) return;
+  const r = cpShown();
+  const active = cpData.active;
+  $("cp-follow").hidden = cpSelected == null;
+  $("cp-run-title").textContent = cpSelected != null
+    ? `Run · ${dateTimeOf(r?.started_at)}${r?.status === "abandoned" ? " · stopped" : r?.status === "finished" ? " · finished" : ""}`
+    : active ? "Current run" : "Campaign run";
+  $("cp-finish").hidden = $("cp-stop").hidden = !active || cpSelected != null;
+  $("cp-start").textContent = active ? "Restart" : "Start new run";
+  $("cp-character").hidden = cpSelected != null;
+  $("cp-start").hidden = cpSelected != null;
+  $("cp-hint").hidden = !!active || cpSelected != null;
+  $("cp-past-actions").hidden = cpSelected == null;
+  $("cp-notes-field").hidden = !r;
+  $("cp-timer").className = "cp-timer" + (r?.status === "running" ? " live" : r?.status === "abandoned" ? " abandoned" : "");
+  $("cp-char").textContent = r?.character || "—";
+  $("cp-class").textContent = r?.class || "—";
+  $("cp-class").title = r?.base_class && r.base_class !== r.class ? r.base_class : "";
+  $("cp-level").textContent = r?.level ?? "—";
+  $("cp-act").textContent = r?.act ? (r.act > 10 ? "Epilogue" : r.act) : "—";
+  $("cp-deaths").textContent = r ? r.deaths : "—";
+  $("cp-loads").textContent = r ? `· ${duration(r.load_seconds)} loading` : "";
+  if (r && cpNotesFor !== r.id && document.activeElement !== $("cp-notes")) {
+    $("cp-notes").value = r.notes || "";
+    cpNotesFor = r.id;
+    $("cp-notes-status").textContent = "";
+  }
+  tickCampaign();
+  renderCampaignSplits(r);
+  renderCampaignZones(r);
+  renderCampaignRuns();
+}
+
+function tickCampaign() {
+  const t = cpLive(cpShown());
+  $("cp-timer").textContent = t ? duration(t.rta) : "—";
+  $("cp-igt").textContent = t ? duration(t.igt) : "—";
+  const now = $("cp-acts-body").querySelector("tr.now");
+  if (now && t) {
+    now.querySelector(".t").textContent = duration(t.rta);
+    now.querySelector(".i").textContent = duration(t.igt);
+    const pb = now.dataset.pb === "" ? null : Number(now.dataset.pb);
+    now.querySelector(".d").innerHTML = pb == null ? '<span class="dim">—</span>' : signed(t.rta - pb);
+  }
+}
+
+function renderCampaignSplits(r) {
+  const pbActs = new Map((r?.pb_acts || []).map((a) => [a.name, a]));
+  const acts = new Map((r?.acts || []).map((a) => [a.name, a]));
+  $("cp-pb-label").textContent = !r ? "" : r.pb_id ? "· compared with your best finished run" : cpData.pb && cpData.pb.id === r.id ? "· this is your best run" : "· no finished run to compare with yet";
+  let prev = 0, prevPb = 0;
+  const rows = [];
+  for (let n = 1; n <= 10; n++) {
+    const name = `Act ${n}`, s = acts.get(name), pb = pbActs.get(name);
+    const isNow = r && r.status === "running" && !s && (r.act ?? 1) === n;
+    const seg = s ? s.rta - prev : null;
+    const pbSeg = pb ? pb.rta - prevPb : null;
+    const segCls = seg != null && pbSeg != null && seg < pbSeg ? "ahead" : "";
+    rows.push(`<tr class="${isNow ? "now" : s ? "" : "todo"}" data-pb="${pb ? pb.rta : ""}">
+      <td>${name}</td>
+      <td class="num t">${s ? duration(s.rta) : isNow ? "" : "—"}</td>
+      <td class="num i">${s ? duration(s.igt) : isNow ? "" : "—"}</td>
+      <td class="num d">${s ? signed(s.delta) : isNow ? "" : '<span class="dim">—</span>'}</td>
+      <td class="num"><span class="${segCls}">${seg != null ? duration(seg) : "—"}</span></td>
+      <td class="num">${pb ? duration(pb.rta) : '<span class="dim">—</span>'}</td>
+    </tr>`);
+    if (s) prev = s.rta;
+    if (pb) prevPb = pb.rta;
+  }
+  $("cp-acts-body").innerHTML = rows.join("");
+  tickCampaign();
+}
+
+function renderCampaignZones(r) {
+  const entries = [
+    ...(r?.zones || []).map((z) => ({ ...z, cls: "" })),
+    ...(r?.levels || []).map((z) => ({ ...z, cls: "lvl" })),
+    ...(r?.acts || []).map((z) => ({ ...z, name: `${z.name} done`, cls: "actdone" })),
+  ].sort((a, b) => b.rta - a.rta || (a.cls === "actdone" ? -1 : 1));
+  $("cp-zones-empty").hidden = entries.length > 0;
+  $("cp-zones").innerHTML = entries.map((z) => `<li class="${z.cls}">
+    <span class="t">${duration(z.rta)}</span><span class="act">${z.act ? `A${z.act}` : ""}</span><span>${esc(z.name)}</span></li>`).join("");
+}
+
+function renderCampaignRuns() {
+  const rows = sortRows(cpData.runs, cpSort.key, cpSort.dir);
+  const shownId = cpShown()?.id;
+  $("cp-runs-empty").hidden = rows.length > 0;
+  $("cp-runs-body").innerHTML = rows.map((r) => {
+    const mark = r.status === "running" ? '<span class="live-dot" title="in progress"></span>'
+      : r.status === "abandoned" ? '<span class="dim" title="stopped">✕ </span>' : "";
+    const best = cpData.pb && cpData.pb.id === r.id ? ' <span class="chip ok">PB</span>' : "";
+    const t = r.status === "running" ? cpLive(r) : r;
+    return `<tr data-id="${r.id}" class="${r.id === shownId ? "selected" : ""}">
+      <td>${mark}${dateTimeOf(r.started_at)}</td>
+      <td>${esc(r.character || "—")}</td>
+      <td>${classLabel(r)}</td>
+      <td class="num">${r.level ?? "—"}</td>
+      <td class="num">${r.act ? (r.act > 10 ? "E" : r.act) : "—"}</td>
+      <td class="num">${duration(t.rta)}${best}</td>
+      <td class="num">${duration(t.igt)}</td>
+      <td class="num">${r.deaths || '<span class="dim">0</span>'}</td>
+      <td class="notes" title="${esc(r.notes)}">${esc(r.notes)}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function cpAction(path, body) {
+  try {
+    cpData = await api(path, { method: "POST", body: JSON.stringify(body ?? {}) });
+    cpFetchedAt = performance.now();
+    cpSelected = null; cpDetail = null;
+    renderCampaign();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+$("cp-start").addEventListener("click", () => {
+  if (cpData?.active && !confirm("Stop the current run and start a new one?")) return;
+  cpAction("/api/campaign/start", { character: $("cp-character").value.trim() || null });
+});
+$("cp-finish").addEventListener("click", () => cpAction("/api/campaign/finish"));
+$("cp-stop").addEventListener("click", () => {
+  if (confirm("Stop this run? It stays in the list, marked as stopped.")) cpAction("/api/campaign/stop");
+});
+$("cp-follow").addEventListener("click", () => selectCampaignRun(null));
+$("cp-delete").addEventListener("click", async () => {
+  if (cpSelected == null || !confirm("Delete this run and its notes? This can't be undone.")) return;
+  await api(`/api/campaign/runs/${cpSelected}/delete`, { method: "POST" }).catch((e) => alert(e.message));
+  cpSelected = null; cpDetail = null;
+  await loadCampaign();
+});
+$("cp-runs-body").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-id]");
+  if (tr) selectCampaignRun(Number(tr.dataset.id)).catch(() => {});
+});
+$("cp-notes").addEventListener("input", () => {
+  const id = cpNotesFor;
+  if (id == null) return;
+  $("cp-notes-status").textContent = "· editing…";
+  clearTimeout(cpNotesTimer);
+  cpNotesTimer = setTimeout(async () => {
+    const notes = $("cp-notes").value;
+    try {
+      await api(`/api/campaign/runs/${id}/notes`, { method: "POST", body: JSON.stringify({ notes }) });
+      $("cp-notes-status").textContent = "· saved";
+      for (const r of [cpDetail, cpData?.active, ...(cpData?.runs || [])]) if (r && r.id === id) r.notes = notes;
+      renderCampaignRuns();
+    } catch (e) {
+      $("cp-notes-status").textContent = `· not saved: ${e.message}`;
+    }
+  }, 700);
+});
+makeSortable("cp-runs-table", "campaign", cpSort, () => { if (cpData) renderCampaignRuns(); });
+
+// --- routing: #session (default), #overview, #campaign, #settings ---
+
+const VIEWS = { session: "dashboard", overview: "overview-view", campaign: "campaign-view", settings: "settings-view" };
 
 function route() {
   const name = Object.hasOwn(VIEWS, location.hash.slice(1)) ? location.hash.slice(1) : "session";
@@ -953,6 +1156,7 @@ function route() {
   renderSessionBanner(status?.loot.session);
   if (name === "settings") loadSettings().catch((e) => setStatus("set-save-status", `✗ ${e.message}`, "bad"));
   if (name === "overview") loadOverview().catch(() => {});
+  if (name === "campaign") loadCampaign().catch(() => {});
 }
 window.addEventListener("hashchange", route);
 
@@ -968,5 +1172,7 @@ makeSortable("ov-items-table", "items", itemsSort, () => { if (ovItems) renderHo
   setInterval(pollStatus, 1000);
   setInterval(pollRuns, 15000);
   setInterval(tickTimer, 250);
+  setInterval(() => { if (!$("campaign-view").hidden) tickCampaign(); }, 250);
+  setInterval(() => { if (!$("campaign-view").hidden) loadCampaign().catch(() => {}); }, 2000);
   setInterval(() => { if (!$("overview-view").hidden) loadOverview().catch(() => {}); }, 60000);
 })();

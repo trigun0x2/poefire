@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from poefire.campaign import CampaignRun, Split
 from poefire.events import LogEvent, event_kind, event_payload_json
 from poefire.loot.diff import ItemDelta
 from poefire.loot.items import ItemEntry, is_tracked
@@ -17,7 +18,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -124,11 +125,31 @@ CREATE TABLE snapshot_values (
 CREATE INDEX snapshot_values_league ON snapshot_values(league, taken_at);
 """
 
+_SCHEMA_V5 = """
+-- Campaign runs (poefire.campaign). Splits are a JSON list, read with the run.
+CREATE TABLE campaign_runs (
+    id         INTEGER PRIMARY KEY,
+    started_at TEXT NOT NULL,
+    ended_at   TEXT,
+    status     TEXT NOT NULL,
+    character  TEXT,
+    class      TEXT,
+    level      INTEGER,
+    deaths     INTEGER NOT NULL DEFAULT 0,
+    act        INTEGER,
+    load_ms    INTEGER NOT NULL DEFAULT 0,
+    notes      TEXT NOT NULL DEFAULT '',
+    splits     TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX campaign_runs_started ON campaign_runs(started_at);
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
     _SCHEMA_V3,
     _SCHEMA_V4,
+    _SCHEMA_V5,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -437,3 +458,62 @@ class Store:
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
+
+    # --- campaign runs ---
+
+    def save_campaign_run(self, run: CampaignRun) -> int:
+        """Insert (no id yet) or update a campaign run; returns its id."""
+        values = (
+            _dt(run.started_at), _dt(run.ended_at), run.status, run.character, run.char_class,
+            run.level, run.deaths, run.act, run.load_ms, run.notes,
+            json.dumps([s.to_json() for s in run.splits]),
+        )  # fmt: skip
+        if run.id is None:
+            cur = self.conn.execute(
+                "INSERT INTO campaign_runs (started_at, ended_at, status, character, class, "
+                "level, deaths, act, load_ms, notes, splits) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                values,
+            )
+            run.id = int(cur.lastrowid or 0)
+        else:
+            self.conn.execute(
+                "UPDATE campaign_runs SET started_at=?, ended_at=?, status=?, character=?, "
+                "class=?, level=?, deaths=?, act=?, load_ms=?, notes=?, splits=? WHERE id=?",
+                (*values, run.id),
+            )
+        return run.id
+
+    @staticmethod
+    def _campaign_run(row: sqlite3.Row) -> CampaignRun:
+        return CampaignRun(
+            id=row["id"],
+            started_at=datetime.fromisoformat(row["started_at"]),
+            ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
+            status=row["status"], character=row["character"], char_class=row["class"],
+            level=row["level"], deaths=row["deaths"], act=row["act"], load_ms=row["load_ms"],
+            notes=row["notes"], splits=[Split.from_json(s) for s in json.loads(row["splits"])],
+        )  # fmt: skip
+
+    def list_campaign_runs(self, limit: int = 200) -> list[CampaignRun]:
+        rows = self.conn.execute(
+            "SELECT * FROM campaign_runs ORDER BY started_at DESC, id DESC LIMIT ?", (limit,)
+        )
+        return [self._campaign_run(r) for r in rows]
+
+    def get_campaign_run(self, run_id: int) -> CampaignRun | None:
+        row = self.conn.execute("SELECT * FROM campaign_runs WHERE id = ?", (run_id,)).fetchone()
+        return self._campaign_run(row) if row else None
+
+    def active_campaign_run(self) -> CampaignRun | None:
+        row = self.conn.execute(
+            "SELECT * FROM campaign_runs WHERE status = 'running' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return self._campaign_run(row) if row else None
+
+    def set_campaign_notes(self, run_id: int, notes: str) -> bool:
+        cur = self.conn.execute("UPDATE campaign_runs SET notes = ? WHERE id = ?", (notes, run_id))
+        return cur.rowcount > 0
+
+    def delete_campaign_run(self, run_id: int) -> bool:
+        cur = self.conn.execute("DELETE FROM campaign_runs WHERE id = ?", (run_id,))
+        return cur.rowcount > 0

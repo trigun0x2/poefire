@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import __version__, wiring
+from poefire import __version__, campaign, wiring
+from poefire.campaign import CampaignTracker
 from poefire.config import Config
 from poefire.leagues import default_price_league, is_private
 from poefire.loot.items import ItemEntry
@@ -104,6 +105,7 @@ class AppRuntime:
         self._log_override = log_path
         self._auto_recorder = recorder is True
 
+        self.campaign = CampaignTracker(self._store, now)  # under _lock, like the tail
         self.log_path: Path | None = None
         self.service: TrackerService | None = None
         self._build_service()
@@ -146,6 +148,7 @@ class AppRuntime:
                 self._store, self.log_path, self.cfg.zone_rules(), self.cfg.characters
             )
             self.service.handlers.append(self._dispatch)
+            self.service.line_observers.append(self.campaign.handle)
             if self._started:
                 self.service.start()
 
@@ -268,6 +271,51 @@ class AppRuntime:
             return False
         self.recorder.request(Trigger.MANUAL, None)
         return True
+
+    # --- campaign runs (shares the tail thread's connection and lock) ---
+
+    def campaign_overview(self, limit: int = 200) -> dict[str, Any]:
+        now = self.now()
+        with self._lock:
+            runs = self._store.list_campaign_runs(limit)
+            active = self.campaign.active
+        pb = campaign.personal_best(runs)
+        return {
+            "active": campaign.run_detail(active, now, pb) if active else None,
+            "pb": campaign.run_summary(pb, now) if pb else None,
+            "runs": [campaign.run_summary(r, now) for r in runs],
+        }
+
+    def campaign_run(self, run_id: int) -> dict[str, Any] | None:
+        with self._lock:
+            run = self._store.get_campaign_run(run_id)
+            runs = self._store.list_campaign_runs(1000)
+        if run is None:
+            return None
+        return campaign.run_detail(run, self.now(), campaign.personal_best(runs))
+
+    def campaign_start(self, character: str | None = None) -> None:
+        with self._lock:
+            self.campaign.start(character)
+
+    def campaign_end(self, finished: bool) -> bool:
+        with self._lock:
+            run = self.campaign.finish() if finished else self.campaign.stop()
+        return run is not None
+
+    def campaign_notes(self, run_id: int, notes: str) -> bool:
+        with self._lock:
+            active = self.campaign.active
+            if active is not None and active.id == run_id:
+                active.notes = notes  # the live copy is saved again on the next split
+            return self._store.set_campaign_notes(run_id, notes)
+
+    def campaign_delete(self, run_id: int) -> bool:
+        with self._lock:
+            active = self.campaign.active
+            if active is not None and active.id == run_id:
+                self.campaign.active = None
+            return self._store.delete_campaign_run(run_id)
 
     # --- updates ---
 

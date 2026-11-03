@@ -32,6 +32,14 @@ class LeagueIn(BaseModel):
     league: str
 
 
+class CampaignStartIn(BaseModel):
+    character: str | None = None
+
+
+class NotesIn(BaseModel):
+    notes: str
+
+
 class LocalOnly(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         host = (request.headers.get("host") or "").rsplit(":", 1)[0]
@@ -136,6 +144,50 @@ def create_app(rt: AppRuntime) -> FastAPI:
             if live is not None and live.id == run_id and live.status is RunStatus.ACTIVE:
                 r = live
             return views.run_detail(s, book, r, rt.now())
+
+    # --- campaign ---
+
+    @app.get("/api/campaign")
+    def campaign_overview() -> dict[str, Any]:
+        return rt.campaign_overview()
+
+    @app.get("/api/campaign/runs/{run_id}")
+    def campaign_run(run_id: int) -> dict[str, Any]:
+        d = rt.campaign_run(run_id)
+        if d is None:
+            raise HTTPException(404, "no such campaign run")
+        return d
+
+    @app.post("/api/campaign/start")
+    def campaign_start(body: CampaignStartIn) -> dict[str, Any]:
+        rt.campaign_start(body.character)
+        return rt.campaign_overview()
+
+    @app.post("/api/campaign/finish")
+    def campaign_finish() -> dict[str, Any]:
+        if not rt.campaign_end(finished=True):
+            raise HTTPException(409, "no campaign run in progress")
+        return rt.campaign_overview()
+
+    @app.post("/api/campaign/stop")
+    def campaign_stop() -> dict[str, Any]:
+        if not rt.campaign_end(finished=False):
+            raise HTTPException(409, "no campaign run in progress")
+        return rt.campaign_overview()
+
+    @app.post("/api/campaign/runs/{run_id}/notes")
+    def campaign_notes(run_id: int, body: NotesIn) -> dict[str, Any]:
+        if len(body.notes) > 20000:
+            raise HTTPException(422, "notes are too long")
+        if not rt.campaign_notes(run_id, body.notes):
+            raise HTTPException(404, "no such campaign run")
+        return {"ok": True}
+
+    @app.post("/api/campaign/runs/{run_id}/delete")
+    def campaign_delete(run_id: int) -> dict[str, Any]:
+        if not rt.campaign_delete(run_id):
+            raise HTTPException(404, "no such campaign run")
+        return {"ok": True}
 
     @app.get("/api/leagues")
     def leagues() -> dict[str, Any]:

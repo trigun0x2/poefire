@@ -157,6 +157,24 @@ inventory into a watched tab nets to zero.
 hard-coded. poefire keeps one hit of headroom under each window, counts hits made by other
 tools on the same account, and on HTTP 429 waits for `Retry-After`.
 
+## Campaign tracker
+
+The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit auto-splitter does
+(based on [POE-LiveSplit-Component](https://github.com/brandondong/POE-LiveSplit-Component)).
+
+- **Start new run** starts the timer (optionally for a named character; otherwise the first
+  character that levels up). Starting again stops the run in progress. **Finish** / **Stop** end
+  it by hand; entering the epilogue after act 10 finishes it automatically.
+- **Splits:** every completed act (the first time you enter an area of a later act) and the first
+  visit to each zone. Acts are read from the area id (`1_1_1`, `2_6_town`...), so hideouts, the
+  labyrinth and maps never count as a new act.
+- **Times:** real time and a load-removed time. Loading screens are timed with the client's
+  millisecond counter, from `Got Instance Details` to `You have entered ...`.
+- **Class:** from the level-up lines (`Name (Class) is now level N`), so it shows the
+  ascendancy once you've ascended. Level-ups and deaths are recorded too.
+- Each act split shows the difference to your best finished run (PB). Every run is kept with its
+  notes, which you can edit at any time; past runs can be deleted.
+
 ## Settings
 
 Click **Settings** in the app's top bar to set up everything without editing files:

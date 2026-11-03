@@ -1,0 +1,266 @@
+"""Campaign speedrun tracker: splits from Client.txt, like a LiveSplit auto-splitter.
+
+A run is started by hand (the "Start new run" button). From then on the log drives it:
+
+- **Timer.** Real time from the start, plus a load-removed time. Loads are timed with the
+  client's millisecond tick counter (the third field of every log line), from the start of a
+  load (`Got Instance Details` / `Generating level`) to `You have entered <zone>.`.
+- **Splits.** The first visit to each zone of an act, and every completed act (the first time
+  an area of a later act is entered). Entering an area past act 10 (the epilogue) finishes
+  the run.
+- **Character.** The first character that levels up is the run's character; its class comes
+  from the level-up line (`Name (Class) is now level N`), so it turns into the ascendancy once
+  you ascend. Level-ups and deaths of that character are recorded.
+
+Campaign area ids look like `<part>_<act>_<zone>` (`1_1_1` is The Twilight Strand,
+`2_6_town` is Lioneye's Watch in act 6); anything else (hideouts, the labyrinth, maps) does
+not change the act.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+from poefire.events import AreaGenerated, LevelUp, LogEvent, PlayerSlain, ZoneEntered
+
+FINAL_ACT = 10
+MAX_LOAD_MS = 5 * 60 * 1000  # longer "loads" are a sleeping PC or a reboot, not a load
+
+_ACT_RE = re.compile(r"^\d+_(\d+)_")
+_TICK_RE = re.compile(r"^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d (\d+) ")
+
+ASCENDANCIES: dict[str, str] = {
+    **dict.fromkeys(("Juggernaut", "Berserker", "Chieftain"), "Marauder"),
+    **dict.fromkeys(("Deadeye", "Raider", "Warden", "Pathfinder"), "Ranger"),
+    **dict.fromkeys(("Necromancer", "Elementalist", "Occultist"), "Witch"),
+    **dict.fromkeys(("Slayer", "Gladiator", "Champion"), "Duelist"),
+    **dict.fromkeys(("Inquisitor", "Hierophant", "Guardian"), "Templar"),
+    **dict.fromkeys(("Assassin", "Trickster", "Saboteur"), "Shadow"),
+    "Ascendant": "Scion",
+}
+
+
+def base_class(cls: str | None) -> str | None:
+    return ASCENDANCIES.get(cls, cls) if cls else None
+
+
+def act_of(area_id: str) -> int | None:
+    m = _ACT_RE.match(area_id)
+    return int(m.group(1)) if m else None
+
+
+def log_tick(line: str) -> int | None:
+    """The client's millisecond tick counter from a raw log line."""
+    m = _TICK_RE.match(line)
+    return int(m.group(1)) if m else None
+
+
+class SplitKind:
+    ZONE = "zone"
+    ACT = "act"
+    LEVEL = "level"
+
+
+@dataclass
+class Split:
+    kind: str
+    name: str
+    act: int | None
+    at: datetime
+    rta: float  # seconds since the start
+    igt: float  # the same, without loading screens
+    level: int | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        return {"kind": self.kind, "name": self.name, "act": self.act,
+                "at": self.at.isoformat(), "rta": round(self.rta, 3), "igt": round(self.igt, 3),
+                "level": self.level}  # fmt: skip
+
+    @classmethod
+    def from_json(cls, d: dict[str, Any]) -> Split:
+        return cls(d["kind"], d["name"], d.get("act"), datetime.fromisoformat(d["at"]),
+                   float(d["rta"]), float(d["igt"]), d.get("level"))  # fmt: skip
+
+
+@dataclass
+class CampaignRun:
+    started_at: datetime
+    id: int | None = None
+    status: str = "running"  # running | finished | abandoned
+    ended_at: datetime | None = None
+    character: str | None = None
+    char_class: str | None = None
+    level: int | None = None
+    deaths: int = 0
+    act: int | None = None
+    load_ms: int = 0
+    notes: str = ""
+    splits: list[Split] = field(default_factory=list)
+
+    @property
+    def running(self) -> bool:
+        return self.status == "running"
+
+    def rta(self, now: datetime) -> float:
+        end = self.ended_at or now
+        return max(0.0, (end - self.started_at).total_seconds())
+
+    def igt(self, now: datetime) -> float:
+        return max(0.0, self.rta(now) - self.load_ms / 1000)
+
+    def act_splits(self) -> list[Split]:
+        return [s for s in self.splits if s.kind == SplitKind.ACT]
+
+
+class CampaignTracker:
+    """Feeds log lines into the active campaign run and saves it after every change.
+    Not thread-safe: the runtime calls it under its lock."""
+
+    def __init__(self, store: Any, now: Callable[[], datetime] = datetime.now) -> None:
+        self.store = store
+        self.now = now
+        self.active: CampaignRun | None = store.active_campaign_run()
+        self._load_start: int | None = None
+        self._next_act: int | None = None
+
+    # --- manual controls ---
+
+    def start(self, character: str | None = None) -> CampaignRun:
+        now = self.now()
+        if self.active is not None:
+            self._end("abandoned", now)
+        run = CampaignRun(started_at=now, character=(character or "").strip() or None)
+        run.id = self.store.save_campaign_run(run)
+        self.active = run
+        self._load_start = self._next_act = None
+        return run
+
+    def finish(self) -> CampaignRun | None:
+        return self._end("finished", self.now())
+
+    def stop(self) -> CampaignRun | None:
+        return self._end("abandoned", self.now())
+
+    def _end(self, status: str, at: datetime) -> CampaignRun | None:
+        run = self.active
+        if run is None:
+            return None
+        run.status, run.ended_at = status, at
+        self.store.save_campaign_run(run)
+        self.active = None
+        return run
+
+    # --- log lines ---
+
+    def handle(self, event: LogEvent | None, line: str) -> None:
+        run = self.active
+        if run is None:
+            return
+        if event is None:
+            if "] Got Instance Details" in line:
+                self._load_start = log_tick(line)
+            return
+        if event.ts < run.started_at:
+            return  # catching up on lines from before the start
+        if isinstance(event, AreaGenerated):
+            if self._load_start is None:
+                self._load_start = log_tick(line)
+            self._next_act = act_of(event.area_id)
+        elif isinstance(event, ZoneEntered):
+            self._entered(run, event, log_tick(line))
+        elif isinstance(event, LevelUp):
+            self._levelled(run, event)
+        elif isinstance(event, PlayerSlain):
+            if run.character and event.character.casefold() == run.character.casefold():
+                run.deaths += 1
+                self.store.save_campaign_run(run)
+
+    def _split(self, run: CampaignRun, kind: str, name: str, at: datetime,
+               level: int | None = None) -> None:  # fmt: skip
+        run.splits.append(Split(kind, name, run.act, at, run.rta(at), run.igt(at), level))
+
+    def _entered(self, run: CampaignRun, event: ZoneEntered, tick: int | None) -> None:
+        if self._load_start is not None and tick is not None:
+            load = tick - self._load_start
+            if 0 <= load <= MAX_LOAD_MS:
+                run.load_ms += load
+        self._load_start = None
+        act, self._next_act = self._next_act, None
+        if act is not None and (run.act is None or act > run.act):
+            if run.act is not None:
+                self._split(run, SplitKind.ACT, f"Act {run.act}", event.ts)
+            run.act = act
+            if act > FINAL_ACT:
+                self.store.save_campaign_run(run)
+                self._end("finished", event.ts)
+                return
+        if (
+            act is not None
+            and act == run.act
+            and not any(
+                s.kind == SplitKind.ZONE and s.act == act and s.name == event.zone
+                for s in run.splits
+            )
+        ):
+            self._split(run, SplitKind.ZONE, event.zone, event.ts)
+        self.store.save_campaign_run(run)
+
+    def _levelled(self, run: CampaignRun, event: LevelUp) -> None:
+        if run.character is None:
+            run.character = event.character
+        elif event.character.casefold() != run.character.casefold():
+            return  # another character
+        run.character = event.character
+        run.char_class = event.character_class
+        run.level = event.level
+        self._split(run, SplitKind.LEVEL, f"Level {event.level}", event.ts, event.level)
+        self.store.save_campaign_run(run)
+
+
+# --- views ---
+
+
+def personal_best(runs: list[CampaignRun]) -> CampaignRun | None:
+    done = [r for r in runs if r.status == "finished" and r.ended_at is not None]
+    return min(done, key=lambda r: r.rta(r.started_at), default=None)  # ended: rta is fixed
+
+
+def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
+    return {
+        "id": run.id,
+        "status": run.status,
+        "started_at": run.started_at.isoformat(),
+        "ended_at": run.ended_at.isoformat() if run.ended_at else None,
+        "character": run.character,
+        "class": run.char_class,
+        "base_class": base_class(run.char_class),
+        "level": run.level,
+        "deaths": run.deaths,
+        "act": run.act,
+        "rta": round(run.rta(now), 1),
+        "igt": round(run.igt(now), 1),
+        "load_seconds": round(run.load_ms / 1000, 1),
+        "notes": run.notes,
+    }
+
+
+def run_detail(run: CampaignRun, now: datetime, pb: CampaignRun | None) -> dict[str, Any]:
+    """The summary plus splits; act splits carry the difference to the personal best."""
+    pb_acts = {s.name: s for s in pb.act_splits()} if pb is not None and pb.id != run.id else {}
+    acts = []
+    for s in run.act_splits():
+        best = pb_acts.get(s.name)
+        acts.append({**s.to_json(), "pb_rta": best.rta if best else None,
+                     "delta": round(s.rta - best.rta, 1) if best else None})  # fmt: skip
+    return {
+        **run_summary(run, now),
+        "pb_id": pb.id if pb is not None and pb.id != run.id else None,
+        "acts": acts,
+        "zones": [s.to_json() for s in run.splits if s.kind == SplitKind.ZONE],
+        "levels": [s.to_json() for s in run.splits if s.kind == SplitKind.LEVEL],
+        "pb_acts": [{"name": s.name, "rta": s.rta, "igt": s.igt} for s in pb_acts.values()],
+    }
