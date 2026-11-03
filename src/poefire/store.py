@@ -14,9 +14,10 @@ from poefire.events import LogEvent, event_kind, event_payload_json
 from poefire.loot.diff import ItemDelta
 from poefire.loot.items import ItemEntry
 from poefire.loot.snapshot import Snapshot
+from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -98,7 +99,19 @@ CREATE TABLE loot (
 CREATE INDEX loot_run ON loot(run_id);
 """
 
-_MIGRATIONS = (_SCHEMA_V1, _SCHEMA_V2)  # index i upgrades schema version i -> i + 1
+_SCHEMA_V3 = """
+-- poe.ninja responses, reduced to pricing fields. One row per league and price table.
+CREATE TABLE price_cache (
+    league     TEXT NOT NULL,
+    source     TEXT NOT NULL,
+    type       TEXT NOT NULL,
+    fetched_at REAL NOT NULL,
+    lines      TEXT NOT NULL,
+    PRIMARY KEY (league, source, type)
+);
+"""
+
+_MIGRATIONS = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3)  # index i upgrades schema version i -> i + 1
 
 
 def _dt(v: datetime | None) -> str | None:
@@ -309,11 +322,48 @@ class Store:
             for r in rows
         ]
 
+    def runs_with_loot_data(self, run_ids: list[str]) -> set[str]:
+        """Runs that have at least one complete return-to-hideout snapshot (so a loot value
+        of 0 means "nothing dropped", not "not tracked")."""
+        if not run_ids:
+            return set()
+        marks = ",".join("?" * len(run_ids))
+        rows = self.conn.execute(
+            f"SELECT DISTINCT run_id FROM snapshots WHERE complete = 1 "
+            f"AND trigger = 'run_return' AND run_id IN ({marks})",
+            run_ids,
+        ).fetchall()
+        return {r["run_id"] for r in rows}
+
     def list_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT * FROM snapshots ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # --- price cache ---
+
+    def save_prices(
+        self, league: str, source: str, type_: str, fetched_at: float, lines: list[PriceLine]
+    ) -> None:
+        self.conn.execute(
+            "INSERT INTO price_cache (league, source, type, fetched_at, lines) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(league, source, type) DO UPDATE SET "
+            "fetched_at = excluded.fetched_at, lines = excluded.lines",
+            (league, source, type_, fetched_at,
+             json.dumps([line.to_json() for line in lines], ensure_ascii=False)),
+        )  # fmt: skip
+
+    def load_prices(self, league: str) -> list[tuple[str, str, float, list[PriceLine]]]:
+        rows = self.conn.execute(
+            "SELECT source, type, fetched_at, lines FROM price_cache WHERE league = ?", (league,)
+        ).fetchall()
+        return [
+            (r["source"], r["type"], r["fetched_at"],
+             [PriceLine.from_json(d) for d in json.loads(r["lines"])])
+            for r in rows
+        ]  # fmt: skip
 
     # --- key/value (log cursor, tracker state) ---
 

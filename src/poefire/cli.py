@@ -266,6 +266,49 @@ def cmd_paths(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ui(args: argparse.Namespace) -> int:
+    """Run the tracker with the web UI (in the browser, or a native window with --window)."""
+    import uvicorn
+
+    from poefire.web.app import create_app
+    from poefire.web.runtime import AppRuntime
+
+    cfg = _config(args)
+    rt = AppRuntime(cfg)
+    if rt.log_path is None:
+        print("Client.txt not found; run tracking is off (pass --log or set log_path)")
+    elif rt.loot.reason:
+        print(f"loot tracking off: {rt.loot.reason}")
+    url = f"http://127.0.0.1:{args.port}/"
+    server = uvicorn.Server(
+        uvicorn.Config(create_app(rt), host="127.0.0.1", port=args.port, log_level="warning")
+    )
+    rt.start()
+    try:
+        if args.window:
+            try:
+                import webview  # pywebview: Edge WebView2 on Windows
+            except ImportError:
+                print("--window needs pywebview: uv sync --extra window; opening the browser")
+            else:
+                thread = threading.Thread(target=server.run, daemon=True)
+                thread.start()
+                webview.create_window("poefire", url, width=1360, height=860, min_size=(900, 600))
+                webview.start()
+                server.should_exit = True
+                thread.join(timeout=5)
+                return 0
+        if not args.no_browser:
+            threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+        print(f"poefire UI at {url} (Ctrl+C to stop)")
+        server.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        rt.stop()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="poefire")
     p.add_argument("--config", type=Path, help="path to config.toml")
@@ -302,6 +345,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("snapshot", help="take a snapshot now and show the change").set_defaults(
         fn=cmd_snapshot
     )
+    up = sub.add_parser("ui", help="tracker with the web UI")
+    up.add_argument("--port", type=int, default=8460)
+    up.add_argument("--window", action="store_true", help="native window (needs pywebview)")
+    up.add_argument("--no-browser", action="store_true", help="don't open a browser")
+    up.set_defaults(fn=cmd_ui)
+
     lt = sub.add_parser("loot", help="show loot per run")
     lt.add_argument("--run", help="run id (default: recent runs)")
     lt.add_argument("--limit", type=int, default=10)

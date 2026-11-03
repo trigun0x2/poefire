@@ -86,16 +86,25 @@ class TrackerService:
             self.store.set_json(STATE_KEY, state_to_dict(self.tracker.state))
 
     def poll(self) -> list[Notice]:
-        """Process every complete line currently available. Returns notices emitted."""
+        """Process every complete line currently available and notify handlers."""
+        notices = self.process_available()
+        self.dispatch(notices)
+        return notices
+
+    def process_available(self) -> list[Notice]:
+        """Like poll(), without notifying handlers (lets callers hold a lock only while
+        state changes, not while handlers run)."""
         if self.tailer is None:
             raise RuntimeError("start() not called")
         notices: list[Notice] = []
         while lines := self.tailer.poll():
             notices.extend(self._process(lines))
+        return notices
+
+    def dispatch(self, notices: list[Notice]) -> None:
         for n in notices:
             for handler in self.handlers:
                 handler(n)
-        return notices
 
     def _process(self, lines: list[TailLine]) -> list[Notice]:
         assert self.tailer is not None

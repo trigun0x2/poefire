@@ -70,9 +70,17 @@ class Snapshotter:
         self.league = league
         self.wanted = [t for t in stash_tabs if t]
         self.character = character
+        self._configured_character = character
         self.include_inventory = include_inventory
         self.clock = clock
         self._tabs: list[TabRef] | None = None
+
+    def set_league(self, league: str) -> None:
+        """Switch leagues: tab ids and the auto-picked character are per league."""
+        if league != self.league:
+            self.league = league
+            self._tabs = None
+            self.character = self._configured_character
 
     def resolve_character(self) -> str:
         if self.character:

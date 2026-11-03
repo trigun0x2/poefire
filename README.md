@@ -10,7 +10,7 @@ official OAuth API. No memory reading, packet sniffing or input automation.
 
 - [x] Phase 1: log parser and map-run tracker (CLI)
 - [x] Phase 2: loot via stash/inventory snapshots (OAuth API)
-- [ ] Phase 3: poe.ninja pricing and web UI
+- [x] Phase 3: poe.ninja pricing and web UI
 
 ## Usage
 
@@ -18,6 +18,8 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
 uv sync
+uv run poefire ui                     # the app: tracker + UI in your browser
+uv run poefire ui --window            # same, in a native window (uv sync --extra window first)
 uv run poefire paths                  # show the resolved Client.txt and database paths
 uv run poefire track                  # tail Client.txt live and record runs
 uv run poefire runs                   # list recorded runs
@@ -124,6 +126,45 @@ inventory into a watched tab nets to zero.
 hard-coded. poefire keeps one hit of headroom under each window, counts hits made by other
 tools on the same account, and on HTTP 429 waits for `Retry-After`.
 
+## Prices
+
+Prices come from poe.ninja's league data: the currency exchange for currency, plus the stash
+overviews for fragments, cards, scarabs, essences, maps, uniques, gems and so on. They're
+cached in the SQLite database, so a restart doesn't re-download them, and refreshed every
+30 minutes. poe.ninja itself updates about every 15 minutes, so polling faster gains nothing.
+If poe.ninja is unreachable, the last cached prices stay in use, and the next attempt waits
+5 minutes. Click the price pill in the UI to refresh now.
+
+Items are matched like this:
+
+- **Currency, fragments, cards, scarabs and other stackables:** by name.
+- **Maps:** by name and tier.
+- **Uniques:** by name and base type; 5- and 6-link variants are matched by link count. When
+  several variants fit, the cheapest one is used, so values err low.
+- **Gems:** by name, closest level and quality, and whether they're corrupted.
+
+Rares and magic gear have no poe.ninja price. They're listed as "no price" and left out of
+the totals. Runs are valued at current prices, so past runs change value as the market moves.
+
+## UI
+
+`poefire ui` runs everything in one process: the log tailer, loot snapshots and price
+refreshes. It serves a local page at `http://127.0.0.1:8460`. The page shows:
+
+- the current run with a live timer
+- the session (runs less than 30 minutes apart): chaos and divine per hour, both per hour of
+  map time and per hour played including hideout time
+- the run history
+- each run's loot, including what was spent in the hideout before it
+- a league selector
+
+The server only listens on localhost, rejects requests addressed to any other host name
+(blocking DNS rebinding), and requires a custom header on state-changing requests, so other
+websites can't trigger actions through your browser.
+
+`--window` opens the same UI in a native window through pywebview, which uses Edge WebView2 on
+Windows. Install it with `uv sync --extra window`.
+
 ## Design
 
 ```
@@ -138,6 +179,8 @@ src/poefire/
   config.py   TOML config and default paths
   api/        POESESSID client, OAuth (PKCE + loopback redirect), rate limiter, API client
   loot/       item identity, snapshots, diffing, run attribution (recorder)
+  pricing/    poe.ninja client, price matching, cached refresh service, valuation
+  web/        runtime (background threads), JSON views, FastAPI app, static front end
   wiring.py   builds API/loot objects from the config
   cli.py      `poefire` command
 ```
@@ -175,8 +218,8 @@ Every event carries `ts`, the client's local time as logged. System messages mus
 
 SQLite tables: `runs`, `run_segments` (active intervals), `events` (every parsed event, tagged
 with the run it happened in), `kv` (log cursor and tracker state), `snapshots` and
-`snapshot_items` (only the latest snapshots keep their items), and `loot` (per-item changes,
-tagged with run and kind).
+`snapshot_items` (only the latest snapshots keep their items), `loot` (per-item changes,
+tagged with run and kind), and `price_cache` (poe.ninja tables per league).
 
 Each poll commits its events, run updates, byte offset and tracker state in one transaction.
 On restart, the tracker resumes from the saved offset if the log file is unchanged, so
