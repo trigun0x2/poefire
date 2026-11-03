@@ -4,8 +4,9 @@ name: Windows release
 # from the latest public tag (the first one uses __version__ from the code), marked as GitHub's
 # "latest" release. The app's auto-updater installs these.
 #
-# Pushes to `dev` publish pre-releases (v<next>-dev.<run number>), which only reach users on
-# the beta update channel. Only the 10 newest pre-releases are kept.
+# Pushes to `dev` replace the one rolling pre-release, tagged `beta` (its zip is named after the
+# build's version, v<next>-dev.<run number>), so the Releases page shows a single beta entry.
+# Only users on the beta update channel get it.
 #
 # Running the workflow manually (Actions > Windows release > Run workflow) only builds the app
 # as a workflow artifact, versioned <next>-dev.<run number>.
@@ -187,23 +188,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$CHANNEL" == "public" ]]; then
-            flags=(--latest --title "poefire v$VERSION" --generate-notes)
+            gh release create "v$VERSION" "$NAME.zip" "$NAME.zip.sha256" \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --latest --title "poefire v$VERSION" --generate-notes
           else
-            flags=(--prerelease --latest=false --title "poefire v$VERSION (pre-release)"
-                   --notes "Development build from \`$GITHUB_REF_NAME\` ($GITHUB_SHA). Only installed by the beta update channel.")
+            # one rolling beta: replace the previous one (release and tag)
+            gh release delete beta --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
+            gh release create beta "$NAME.zip" "$NAME.zip.sha256" \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease --latest=false --title "poefire beta (v$VERSION)" \
+              --notes "Latest development build from \`$GITHUB_REF_NAME\` ($GITHUB_SHA), version $VERSION. Replaced on every push to \`$GITHUB_REF_NAME\`; only installed by the beta update channel."
           fi
-          gh release create "v$VERSION" "$NAME.zip" "$NAME.zip.sha256" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            "${flags[@]}"
 
-      - name: Keep only the 10 newest pre-releases
+      - name: Remove older per-build pre-releases
         if: needs.build.outputs.channel == 'prerelease'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease,createdAt \
-            --jq '[.[] | select(.isPrerelease)] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease \
+            --jq '.[] | select(.isPrerelease and .tagName != "beta") | .tagName' |
           while read -r tag; do
             echo "deleting old pre-release $tag"
             gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes

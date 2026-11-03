@@ -306,3 +306,13 @@ def test_cleanup_staging_keeps_the_running_copy(tmp_path: Path) -> None:
     (tmp_path / "update.log").write_text("x")
     updater.cleanup_staging(tmp_path, keep=tmp_path / "0.9.0")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["0.9.0", "update.log"]
+
+
+def test_rolling_beta_release_is_read_by_its_zip_version() -> None:
+    beta = release("0.9.0-dev.25", prerelease=True)
+    beta["tag_name"] = "beta"  # one rolling pre-release; the version is in the zip's name
+    gh = GitHub([beta, release("0.8.0")])
+    info = make_updater(gh, current="0.8.0").check(include_prereleases=True)
+    assert info is not None and info.version == "0.9.0-dev.25" and info.tag == "beta"
+    assert make_updater(gh, current="0.8.0").check() is None  # stable channel ignores it
+    assert make_updater(gh, current="0.9.0-dev.25").check(include_prereleases=True) is None
