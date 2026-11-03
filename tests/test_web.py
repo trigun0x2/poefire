@@ -183,3 +183,10 @@ def test_recent_maps_uses_last_ten_tracked_finished(tmp_path: Path) -> None:
     assert last is not None and last["id"] == "r1"
     assert last["top_items"][0]["name"] == "Chaos Orb"
     assert views.recent_maps(rows[:1], None) == {"maps": 0, "of": 10}
+
+
+def test_logo_and_favicon_served(app: TestClient) -> None:
+    r = app.get("/favicon.ico")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/x-icon"
+    assert r.content[:4] == b"\x00\x00\x01\x00"  # ICO header
+    assert "<svg" in app.get("/static/logo.svg").text

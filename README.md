@@ -96,6 +96,13 @@ at the hidden prompt; it checks the cookie by listing your characters. The cooki
 use the `POE_SESSID` environment variable instead. When you log out of the website or the
 session expires, you'll get an HTTP 401: set a new cookie.
 
+**How long a POESESSID lasts.** GGG decides that, not poefire: a cookie usually keeps working
+until you log out of pathofexile.com, change your password, or GGG ends the session. poefire
+measures it instead of guessing. Settings shows when the current cookie was saved, when it last
+worked and how long it has worked, plus how long your previous cookies lasted. When the website
+rejects the cookie (HTTP 401/403, or a redirect to the login page), loot tracking pauses. A
+banner and the sidebar then say it expired, and how long it worked, and point you to Settings.
+
 **What the cookie means.** POESESSID is your whole logged-in website session, not a
 read-only key. Anyone who has it can act as you on pathofexile.com, so never share it or
 paste it into chats or screenshots. poefire keeps it out of every log line and error message.
@@ -150,7 +157,10 @@ Click **Settings** in the app's top bar to set up everything without editing fil
   whether one is saved, but never displays it again. **Check connection** lists your
   characters and stash tabs.
 - **Loot tracking:** league, character, the stash tabs to watch (chosen from your real tab
-  list), the map-start snapshot, the hideout snapshot delay, and whose deaths count.
+  list), the map-start snapshot, the hideout snapshot delay, and whose deaths count. Death
+  names match regardless of capitalization. The page lists the character names seen in your
+  log and whether their deaths count, and it warns about a name that never appears in your log
+  (an account name, for example).
 
 Changes apply immediately, with no restart. They're saved to `config.toml` in the data folder
 (`%APPDATA%\poefire`), which you can also edit by hand. Saving from the page rewrites the
@@ -194,7 +204,8 @@ shows as "so far".
 or vendoring gear doesn't change a map's value. Gear is recognized by the category in its icon
 path, or by level requirements and sockets. Everything else is tracked: currency, fragments,
 scarabs, essences, divination cards, gems, maps, breachstones, logbooks, beasts and so on.
-Items poe.ninja has no price for are listed as "no price" and left out of the totals. Runs are
+Items poe.ninja has no price for, and items worth under 0.05c (they'd show as "0c"), are
+hidden from item lists and left out of the totals; each list says how many it hid. Runs are
 valued at current prices, so past runs change value as the market moves.
 
 ## UI

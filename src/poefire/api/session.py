@@ -20,6 +20,7 @@ posing as a browser. If GGG's edge protection rejects it, that's a decision to r
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -43,37 +44,121 @@ class SessionError(Exception):
 
 
 class SessionExpiredError(SessionError):
-    """401: the POESESSID is invalid or expired. Log in on the website and set a new one."""
+    """The website rejected the POESESSID: it expired, or you logged out on pathofexile.com."""
+
+
+EXPIRED_HELP = (
+    "Log in on pathofexile.com, copy the new POESESSID cookie and paste it in "
+    "Settings → Path of Exile account."
+)
 
 
 class SessionStore:
     """The cookie lives in its own file (owner-only permissions), never in config.toml, so
-    sharing a config can't leak it. `POE_SESSID` in the environment overrides the file."""
+    sharing a config can't leak it. `POE_SESSID` in the environment overrides the file.
+
+    The file also records the cookie's health, to show how long a POESESSID actually lasts:
+    when it was saved, when it last worked, when the website rejected it, and the same for
+    previous cookies. GGG decides the lifetime (it usually lasts until you log out of the
+    website, change your password, or the session is ended on their side), so it's measured,
+    not assumed."""
 
     ENV = "POE_SESSID"
+    HISTORY = 10
+    OK_WRITE_INTERVAL = 300  # seconds: don't rewrite the file on every successful request
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, clock: Callable[[], float] = time.time) -> None:
         self.path = path
+        self.clock = clock
+        self._lock = threading.Lock()
 
-    def load(self) -> str | None:
-        if env := os.environ.get(self.ENV, "").strip():
-            return env
+    def _read(self) -> dict[str, Any]:
         try:
-            value = json.loads(self.path.read_text()).get("poesessid")
-        except (FileNotFoundError, json.JSONDecodeError, AttributeError):
-            return None
-        return str(value) if value else None
+            data = json.loads(self.path.read_text())
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
 
-    def save(self, poesessid: str) -> None:
+    def _write(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
-            json.dump({"poesessid": poesessid}, f)
+            json.dump(data, f)
         os.replace(tmp, self.path)
+
+    @property
+    def from_env(self) -> bool:
+        return bool(os.environ.get(self.ENV, "").strip())
+
+    def load(self) -> str | None:
+        if env := os.environ.get(self.ENV, "").strip():
+            return env
+        value = self._read().get("poesessid")
+        return str(value) if value else None
+
+    def save(self, poesessid: str) -> None:
+        with self._lock:
+            old = self._read()
+            history = list(old.get("history") or [])
+            if old.get("saved_at"):
+                history.insert(0, {k: old.get(k) for k in ("saved_at", "last_ok", "expired_at")})
+            self._write({"poesessid": poesessid, "saved_at": self.clock(), "last_ok": None,
+                         "expired_at": None, "history": history[: self.HISTORY]})  # fmt: skip
 
     def clear(self) -> None:
         self.path.unlink(missing_ok=True)
+
+    def record_auth(self, ok: bool) -> None:
+        """Called by SessionApi after each request: did the website accept the cookie?"""
+        if self.from_env:
+            return  # nothing on disk to describe
+        with self._lock:
+            data = self._read()
+            if not data.get("poesessid"):
+                return
+            now = self.clock()
+            if ok:
+                if (
+                    data.get("expired_at") is None
+                    and now - (data.get("last_ok") or 0) < self.OK_WRITE_INTERVAL
+                ):
+                    return
+                data["last_ok"], data["expired_at"] = now, None
+            elif data.get("expired_at") is None:
+                data["expired_at"] = now
+            else:
+                return
+            self._write(data)
+
+    def health(self) -> dict[str, Any]:
+        """Cookie health for display. Never includes the cookie."""
+        data = self._read()
+        saved, last_ok, expired = data.get("saved_at"), data.get("last_ok"), data.get("expired_at")
+
+        def lasted(rec: dict[str, Any]) -> float | None:
+            end = rec.get("expired_at") or rec.get("last_ok")
+            return end - rec["saved_at"] if end and rec.get("saved_at") else None
+
+        past = [r for r in data.get("history") or [] if r.get("saved_at")]
+        return {
+            "saved": bool(data.get("poesessid")) or self.from_env,
+            "from_env": self.from_env,
+            "saved_at": saved,
+            "last_ok": last_ok,
+            "expired_at": expired,
+            "expired": expired is not None,
+            # how long it has worked so far (or worked in total, once expired)
+            "worked_seconds": lasted(data) if saved else None,
+            "history": [
+                {
+                    "saved_at": r["saved_at"],
+                    "lasted_seconds": lasted(r),
+                    "expired": r.get("expired_at") is not None,
+                }
+                for r in past
+            ],
+        }
 
 
 class SessionApi:
@@ -90,6 +175,7 @@ class SessionApi:
         min_interval: float = 1.5,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        on_auth: Callable[[bool], None] | None = None,
     ) -> None:
         """`min_interval`: floor between requests on top of the header-driven limiter; these
         endpoints have tight per-IP limits and GGG has banned tools that burst them."""
@@ -102,6 +188,7 @@ class SessionApi:
         self.http = http or httpx.Client(timeout=30)
         self.limiter = limiter or RateLimiter(clock=clock, sleep=sleep)
         self.min_interval = min_interval
+        self.on_auth = on_auth  # told whether the website accepted the cookie
         self.clock = clock
         self.sleep = sleep
         self._last_request = float("-inf")
@@ -137,22 +224,50 @@ class SessionApi:
         # bucket until Retry-After has passed, so the next snapshot waits on its own.
         if resp.status_code == 429:
             raise SessionError(f"rate limited; retry after {resp.headers.get('Retry-After', '?')}s")
-        if resp.status_code == 401:
+        try:
+            data = self._check(resp, path)
+        except SessionExpiredError:
+            self._report(False)
+            raise
+        self._report(True)
+        return data
+
+    def _report(self, ok: bool) -> None:
+        if self.on_auth is not None:
+            with contextlib.suppress(Exception):  # health tracking must never break a request
+                self.on_auth(ok)
+
+    @staticmethod
+    def _check(resp: httpx.Response, path: str) -> Any:
+        """Body of a successful response; SessionExpiredError when the cookie was rejected."""
+        status = resp.status_code
+        if status == 401:
             raise SessionExpiredError(
-                "POESESSID invalid or expired (HTTP 401); run `poefire set-session` with a new one"
+                f"Your POESESSID has expired or was logged out (HTTP 401). {EXPIRED_HELP}"
             )
-        if resp.status_code == 403:
-            raise SessionError(
-                "HTTP 403: check account_name (use the full Name#1234 form) and that the "
-                "POESESSID belongs to that account"
+        if status == 403:
+            raise SessionExpiredError(
+                "The website rejected your POESESSID (HTTP 403). Usually it has expired or you "
+                f"logged out. {EXPIRED_HELP} If you just pasted it, check the account name "
+                "(the full Name#1234) matches the account the cookie belongs to."
             )
-        if resp.status_code != 200:
-            raise SessionError(f"HTTP {resp.status_code} from {path}")
+        if 300 <= status < 400:
+            # sent to the login page: the session is gone
+            raise SessionExpiredError(
+                f"Your POESESSID is no longer logged in (redirected to the login page). "
+                f"{EXPIRED_HELP}"
+            )
+        if status != 200:
+            raise SessionError(f"HTTP {status} from {path}")
         try:
             return resp.json()
         except ValueError as e:
+            if "login" in resp.text[:20000].lower():
+                raise SessionExpiredError(
+                    f"Your POESESSID is no longer logged in (got the login page). {EXPIRED_HELP}"
+                ) from e
             # e.g. an HTML challenge page from the site's edge protection
-            raise SessionError(f"non-JSON response from {path} (HTTP {resp.status_code})") from e
+            raise SessionError(f"non-JSON response from {path} (HTTP {status})") from e
 
     def _common(self) -> dict[str, str | int]:
         return {"accountName": self.account_name, "realm": self.realm}

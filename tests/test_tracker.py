@@ -258,3 +258,10 @@ def test_suicide_counts_as_death() -> None:
     feed(t, s.events)
     feed(t, [PlayerSlain(s.t, "Me", suicide=True)])
     assert t.run is not None and t.run.deaths == 1
+
+
+def test_death_names_match_case_insensitively() -> None:
+    s = Script().go("MapWorldsStrand", "Strand", 111).wait(5).die("xyz_bow").die("Other")
+    t = tracker(characters=(" Xyz_Bow ",))
+    feed(t, s.events)
+    assert t.run is not None and t.run.deaths == 1

@@ -89,10 +89,7 @@ button { font: inherit; color: inherit; }
 .resize-handle.s { left: 0; right: 8px; bottom: 0; height: 5px; cursor: ns-resize; }
 .resize-handle.se { right: 0; bottom: 0; width: 12px; height: 12px; cursor: nwse-resize; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; letter-spacing: 0.2px; }
-.flame {
-  width: 14px; height: 18px; border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
-  background: radial-gradient(circle at 50% 70%, #ffd27a 0 25%, var(--accent) 55%, #c2410c 100%);
-}
+.brand .logo { width: 22px; height: 22px; display: block; pointer-events: none; }
 .league { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 select {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
@@ -293,3 +290,22 @@ th[aria-sort="ascending"] button, th[aria-sort="descending"] button { color: var
 .sort-ind { width: 8px; display: inline-block; font-size: 9px; color: var(--accent); }
 th[aria-sort="ascending"] .sort-ind::after { content: "▲"; }
 th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
+
+/* character names seen in the log (deaths setting) */
+.name-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.name-chip {
+  display: flex; align-items: baseline; gap: 6px; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 10px; color: var(--text); cursor: pointer; font-size: 12.5px;
+}
+.name-chip span { color: var(--muted); font-size: 11.5px; }
+.name-chip.on { border-color: rgba(76, 195, 138, 0.5); }
+.name-chip.off { opacity: 0.75; }
+
+/* expired POESESSID banner */
+.banner {
+  display: flex; align-items: center; gap: 12px; margin: 14px 18px 0; padding: 10px 14px;
+  border: 1px solid rgba(239, 93, 93, 0.45); background: rgba(239, 93, 93, 0.1); border-radius: 9px;
+  font-size: 13px; line-height: 1.45;
+}
+.banner .btn { margin-left: auto; }
+.chip.bad { background: rgba(239, 93, 93, 0.15); color: var(--bad); }

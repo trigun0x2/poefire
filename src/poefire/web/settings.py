@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from poefire.api.session import SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config
 from poefire.leagues import is_private
+from poefire.store import Store
 from poefire.web.runtime import AppRuntime
 
 POESESSID_RE = re.compile(r"[0-9a-fA-F]{32}")
@@ -46,6 +47,29 @@ def _session_store(rt: AppRuntime) -> SessionStore:
     return SessionStore(rt.cfg.session_path)
 
 
+def log_characters(rt: AppRuntime) -> list[dict[str, Any]]:
+    """Character names seen in the log recently (deaths and level-ups), with their deaths and
+    whether the current "count deaths for" setting counts them."""
+    wanted = {c.casefold() for c in rt.cfg.characters}
+    seen: dict[str, dict[str, Any]] = {}
+    with Store(rt.cfg.db_path) as s:
+        for kind in ("PlayerSlain", "LevelUp"):
+            for e in s.list_events(kind=kind, limit=500):
+                name = str(e.get("character") or "")
+                if not name:
+                    continue
+                c = seen.setdefault(name.casefold(), {"name": name, "deaths": 0, "in_maps": 0,
+                                                      "last_seen": e["ts"]})  # fmt: skip
+                c["last_seen"] = max(c["last_seen"], e["ts"])
+                if kind == "PlayerSlain":
+                    c["deaths"] += 1
+                    c["in_maps"] += 1 if e.get("run_id") else 0
+    out = sorted(seen.values(), key=lambda c: c["last_seen"], reverse=True)
+    for c in out:
+        c["counted"] = not wanted or c["name"].casefold() in wanted
+    return out
+
+
 def settings_json(rt: AppRuntime) -> dict[str, Any]:
     cfg = rt.cfg
     detected = next((p for p in WINDOWS_LOG_CANDIDATES if p.exists()), None)
@@ -61,6 +85,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "account_name": cfg.account_name or "",
         "session_saved": _session_store(rt).load() is not None,
         "session_from_env": from_env,
+        "session_health": _session_store(rt).health(),
         "auth": cfg.auth,
         "league": rt.league,
         "league_is_private": rt.is_private,
@@ -69,6 +94,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "ninja_leagues": rt.ninja_leagues(),
         "character": cfg.character or "",
         "characters": cfg.characters,
+        "log_characters": log_characters(rt),
         "stash_tabs": cfg.stash_tabs,
         "snapshot_on_run_start": cfg.snapshot_on_run_start,
         "snapshot_delay": cfg.snapshot_delay,
@@ -119,7 +145,16 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
     if body.character is not None:
         changes["character"] = body.character.strip() or None
     if body.characters is not None:
-        changes["characters"] = [c.strip() for c in body.characters if c.strip()]
+        names = [c.strip() for c in body.characters if c.strip()]
+        known = {c["name"].casefold() for c in log_characters(rt)}
+        unknown = [n for n in names if known and n.casefold() not in known]
+        if unknown:
+            warnings.append(
+                f"{', '.join(unknown)} hasn't died or leveled up in your log yet. Deaths only "
+                "count for the listed characters, so check the spelling (it's the character "
+                "name, not the account name)"
+            )
+        changes["characters"] = names
     if body.stash_tabs is not None:
         changes["stash_tabs"] = list(dict.fromkeys(t.strip() for t in body.stash_tabs if t.strip()))
     if body.snapshot_on_run_start is not None:

@@ -137,8 +137,9 @@ def test_min_interval_between_requests() -> None:
 @pytest.mark.parametrize(
     ("status", "error", "match"),
     [
-        (401, SessionExpiredError, "set-session"),
-        (403, SessionError, "Name#1234"),
+        (401, SessionExpiredError, "expired or was logged out"),
+        (403, SessionExpiredError, "Name#1234"),
+        (302, SessionExpiredError, "login page"),
         (429, SessionError, "retry after 30"),
         (500, SessionError, "HTTP 500"),
     ],
@@ -229,3 +230,83 @@ def test_network_error_is_a_session_error() -> None:
     with pytest.raises(SessionError, match="network error") as e:
         api.list_characters()
     assert COOKIE not in str(e.value)
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.t = 1_000_000.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_session_health_lifecycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(SessionStore.ENV, raising=False)
+    clock = Clock()
+    store = SessionStore(tmp_path / "session.json", clock=clock)
+    store.save(COOKIE)
+    h = store.health()
+    assert h["saved"] and not h["expired"] and h["last_ok"] is None
+    assert COOKIE not in str(h)
+
+    clock.t += 3600
+    store.record_auth(True)
+    assert store.health()["last_ok"] == clock.t
+    clock.t += 60
+    store.record_auth(True)  # within 5 minutes: not rewritten
+    assert store.health()["last_ok"] == clock.t - 60
+
+    clock.t += 2 * 86400
+    store.record_auth(False)
+    h = store.health()
+    assert h["expired"] and h["expired_at"] == clock.t
+    assert h["worked_seconds"] == 3600 + 60 + 2 * 86400
+    store.record_auth(False)  # first failure time is kept
+    assert store.health()["expired_at"] == clock.t
+
+    # a new cookie: the old one goes into the history with how long it lasted
+    clock.t += 100
+    store.save("f" * 32)
+    h = store.health()
+    assert not h["expired"] and h["history"][0]["lasted_seconds"] == 3600 + 60 + 2 * 86400
+    assert h["history"][0]["expired"] is True
+    assert store.load() == "f" * 32
+
+
+def test_cookie_from_env_is_not_tracked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(SessionStore.ENV, COOKIE)
+    store = SessionStore(tmp_path / "session.json")
+    store.record_auth(False)
+    assert not (tmp_path / "session.json").exists()
+    assert store.health()["from_env"] and store.health()["saved"]
+
+
+@pytest.mark.parametrize(
+    ("response", "expired"),
+    [
+        (httpx.Response(200, json=[]), False),
+        (httpx.Response(401), True),
+        (httpx.Response(403, json={"error": {"code": 6, "message": "Forbidden"}}), True),
+        (httpx.Response(302, headers={"Location": "/login"}), True),
+        (httpx.Response(200, text="<html><form action='/login'>Sign in</form></html>"), True),
+        (httpx.Response(200, text="<html>Just a moment...</html>"), None),  # edge protection
+        (httpx.Response(500), None),
+    ],
+)
+def test_auth_results_are_reported(response: httpx.Response, expired: bool | None) -> None:
+    reports: list[bool] = []
+    clock = FakeClock()
+    api = SessionApi(COOKIE, "Exile#1234", UA,
+                     http=httpx.Client(transport=httpx.MockTransport(lambda r: response)),
+                     clock=clock, sleep=clock.sleep, on_auth=reports.append)  # fmt: skip
+    if expired is False:
+        api.list_characters()
+        assert reports == [True]
+    elif expired:
+        with pytest.raises(SessionExpiredError, match="Settings") as e:
+            api.list_characters()
+        assert reports == [False] and COOKIE not in str(e.value)
+    else:
+        with pytest.raises(SessionError) as e2:
+            api.list_characters()
+        assert not isinstance(e2.value, SessionExpiredError) and reports == []

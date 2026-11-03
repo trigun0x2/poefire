@@ -104,12 +104,13 @@ def test_holdings_and_tab_filter(env: tuple[TestClient, AppRuntime, Path]) -> No
     first = d["items"][0]
     assert (first["name"], first["quantity"], first["chaos_total"]) == ("Divine Orb", 3, 600.0)
     assert first["tabs"] == ["Inventory", "Currency"] and first["share"] == round(600 / 650, 4)
-    assert d["items"][-1]["name"] == "Mystery Orb" and d["items"][-1]["chaos_each"] is None
-    assert d["unpriced"] == 1
+    # unpriced items are hidden from the list but counted
+    assert "Mystery Orb" not in [i["name"] for i in d["items"]]
+    assert d["unpriced"] == 1 and d["hidden"] == 1
 
     only = client.get("/api/overview/items?tabs=tabB").json()
     assert only["total_chaos"] == 50.0 and [i["name"] for i in only["items"]] == [
-        "Exalted Orb", "Mystery Orb"]  # fmt: skip
+        "Exalted Orb"]  # fmt: skip
     both = client.get("/api/overview/items?tabs=tabA,inventory").json()
     assert both["total_chaos"] == 600.0
 

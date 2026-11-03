@@ -140,7 +140,8 @@ class RunTracker:
     ) -> None:
         self.rules = rules or ZoneRules()
         # Empty = count every "has been slain" line (fine solo; set names for party play).
-        self.characters = frozenset(characters)
+        # case-insensitive: "Xyz_Bow" in the settings still matches "xyz_bow" in the log
+        self.characters = frozenset(c.strip().casefold() for c in characters if c.strip())
         self.state = state or TrackerState()
         self._new_id = new_id
 
@@ -226,7 +227,7 @@ class RunTracker:
         run = self.state.run
         if run is None or not self.state.in_run:
             return
-        if self.characters and e.character not in self.characters:
+        if self.characters and e.character.casefold() not in self.characters:
             return
         run.deaths += 1
         out.append(self._notice(NoticeKind.UPDATED, run))

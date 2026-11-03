@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from poefire import __version__
+from poefire.api.session import SessionStore
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import overview, settings, views
@@ -92,6 +93,9 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "loot": {
                 "enabled": rt.loot.enabled,
                 "reason": rt.loot.reason,
+                "session": SessionStore(rt.cfg.session_path).health()
+                if rt.cfg.auth == "session"
+                else None,
                 "last": None
                 if last is None
                 else {
@@ -202,6 +206,10 @@ def create_app(rt: AppRuntime) -> FastAPI:
     @app.post("/api/settings/check-account")
     def check_account() -> dict[str, Any]:
         return settings.check_account(rt)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        return FileResponse(STATIC / "favicon.ico", media_type="image/x-icon")
 
     @app.get("/")
     def index() -> FileResponse:

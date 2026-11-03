@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from poefire.pricing.book import PriceBook
-from poefire.pricing.valuation import Valuation, value_deltas
+from poefire.pricing.valuation import Valuation, is_worth_showing, value_deltas
 from poefire.store import Store
 from poefire.tracker import Run, RunStatus
 
@@ -128,7 +128,8 @@ def last_map(rows: Sequence[RunRow], chaos_per_divine: float | None, top: int = 
     row = next((r for r in rows if r.run.status is not RunStatus.ACTIVE), None)
     if row is None:
         return None
-    drops = [i for i in row.value.items if (i.chaos_total or 0) > 0][:top]
+    drops = [i for i in row.value.items
+             if is_worth_showing(i.chaos_total) and (i.chaos_total or 0) > 0][:top]  # fmt: skip
     return {
         **row.to_json(chaos_per_divine),
         "top_items": [
@@ -140,10 +141,12 @@ def last_map(rows: Sequence[RunRow], chaos_per_divine: float | None, top: int = 
 
 
 def valuation_json(v: Valuation, chaos_per_divine: float | None) -> Json:
+    shown = [i for i in v.items if is_worth_showing(i.chaos_total)]
     return {
         "chaos": round(v.chaos, 1),
         "divine": _round(v.divine(chaos_per_divine)),
         "unpriced": v.unpriced,
+        "hidden": len(v.items) - len(shown),  # no price, or worth ~0c
         "items": [
             {
                 "name": i.name,
@@ -153,7 +156,7 @@ def valuation_json(v: Valuation, chaos_per_divine: float | None) -> Json:
                 "icon": i.icon,
                 "source": i.source,
             }
-            for i in v.items
+            for i in shown
         ],
     }
 

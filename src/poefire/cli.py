@@ -306,7 +306,9 @@ def cmd_ui(args: argparse.Namespace) -> int:
                         js_api=controls, background_color="#111317",
                     )  # fmt: skip
                     controls._attach(window)
-                    webview.start()
+                    # the packaged exe carries the icon itself; this covers running from source
+                    icon = Path(__file__).parent / "web" / "static" / "favicon.ico"
+                    webview.start(icon=str(icon))
                 except Exception as e:  # e.g. .NET/WebView2 can't load on this machine
                     print(f"native window failed ({e!r}); opening the browser instead")
                     webbrowser.open(url)

@@ -48,10 +48,14 @@ def account_api(cfg: Config) -> AccountApi:
     if cfg.auth == "session":
         if not cfg.account_name:
             raise ConfigError("set account_name in config.toml (full name, e.g. Name#1234)")
-        poesessid = SessionStore(cfg.session_path).load()
+        sessions = SessionStore(cfg.session_path)
+        poesessid = sessions.load()
         if not poesessid:
-            raise ConfigError("no POESESSID saved; run `poefire set-session`")
-        return SessionApi(poesessid, cfg.account_name, session_user_agent(cfg), cfg.realm)
+            raise ConfigError("no POESESSID saved; paste it in Settings (or `poefire set-session`)")
+        return SessionApi(
+            poesessid, cfg.account_name, session_user_agent(cfg), cfg.realm,
+            on_auth=sessions.record_auth,
+        )  # fmt: skip
     raise ConfigError(f'unknown auth {cfg.auth!r} (use "session" or "oauth")')
 
 

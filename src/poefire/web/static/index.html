@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>poefire</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="titlebar pywebview-drag-region" id="titlebar">
-    <div class="brand pywebview-drag-region"><span class="flame" aria-hidden="true"></span>poefire</div>
+    <div class="brand pywebview-drag-region"><img class="logo" src="/static/logo.svg" alt="" width="22" height="22">poefire</div>
     <label class="league">
       <span>League</span>
       <select id="league" aria-label="League"></select>
@@ -70,6 +72,7 @@
     </nav>
 
     <div class="content" id="content">
+      <div class="banner" id="session-banner" hidden role="alert"></div>
   <section class="view overview" id="overview-view" hidden>
     <section class="card ov-value">
       <div class="ov-head">
@@ -143,6 +146,7 @@
 
       <div class="field">
         <span>POESESSID cookie <span class="chip" id="set-session-chip"></span></span>
+        <div class="hint" id="set-session-health"></div>
         <div class="row">
           <input id="set-session" type="password" placeholder="Paste a new POESESSID to save it" spellcheck="false" autocomplete="new-password">
           <button type="button" class="btn primary" id="set-session-save">Save cookie</button>
@@ -205,6 +209,7 @@
         <span>Count deaths for <span class="muted">(comma-separated; empty = everyone in the log, fine when playing solo)</span></span>
         <input id="set-deaths" type="text" spellcheck="false">
       </label>
+      <div class="name-chips" id="set-deaths-seen"></div>
     </section>
 
     <div class="save-bar">

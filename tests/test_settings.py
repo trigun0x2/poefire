@@ -158,3 +158,28 @@ def test_config_toml_roundtrip(tmp_path: Path) -> None:
                  account_name="Exile#1234")  # fmt: skip
     path = cfg.save(tmp_path / "config.toml")
     assert Config.load(path) == cfg
+
+
+def test_death_names_seen_in_log_and_unknown_name_warning(
+    env: tuple[TestClient, AppRuntime, Path],
+) -> None:
+    from datetime import datetime
+
+    from poefire.events import LevelUp, PlayerSlain
+
+    client, rt, _ = env
+    with Store(rt.cfg.db_path) as s, s.transaction():
+        s.add_event(PlayerSlain(datetime(2026, 11, 1, 16, 0), "xyz_bow"), "run1")
+        s.add_event(PlayerSlain(datetime(2026, 11, 1, 16, 5), "xyz_bow"), None)
+        s.add_event(LevelUp(datetime(2026, 11, 1, 16, 6), "alt_char", "Witch", 12), None)
+    seen = {c["name"]: c for c in client.get("/api/settings").json()["log_characters"]}
+    assert seen["xyz_bow"]["deaths"] == 2 and seen["xyz_bow"]["in_maps"] == 1
+    assert seen["alt_char"]["deaths"] == 0 and all(c["counted"] for c in seen.values())
+
+    r = client.post("/api/settings", headers=H, json={"characters": ["MyAccount#1234"]}).json()
+    assert any("MyAccount#1234" in w and "character name" in w for w in r["warnings"])
+    seen = {c["name"]: c for c in r["log_characters"]}
+    assert not seen["xyz_bow"]["counted"]
+
+    r = client.post("/api/settings", headers=H, json={"characters": ["XYZ_BOW"]}).json()
+    assert r["warnings"] == [] and {c["name"]: c for c in r["log_characters"]}["xyz_bow"]["counted"]

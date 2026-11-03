@@ -8,7 +8,7 @@ from typing import Any
 
 from poefire.loot.recorder import TAB_NAMES_KEY
 from poefire.pricing.book import PriceBook
-from poefire.pricing.valuation import value_holdings
+from poefire.pricing.valuation import is_worth_showing, value_holdings
 from poefire.store import Store
 
 type Json = dict[str, Any]
@@ -70,6 +70,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
     chosen = [e for e in entries if not wanted or e.source in wanted]
     held = value_holdings(chosen, book)
     total = sum(h.chaos_total or 0 for h in held)
+    shown = [h for h in held if is_worth_showing(h.chaos_total)]
     return {
         "taken_at": taken_at.isoformat(),
         "tabs": tab_list,
@@ -77,6 +78,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
         "total_divine": _round(total / cpd) if cpd else None,
         "chaos_per_divine": cpd,
         "unpriced": sum(1 for h in held if h.chaos_each is None),
+        "hidden": len(held) - len(shown),  # no price, or worth ~0c
         "items": [
             {
                 "name": h.name,
@@ -88,6 +90,6 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
                 "icon": h.icon,
                 "tabs": [names.get(s, s) for s in h.sources],
             }
-            for h in held[:limit]
+            for h in shown[:limit]
         ],
     }

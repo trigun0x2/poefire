@@ -71,12 +71,18 @@ function renderStatus() {
   $("prices-pill").title = p.error ? `Last error: ${p.error}` : "Refresh prices from poe.ninja";
 
   const l = s.loot;
+  const expired = l.session?.expired;
   const ld = $("loot-pill").querySelector(".dot");
-  ld.className = "dot " + (!l.enabled ? "bad" : l.last && !l.last.complete ? "warn" : "ok");
-  $("loot-text").textContent = !l.enabled
-    ? "Loot tracking off"
-    : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
-  $("loot-pill").title = !l.enabled ? `${l.reason} (click to open Settings)` : l.last?.error || "Take a snapshot now";
+  ld.className = "dot " + (!l.enabled || expired ? "bad" : l.last && !l.last.complete ? "warn" : "ok");
+  $("loot-text").textContent = expired
+    ? "POESESSID expired · update it"
+    : !l.enabled
+      ? "Loot tracking off"
+      : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
+  $("loot-pill").title = expired
+    ? "The website rejected your POESESSID. Click to paste a new one in Settings."
+    : !l.enabled ? `${l.reason} (click to open Settings)` : l.last?.error || "Take a snapshot now";
+  renderSessionBanner(l.session);
   $("last-empty").innerHTML = s.log_path
     ? "No map finished yet. Stats appear when you're back in your hideout."
     : 'Client.txt not found. Set its location in <a href="#settings">Settings</a>.';
@@ -104,6 +110,34 @@ function tickTimer() {
   if (!run) return;
   const extra = run.status === "active" ? (performance.now() - statusAt) / 1000 : 0;
   $("now-timer").textContent = duration(run.active_seconds + extra);
+}
+
+function since(unix) {
+  if (!unix) return "never";
+  const s = Date.now() / 1000 - unix;
+  if (s < 90) return "just now";
+  if (s < 5400) return `${Math.round(s / 60)} min ago`;
+  if (s < 172800) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} days ago`;
+}
+function span(seconds) {
+  if (seconds == null) return "—";
+  if (seconds < 5400) return `${Math.max(1, Math.round(seconds / 60))} min`;
+  if (seconds < 172800) return `${(seconds / 3600).toFixed(1)} hours`;
+  return `${(seconds / 86400).toFixed(1)} days`;
+}
+function dateOf(unix) {
+  return new Date(unix * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderSessionBanner(h) {
+  const b = $("session-banner");
+  const show = h?.expired && location.hash !== "#settings";
+  b.hidden = !show;
+  if (!show) return;
+  const lasted = h.worked_seconds ? ` It worked for ${span(h.worked_seconds)} after you saved it.` : "";
+  b.innerHTML = `<span><b>Your POESESSID expired ${since(h.expired_at)}.</b> Loot tracking is paused until you paste a new one.${lasted}</span>` +
+    '<a class="btn primary" href="#settings">Update in Settings</a>';
 }
 
 function renderSidebarStats() {
@@ -281,7 +315,7 @@ async function renderDetail() {
       <div class="muted">${duration(d.active_seconds)} · ${d.deaths} death${d.deaths === 1 ? "" : "s"}</div>
     </div>
     ${itemList(d.loot.items)}
-    ${d.loot.unpriced ? `<div class="note">${d.loot.unpriced} item kind${d.loot.unpriced === 1 ? "" : "s"} without a poe.ninja price, not counted in the value.</div>` : ""}
+    ${d.loot.hidden ? `<div class="note">${d.loot.hidden} item kind${d.loot.hidden === 1 ? "" : "s"} with no price or worth under 0.05c hidden.</div>` : ""}
     ${before}`;
 }
 
@@ -333,7 +367,7 @@ $("league").addEventListener("change", async (e) => {
 });
 $("prices-pill").addEventListener("click", () => api("/api/prices/refresh", { method: "POST" }).then(pollStatus));
 $("loot-pill").addEventListener("click", () => {
-  if (status?.loot.enabled) api("/api/snapshot", { method: "POST" }).catch(() => {});
+  if (status?.loot.enabled && !status.loot.session?.expired) api("/api/snapshot", { method: "POST" }).catch(() => {});
   else location.hash = "#settings";
 });
 $("runs-body").addEventListener("click", (e) => {
@@ -368,8 +402,21 @@ async function loadSettings() {
 
   $("set-account").value = s.account_name;
   const chip = $("set-session-chip");
-  chip.className = `chip${s.session_saved ? " ok" : ""}`;
-  chip.textContent = s.session_from_env ? "set by POE_SESSID variable" : s.session_saved ? "saved" : "not set";
+  const h = s.session_health;
+  chip.className = `chip${h.expired ? " bad" : s.session_saved ? " ok" : ""}`;
+  chip.textContent = s.session_from_env ? "set by POE_SESSID variable" : h.expired ? "expired" : s.session_saved ? "saved" : "not set";
+  const lines = [];
+  if (h.saved_at) {
+    lines.push(h.expired
+      ? `Rejected by the website ${since(h.expired_at)} (${dateOf(h.expired_at)}), ${h.last_ok ? `after working for ${span(h.worked_seconds)}` : "without ever working: check the account name"}. Paste a new one.`
+      : `Saved ${dateOf(h.saved_at)}${h.last_ok ? ` · last worked ${since(h.last_ok)} · working for ${span(h.worked_seconds)}` : " · not used yet"}.`);
+  }
+  const past = h.history.filter((x) => x.lasted_seconds != null);
+  if (past.length) {
+    lines.push(`Previous cookies lasted: ${past.map((x) => `${span(x.lasted_seconds)}${x.expired ? "" : " (replaced while still working)"}`).join(", ")}.`);
+  }
+  $("set-session-health").className = `hint${h.expired ? " bad" : ""}`;
+  $("set-session-health").textContent = lines.join(" ");
   $("set-session-clear").disabled = !s.session_saved || s.session_from_env;
 
   const leagues = (await api("/api/leagues")).options;
@@ -382,6 +429,7 @@ async function loadSettings() {
   $("set-run-start").checked = s.snapshot_on_run_start;
   $("set-delay").value = s.snapshot_delay;
   $("set-deaths").value = s.characters.join(", ");
+  renderDeathNames();
   renderAccountPickers();
   setStatus("set-save-status", s.loot.enabled ? "Loot tracking is on." : `Loot tracking is off: ${s.loot.reason}`, s.loot.enabled ? "ok" : "warn");
 }
@@ -410,6 +458,20 @@ function renderLeagueHints() {
     ? "poe.ninja has no prices for private leagues. Leave empty to use the current challenge league, " +
       "or pick the league yours is based on (e.g. the hardcore one for a hardcore private league)."
     : "Leave empty to price from the league you play.";
+}
+
+function renderDeathNames() {
+  const seen = settings.log_characters || [];
+  if (!seen.length) {
+    $("set-deaths-seen").innerHTML = '<span class="hint">No deaths or level-ups in the log yet. Character names show up here once they appear.</span>';
+    return;
+  }
+  const typed = $("set-deaths").value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  $("set-deaths-seen").innerHTML = '<span class="hint">Seen in your log (click to add):</span>' + seen.map((c) => {
+    const counted = !typed.length || typed.includes(c.name.toLowerCase());
+    return `<button type="button" class="name-chip ${counted ? "on" : "off"}" data-name="${esc(c.name)}" title="${counted ? "Deaths counted" : "Deaths ignored: not in the list"}">` +
+      `${esc(c.name)}<span>${c.deaths} death${c.deaths === 1 ? "" : "s"} · ${counted ? "counted" : "ignored"}</span></button>`;
+  }).join("");
 }
 
 function renderAccountPickers() {
@@ -491,6 +553,15 @@ $("set-session-clear").addEventListener("click", async () => {
 });
 
 $("set-check").addEventListener("click", checkAccount);
+$("set-deaths").addEventListener("input", renderDeathNames);
+$("set-deaths-seen").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-name]");
+  if (!b) return;
+  const names = $("set-deaths").value.split(",").map((x) => x.trim()).filter(Boolean);
+  if (!names.some((n) => n.toLowerCase() === b.dataset.name.toLowerCase())) names.push(b.dataset.name);
+  $("set-deaths").value = names.join(", ");
+  renderDeathNames();
+});
 
 $("settings-view").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -677,7 +748,8 @@ function renderDataTable(pts) {
 function renderHoldings() {
   const d = ovItems;
   const cpd = d.chaos_per_divine;
-  $("ov-asof").textContent = d.taken_at ? `· as of ${new Date(d.taken_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, current prices` : "";
+  const hiddenNote = d.hidden ? ` · ${d.hidden} with no price or ~0c hidden` : "";
+  $("ov-asof").textContent = d.taken_at ? `· as of ${new Date(d.taken_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, current prices${hiddenNote}` : "";
   const chips = [`<button type="button" data-tab=""${ovTabs.size === 0 ? ' class="on"' : ""}>All tabs</button>`]
     .concat(d.tabs.map((t) => `<button type="button" data-tab="${esc(t.id)}"${ovTabs.has(t.id) ? ' class="on"' : ""}>${esc(t.name)}<span class="v">${money(t.chaos, cpd ? t.chaos / cpd : null)}</span></button>`));
   $("ov-tabs").innerHTML = d.tabs.length ? chips.join("") : "";
@@ -802,6 +874,7 @@ function route() {
     $(`nav-${key}`).classList.toggle("active", key === name);
   }
   $("content").scrollTop = 0;
+  renderSessionBanner(status?.loot.session);
   if (name === "settings") loadSettings().catch((e) => setStatus("set-save-status", `✗ ${e.message}`, "bad"));
   if (name === "overview") loadOverview().catch(() => {});
 }

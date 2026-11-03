@@ -84,3 +84,12 @@ def value_holdings(entries: Iterable[ItemEntry], book: PriceBook) -> list[HeldIt
                             tuple(sorted(sources[key]))))  # fmt: skip
     out.sort(key=lambda h: (-(h.chaos_total or 0), h.name))
     return out
+
+
+# Items worth less than this show as "0c": not worth a row.
+MIN_SHOWN_CHAOS = 0.05
+
+
+def is_worth_showing(chaos_total: float | None) -> bool:
+    """False for items without a price and for ones that round to 0c."""
+    return chaos_total is not None and abs(chaos_total) >= MIN_SHOWN_CHAOS
