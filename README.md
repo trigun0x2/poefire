@@ -292,15 +292,17 @@ reading restarts from byte 0.
 `.github/workflows/ci.yml` runs lint, type checks and tests on Windows and Linux for every push
 and pull request.
 
-`.github/workflows/release.yml` builds the Windows zip. It runs the tests, builds a one-folder
-app with PyInstaller (`packaging/windows/poefire.spec`), starts the built exe to check it
-serves the UI, and uploads the zip with its SHA-256 checksum. To publish a release:
+`.github/workflows/release.yml` publishes a release on every push to the default branch. It
+takes the latest `vX.Y.Z` tag and bumps the minor version (v0.1.0, v0.2.0, v0.3.0…); the first
+release uses `__version__` from the code. It stamps that version into the build, runs the
+tests, and builds a one-folder app with PyInstaller (`packaging/windows/poefire.spec`). It then
+starts the built exe to check it serves the UI and that the native window opens, and publishes
+`poefire-<version>-windows-x64.zip` with its SHA-256 checksum as a GitHub release. The app
+files sit at the top level of the zip.
 
-1. Set `__version__` in `src/poefire/__init__.py` and `version` in `pyproject.toml`.
-2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-
-The workflow refuses a tag that doesn't match `__version__`. Running it manually from the
-Actions tab builds the zip as a workflow artifact without publishing a release.
+Releases run one at a time, so two quick pushes get two versions. Running the workflow
+manually from the Actions tab only builds the app as a workflow artifact (`<next>.devN`),
+without publishing.
 
 ## Development
 
