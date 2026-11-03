@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from poefire import __version__
 from poefire.store import Store
 from poefire.tracker import RunStatus
-from poefire.web import settings, views
+from poefire.web import overview, settings, views
 from poefire.web.runtime import SESSION_GAP, AppRuntime
 
 STATIC = Path(__file__).parent / "static"
@@ -145,6 +145,23 @@ def create_app(rt: AppRuntime) -> FastAPI:
         if not rt.snapshot_now():
             raise HTTPException(409, rt.loot.reason or "loot tracking is off")
         return {"ok": True}
+
+    # --- overview ---
+
+    @app.get("/api/overview/history")
+    def overview_history(range: str = "7d") -> dict[str, Any]:
+        book = rt.prices.book(rt.price_league)
+        with store() as s:
+            return overview.history(s, rt.league, range, rt.now(), book.chaos_per_divine)
+
+    @app.get("/api/overview/items")
+    def overview_items(tabs: str = "") -> dict[str, Any]:
+        book = rt.prices.book(rt.price_league)
+        with store() as s:
+            return {
+                **overview.holdings(s, book, tabs.split(",")),
+                "loot_enabled": rt.loot.enabled,
+            }
 
     # --- settings ---
 

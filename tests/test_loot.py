@@ -238,6 +238,9 @@ class ScriptedSnapshotter:
     def take(self) -> Snapshot:
         return self.snaps.pop(0)
 
+    def tab_names(self) -> dict[str, str]:
+        return {"inventory": "Inventory"}
+
 
 T = datetime(2024, 7, 27, 20, 0)
 

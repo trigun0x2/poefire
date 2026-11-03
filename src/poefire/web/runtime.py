@@ -16,9 +16,11 @@ from pathlib import Path
 from poefire import __version__, wiring
 from poefire.config import Config
 from poefire.leagues import default_price_league, is_private
+from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.pricing.ninja import NinjaClient
 from poefire.pricing.service import PriceService
+from poefire.pricing.valuation import value_holdings
 from poefire.service import TrackerService
 from poefire.store import Store
 from poefire.tracker import Notice, TrackerState
@@ -112,6 +114,7 @@ class AppRuntime:
         self.recorder = rec
         self.loot = LootStatus(enabled=True)
         rec.handlers.append(self._on_loot)
+        rec.valuer = self.value_snapshot
         rec.snapshotter.set_league(self._league)
         if self._started:
             rec.start()
@@ -203,6 +206,14 @@ class AppRuntime:
     def _on_loot(self, result: LootResult) -> None:
         self.loot.last = result
         self.loot.last_at = self.now()
+
+    def value_snapshot(self, items: list[ItemEntry]) -> tuple[str, float, float | None, int]:
+        """Total value of a snapshot at current prices, for the Overview history."""
+        book = self.prices.book(self.price_league)
+        held = value_holdings(items, book)
+        chaos = sum(h.chaos_total or 0 for h in held)
+        unpriced = sum(1 for h in held if h.chaos_each is None)
+        return self._league, chaos, book.chaos_per_divine, unpriced
 
     def snapshot_now(self) -> bool:
         if self.recorder is None:

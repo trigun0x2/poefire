@@ -17,7 +17,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -111,7 +111,25 @@ CREATE TABLE price_cache (
 );
 """
 
-_MIGRATIONS = (_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3)  # index i upgrades schema version i -> i + 1
+_SCHEMA_V4 = """
+-- Total value of each complete snapshot at the prices of that moment (the Overview graph).
+CREATE TABLE snapshot_values (
+    snapshot_id      INTEGER PRIMARY KEY REFERENCES snapshots(id) ON DELETE CASCADE,
+    taken_at         TEXT NOT NULL,
+    league           TEXT NOT NULL,
+    chaos            REAL NOT NULL,
+    chaos_per_divine REAL,
+    unpriced         INTEGER NOT NULL
+);
+CREATE INDEX snapshot_values_league ON snapshot_values(league, taken_at);
+"""
+
+_MIGRATIONS = (
+    _SCHEMA_V1,
+    _SCHEMA_V2,
+    _SCHEMA_V3,
+    _SCHEMA_V4,
+)  # index i upgrades schema version i -> i + 1
 
 
 def _dt(v: datetime | None) -> str | None:
@@ -281,6 +299,38 @@ class Store:
             )
         ]  # fmt: skip
         return row["id"], datetime.fromisoformat(row["taken_at"]), items
+
+    def latest_snapshot_items(self) -> tuple[datetime, list[ItemEntry]] | None:
+        latest = self.last_complete_snapshot()
+        return None if latest is None else (latest[1], latest[2])
+
+    def add_snapshot_value(
+        self,
+        snapshot_id: int,
+        taken_at: datetime,
+        league: str,
+        chaos: float,
+        chaos_per_divine: float | None,
+        unpriced: int,
+    ) -> None:
+        self.conn.execute(
+            "INSERT OR REPLACE INTO snapshot_values "
+            "(snapshot_id, taken_at, league, chaos, chaos_per_divine, unpriced) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (snapshot_id, taken_at.isoformat(), league, chaos, chaos_per_divine, unpriced),
+        )
+
+    def value_history(
+        self, league: str, since: datetime | None = None
+    ) -> list[tuple[datetime, float, float | None]]:
+        """(taken_at, chaos, chaos_per_divine) for the league's snapshots, oldest first."""
+        sql = "SELECT taken_at, chaos, chaos_per_divine FROM snapshot_values WHERE league = ?"
+        args: list[Any] = [league]
+        if since is not None:
+            sql += " AND taken_at >= ?"
+            args.append(since.isoformat())
+        rows = self.conn.execute(sql + " ORDER BY taken_at", args).fetchall()
+        return [(datetime.fromisoformat(r[0]), r[1], r[2]) for r in rows]
 
     def prune_snapshot_items(self, keep: int = 2) -> None:
         self.conn.execute(

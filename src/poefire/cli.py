@@ -294,9 +294,18 @@ def cmd_ui(args: argparse.Namespace) -> int:
                 thread = threading.Thread(target=server.run, daemon=True)
                 thread.start()
                 try:
-                    webview.create_window(
-                        "poefire", url, width=1360, height=860, min_size=(900, 600)
-                    )
+                    from poefire.web.window import MIN_HEIGHT, MIN_WIDTH, WindowControls
+
+                    controls = WindowControls()
+                    # No OS title bar: the page draws its own (see web/window.py). Only the
+                    # bar's background drags the window, not the buttons/selects inside it.
+                    webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+                    window = webview.create_window(
+                        "poefire", url, width=1360, height=860,
+                        min_size=(MIN_WIDTH, MIN_HEIGHT), frameless=True, easy_drag=False,
+                        js_api=controls, background_color="#111317",
+                    )  # fmt: skip
+                    controls._attach(window)
                     webview.start()
                 except Exception as e:  # e.g. .NET/WebView2 can't load on this machine
                     print(f"native window failed ({e!r}); opening the browser instead")

@@ -37,6 +37,11 @@ class TabRef:
     name: str
     type: str
     parent_id: str | None = None  # set for substashes (e.g. map/unique tab sections)
+    parent_name: str | None = None
+
+    @property
+    def label(self) -> str:
+        return f"{self.parent_name} / {self.name}" if self.parent_name else self.name
 
 
 class SnapshotError(Exception):
@@ -119,7 +124,8 @@ class Snapshotter:
             seen.add(tab["id"])
             refs.append(
                 TabRef(tab["id"], tab.get("name", ""), tab.get("type", ""),
-                       parent["id"] if parent else None)
+                       parent["id"] if parent else None,
+                       parent.get("name") if parent else None)
             )  # fmt: skip
 
         for tab, parent in listed:
@@ -140,6 +146,12 @@ class Snapshotter:
             log.warning("stash tabs not found in %s: %s", self.league, ", ".join(sorted(missing)))
         self._tabs = refs
         return refs
+
+    def tab_names(self) -> dict[str, str]:
+        """Source id -> display name, for the tabs in the last snapshot."""
+        names = {"inventory": "Inventory"}
+        names.update({t.id: t.label or t.id for t in self._tabs or ()})
+        return names
 
     def take(self) -> Snapshot:
         snap = Snapshot(taken_at=self.clock())

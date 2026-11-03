@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header class="bar">
-    <div class="brand"><span class="flame" aria-hidden="true"></span>poefire</div>
+  <header class="titlebar pywebview-drag-region" id="titlebar">
+    <div class="brand pywebview-drag-region"><span class="flame" aria-hidden="true"></span>poefire</div>
     <label class="league">
       <span>League</span>
       <select id="league" aria-label="League"></select>
@@ -18,6 +18,7 @@
       <span class="now-name" id="now-name"></span>
       <span class="now-timer" id="now-timer">00:00</span>
     </div>
+    <div class="drag-spacer pywebview-drag-region"></div>
     <div class="pills">
       <button class="pill" id="prices-pill" title="Refresh prices from poe.ninja">
         <span class="dot"></span><span id="prices-text">Prices…</span>
@@ -25,12 +26,84 @@
       <button class="pill" id="loot-pill" title="Take a snapshot now">
         <span class="dot"></span><span id="loot-text">Loot…</span>
       </button>
-      <a class="pill nav" id="nav-settings" href="#settings">Settings</a>
-      <a class="pill nav" id="nav-dashboard" href="#" hidden>← Dashboard</a>
+    </div>
+    <div class="win-controls" id="win-controls" hidden>
+      <button class="win-btn" id="win-min" title="Minimize" aria-label="Minimize">
+        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5.5h8"/></svg>
+      </button>
+      <button class="win-btn" id="win-max" title="Maximize" aria-label="Maximize">
+        <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7"/></svg>
+      </button>
+      <button class="win-btn close" id="win-close" title="Close" aria-label="Close">
+        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>
+      </button>
     </div>
   </header>
 
-  <form class="settings" id="settings-view" hidden autocomplete="off">
+  <div class="shell">
+    <nav class="sidebar" aria-label="Sections">
+      <a class="nav-item" id="nav-session" href="#session">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg>
+        <span>Session</span>
+      </a>
+      <a class="nav-item" id="nav-overview" href="#overview">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16h14M5 13l4-4 3 2 4-5"/></svg>
+        <span>Overview</span>
+      </a>
+      <div class="nav-spacer"></div>
+      <a class="nav-item" id="nav-settings" href="#settings">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
+
+    <div class="content" id="content">
+  <section class="view overview" id="overview-view" hidden>
+    <section class="card ov-value">
+      <div class="ov-head">
+        <div>
+          <div class="card-title">Total value <span class="muted">· watched tabs + inventory</span></div>
+          <div class="ov-total"><span id="ov-total">—</span><span class="ov-change" id="ov-change"></span></div>
+        </div>
+        <div class="ov-controls">
+          <div class="seg" id="ov-unit" role="group" aria-label="Unit">
+            <button type="button" data-unit="divine" class="on">Divine</button>
+            <button type="button" data-unit="chaos">Chaos</button>
+          </div>
+          <div class="seg" id="ov-range" role="group" aria-label="Time range">
+            <button type="button" data-range="24h">24h</button>
+            <button type="button" data-range="7d" class="on">7d</button>
+            <button type="button" data-range="30d">30d</button>
+            <button type="button" data-range="all">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart" id="ov-chart"></div>
+      <details class="hint chart-data">
+        <summary>Data table</summary>
+        <div class="table-wrap short"><table id="ov-data"></table></div>
+      </details>
+    </section>
+
+    <section class="card ov-items">
+      <div class="ov-items-head">
+        <div class="card-title">Most valuable items <span class="muted" id="ov-asof"></span></div>
+        <button type="button" class="btn" id="ov-snapshot">Snapshot now</button>
+      </div>
+      <div class="tab-filter" id="ov-tabs" role="group" aria-label="Filter by tab"></div>
+      <div class="table-wrap">
+        <table class="ov-table">
+          <thead>
+            <tr><th>Item</th><th class="num">Qty</th><th class="num">Each</th><th class="num">Total</th><th class="num">Share</th></tr>
+          </thead>
+          <tbody id="ov-items-body"></tbody>
+        </table>
+        <div class="empty" id="ov-items-empty" hidden></div>
+      </div>
+    </section>
+  </section>
+
+  <form class="view settings" id="settings-view" hidden autocomplete="off">
     <h1>Settings</h1>
 
     <section class="card">
@@ -128,7 +201,7 @@
     </div>
   </form>
 
-  <main id="dashboard">
+  <main class="view" id="dashboard">
     <section class="card current" id="last">
       <div class="card-title">Last map</div>
       <div class="current-empty" id="last-empty">No map finished yet. Stats appear when you're back in your hideout.</div>
@@ -150,7 +223,7 @@
     </section>
 
     <section class="card session">
-      <div class="card-title">Session <span class="muted" id="session-since"></span></div>
+      <div class="card-title">This session <span class="muted" id="session-since"></span></div>
       <div class="tiles" id="tiles"></div>
     </section>
 
@@ -175,6 +248,13 @@
       <div id="detail"></div>
     </section>
   </main>
+    </div>
+  </div>
+
+  <!-- resize handles for the frameless window (shown only in the native window) -->
+  <div class="resize-handle e" data-edge="e" hidden></div>
+  <div class="resize-handle s" data-edge="s" hidden></div>
+  <div class="resize-handle se" data-edge="se" hidden></div>
 
   <script src="/static/app.js"></script>
 </body>

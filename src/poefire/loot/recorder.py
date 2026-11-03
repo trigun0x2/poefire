@@ -23,11 +23,17 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from poefire.loot.diff import ItemDelta, diff_items
-from poefire.loot.snapshot import Snapshotter
+from poefire.loot.items import ItemEntry
+from poefire.loot.snapshot import Snapshot, Snapshotter
 from poefire.store import Store
 from poefire.tracker import Notice, NoticeKind, RunNotice, SafeZoneEntered
 
 log = logging.getLogger(__name__)
+
+
+TAB_NAMES_KEY = "tab_names"
+
+type SnapshotValue = tuple[str, float, float | None, int]  # league, chaos, chaos/divine, unpriced
 
 
 class Trigger(StrEnum):
@@ -86,6 +92,8 @@ class LootRecorder:
         self.now = now
         self.monotonic = monotonic
         self.handlers: list[Callable[[LootResult], None]] = []
+        # Set by the app: prices a complete snapshot -> (league, chaos, chaos/divine, unpriced)
+        self.valuer: Callable[[list[ItemEntry]], SnapshotValue | None] | None = None
         self._store: Store | None = None
         self._pending: list[_Request] = []
         self._cond = threading.Condition()
@@ -156,6 +164,18 @@ class LootRecorder:
 
     # --- the actual work (synchronous; also used for manual snapshots) ---
 
+    def _record_value(self, store: Store, snapshot_id: int, snap: Snapshot) -> None:
+        store.set_json(TAB_NAMES_KEY, self.snapshotter.tab_names())
+        if self.valuer is None:
+            return
+        try:
+            v = self.valuer(snap.items)
+        except Exception:
+            log.exception("valuing snapshot failed")
+            return
+        if v is not None:
+            store.add_snapshot_value(snapshot_id, snap.taken_at, *v)
+
     def record(self, trigger: Trigger, run_id: str | None = None) -> LootResult:
         if self._store is None:
             self._store = self.store_factory()
@@ -166,6 +186,7 @@ class LootRecorder:
             sid = store.add_snapshot(snap, trigger.value, run_id)
             if not snap.complete:
                 return LootResult(trigger, run_id, sid, False, False, error=snap.error)
+            self._record_value(store, sid, snap)
             if prev is None or snap.taken_at - prev[1] > self.max_gap:
                 store.prune_snapshot_items()
                 return LootResult(trigger, run_id, sid, True, True)

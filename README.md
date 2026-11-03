@@ -199,23 +199,36 @@ valued at current prices, so past runs change value as the market moves.
 ## UI
 
 `poefire ui` runs everything in one process: the log tailer, loot snapshots and price
-refreshes. It serves a local page at `http://127.0.0.1:8460`. The page shows:
+refreshes. It serves a local page at `http://127.0.0.1:8460`. The top bar holds the league
+selector, the current map with its elapsed time, and the price and loot status. The sidebar
+switches between three tabs:
 
+**Session**
 - the last map, front and center: loot value, time, deaths, how it compares with your average
   map, and its top drops (it updates as soon as you're back in the hideout)
-- the current map and its elapsed time, compact in the top bar
 - average chaos (and divine) per map over the last 10 finished maps that have loot data
 - the session (runs less than 30 minutes apart): total loot, best run, map time, deaths
-- the run history
-- each run's loot, including what was spent in the hideout before it
-- a league selector
+- the run history, and each run's loot, including what was spent in the hideout before it
+
+**Overview**
+- the total value of your watched tabs and inventory over time, in divine (default) or chaos,
+  for the last 24 hours, 7 days, 30 days or all time. Hover the chart for exact values, or
+  open the data table. Every complete snapshot records a value at that moment's prices, so
+  the chart fills in as you play.
+- the most valuable items from the latest snapshot at current prices, with quantity, price
+  each, total and share. You can filter by tab or inventory.
+
+**Settings** (see above)
 
 The server only listens on localhost, rejects requests addressed to any other host name
 (blocking DNS rebinding), and requires a custom header on state-changing requests, so other
 websites can't trigger actions through your browser.
 
 `--window` opens the same UI in a native window through pywebview, which uses Edge WebView2 on
-Windows. Install it with `uv sync --extra window`.
+Windows. Install it with `uv sync --extra window`. The window has no Windows title bar: drag
+it by the app's top bar, double-click the bar to maximize, and resize it from the right or
+bottom edge. Minimize, maximize and close are at the top right. Maximize leaves the taskbar
+visible.
 
 ## Design
 
