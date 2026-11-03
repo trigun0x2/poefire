@@ -6,11 +6,13 @@ Line layout (English client):
     <date>     <time>   <uptime>  <hash>   [<lvl> Client <pid>] <message>
 
 The `LOG FILE OPENING` banner has only the date and time. System messages (zone entry,
-deaths, level-ups, AFK/DND) are prefixed with ": "; whispers start with "@"; area generation
-is a DEBUG line with no prefix. Anchoring on those prefixes keeps chat lines such as
-"Bob: You have entered Hideout." from matching.
+deaths, level-ups, AFK/DND, trades) are prefixed with ": "; whispers start with "@"; area
+generation and `Closing game gracefully` have no prefix. Anchoring on those prefixes keeps
+chat and NPC lines such as "Tujen, the Haggler: Local! Need your aid!" from matching.
 
-DRAFT: regexes are based on known log formats and must be confirmed against real lines.
+Verified against a real 2026 client log (tests/data/real_client_2026-11-01.txt): area
+generation, zone entry, slain/suicide, level-up, trade accepted, game closing. Still
+unverified: whispers, AFK/DND, the log-opening banner.
 """
 
 from __future__ import annotations
@@ -20,12 +22,14 @@ from datetime import datetime
 
 from poefire.events import (
     AreaGenerated,
+    ClientClosed,
     LevelUp,
     LogEvent,
     LogOpened,
     PlayerSlain,
     StatusMode,
     StatusModeChanged,
+    TradeAccepted,
     Whisper,
     WhisperDirection,
     ZoneEntered,
@@ -41,7 +45,7 @@ _GENERATING_RE = re.compile(
     r'^Generating level (?P<level>\d+) area "(?P<area_id>[^"]+)" with seed (?P<seed>\d+)$'
 )
 _ENTERED_RE = re.compile(r"^You have entered (?P<zone>.+)\.$")
-_SLAIN_RE = re.compile(r"^(?P<name>\S+) has been slain\.$")
+_SLAIN_RE = re.compile(r"^(?P<name>\S+) has (?P<how>been slain|committed suicide)\.$")
 _LEVEL_RE = re.compile(r"^(?P<name>\S+) \((?P<cls>[A-Za-z]+)\) is now level (?P<level>\d+)$")
 _STATUS_RE = re.compile(
     r'^(?P<mode>AFK|DND) mode is now (?P<state>ON|OFF)\.(?: Autoreply "(?P<reply>.*)")?$'
@@ -50,6 +54,7 @@ _WHISPER_RE = re.compile(
     r"^@(?P<dir>From|To) (?:<(?P<guild>[^>]*)> )?(?P<name>[^\s:<>]+): (?P<msg>.*)$"
 )
 _LOG_OPENING = "***** LOG FILE OPENING *****"
+_CLIENT_CLOSING = "Closing game gracefully"
 
 
 def parse_line(line: str) -> LogEvent | None:
@@ -75,6 +80,8 @@ def parse_line(line: str) -> LogEvent | None:
         )
     if msg == _LOG_OPENING:
         return LogOpened(ts=_timestamp(m))
+    if msg == _CLIENT_CLOSING:
+        return ClientClosed(ts=_timestamp(m))
     return None
 
 
@@ -86,9 +93,13 @@ def _parse_system(ts: datetime, body: str) -> LogEvent | None:
     if body.startswith("You have entered "):
         e = _ENTERED_RE.match(body)
         return ZoneEntered(ts=ts, zone=e["zone"]) if e else None
-    if body.endswith(" has been slain."):
+    if body == "Trade accepted.":
+        return TradeAccepted(ts=ts)
+    if body.endswith((" has been slain.", " has committed suicide.")):
         s = _SLAIN_RE.match(body)
-        return PlayerSlain(ts=ts, character=s["name"]) if s else None
+        if s is None:
+            return None
+        return PlayerSlain(ts=ts, character=s["name"], suicide=s["how"] == "committed suicide")
     if " is now level " in body:
         lv = _LEVEL_RE.match(body)
         if lv is None:

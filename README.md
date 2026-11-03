@@ -124,7 +124,9 @@ src/poefire/
 | `LogOpened` | `***** LOG FILE OPENING *****` |
 | `AreaGenerated(area_level, area_id, seed)` | `Generating level 83 area "MapWorldsStrand" with seed 123` |
 | `ZoneEntered(zone)` | `: You have entered Strand.` |
-| `PlayerSlain(character)` | `: Name has been slain.` |
+| `PlayerSlain(character, suicide)` | `: Name has been slain.` / `: Name has committed suicide.` |
+| `TradeAccepted` | `: Trade accepted.` |
+| `ClientClosed` | `Closing game gracefully` |
 | `LevelUp(character, character_class, level)` | `: Name (Witch) is now level 92` |
 | `Whisper(direction, character, guild, message)` | `@From <GUILD> Name: msg` / `@To Name: msg` |
 | `StatusModeChanged(mode, enabled, autoreply)` | `: AFK mode is now ON. Autoreply "..."` / `... OFF.` (also DND) |
@@ -140,7 +142,7 @@ Every event carries `ts`, the client's local time as logged. System messages mus
   time. Maps can only be opened from a hideout or town, so even a map-like area ID reached from
   inside the run counts as a side area.
 - The run finishes when a different map instance is generated after leaving it, or when the
-  client restarts (`LOG FILE OPENING`).
+  client closes (`Closing game gracefully`) or restarts (`LOG FILE OPENING`).
 - Time is counted from `You have entered` until the next `Generating` line, so loading
   screens are excluded. A run's `ended_at` is when you last left it.
 

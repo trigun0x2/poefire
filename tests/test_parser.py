@@ -4,11 +4,13 @@ import pytest
 
 from poefire.events import (
     AreaGenerated,
+    ClientClosed,
     LevelUp,
     LogOpened,
     PlayerSlain,
     StatusMode,
     StatusModeChanged,
+    TradeAccepted,
     Whisper,
     WhisperDirection,
     ZoneEntered,
@@ -105,3 +107,54 @@ def test_log_opening() -> None:
 )
 def test_ignored_lines(line: str) -> None:
     assert parse_line(line) is None
+
+
+# --- lines from a real 2026 client log (tests/data/real_client_2026-11-01.txt) ---
+
+REAL = "2026/11/01 16:05:44 843527078 cffb065b [INFO Client 46384] "
+REAL_TS = datetime(2026, 11, 1, 16, 5, 44)
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        (
+            "2026/11/01 16:05:44 843518031 1186a8a3 [DEBUG Client 46384] "
+            'Generating level 70 area "MapWorldsSpiderLair" with seed 616541807',
+            AreaGenerated(REAL_TS, 70, "MapWorldsSpiderLair", 616541807),
+        ),
+        (
+            "2026/11/01 16:05:44 843518031 1186a8a3 [DEBUG Client 46384] "
+            'Generating level 60 area "HideoutSpace" with seed 1',
+            AreaGenerated(REAL_TS, 60, "HideoutSpace", 1),
+        ),
+        (REAL + ": You have entered Celestial Nebula Hideout.",
+         ZoneEntered(REAL_TS, "Celestial Nebula Hideout")),
+        (REAL + ": xyz_bow has been slain.", PlayerSlain(REAL_TS, "xyz_bow")),
+        (REAL + ": xyz_bow has committed suicide.", PlayerSlain(REAL_TS, "xyz_bow", suicide=True)),
+        (REAL + ": xyz_bow (Deadeye) is now level 67", LevelUp(REAL_TS, "xyz_bow", "Deadeye", 67)),
+        (REAL + ": Trade accepted.", TradeAccepted(REAL_TS)),
+        ("2026/11/01 16:05:44 843717921 f9532a48 [INFO Client 46384] Closing game gracefully",
+         ClientClosed(REAL_TS)),
+    ],
+)  # fmt: skip
+def test_real_lines(line: str, expected: object) -> None:
+    assert parse_line(line) == expected
+
+
+@pytest.mark.parametrize(
+    "msg",
+    [
+        "Tujen, the Haggler: Local! Need your aid!",  # NPC dialogue looks like local chat
+        "The Envoy: They fought with such ferocity. Now the woods burn.",
+        ": You have received an Atlas Skill Point.",
+        ": 6 Items identified",
+        "[LOADING SCREEN] (Spider Lair) Duration = 0.920201 seconds",
+        "[SCENE] Set Source [Spider Lair]",
+        "Joined guild named someguild with 15 members",
+        "Client-Safe Instance ID = 3053050573",
+        "Successfully allocated passive skill id: life1119, name: Evasion and Life",
+    ],
+)
+def test_real_noise_is_ignored(msg: str) -> None:
+    assert parse_line(REAL + msg) is None

@@ -31,6 +31,13 @@ class LogOpened:
 
 
 @dataclass(frozen=True, slots=True)
+class ClientClosed:
+    """`Closing game gracefully`: the client exited normally."""
+
+    ts: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class AreaGenerated:
     """`Generating level N area "AreaId" with seed S`: logged at the start of every load,
     including re-entering an existing instance (same seed)."""
@@ -51,8 +58,18 @@ class ZoneEntered:
 
 @dataclass(frozen=True, slots=True)
 class PlayerSlain:
+    """`: Name has been slain.` or `: Name has committed suicide.`"""
+
     ts: datetime
     character: str
+    suicide: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TradeAccepted:
+    """`: Trade accepted.`: a player trade completed (it shows up in loot deltas)."""
+
+    ts: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +98,15 @@ class StatusModeChanged:
 
 
 type LogEvent = (
-    LogOpened | AreaGenerated | ZoneEntered | PlayerSlain | LevelUp | Whisper | StatusModeChanged
+    LogOpened
+    | ClientClosed
+    | AreaGenerated
+    | ZoneEntered
+    | PlayerSlain
+    | LevelUp
+    | Whisper
+    | StatusModeChanged
+    | TradeAccepted
 )
 
 

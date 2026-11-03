@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 from poefire.cli import main
@@ -99,3 +100,33 @@ def test_cli_replay(capsys: object, tmp_path: Path) -> None:
     assert main(["replay", str(SAMPLE)]) == 0
     out = capsys.readouterr().out  # type: ignore[attr-defined]
     assert "Strand" in out and "Cemetery" in out and "2 runs" in out
+
+
+REAL_LOG = Path(__file__).parent / "data" / "real_client_2026-11-01.txt"
+
+
+def test_replay_real_log(tmp_path: Path) -> None:
+    store = Store(tmp_path / "db.sqlite3")
+    svc = TrackerService(store, REAL_LOG, characters=["xyz_bow"])
+    svc.start(from_beginning=True)
+    svc.poll()
+    runs = list(reversed(store.list_runs()))
+    summary = [(r.area_id, r.area_level, int(r.active_seconds()), len(r.segments), r.deaths)
+               for r in runs]  # fmt: skip
+    assert summary == [
+        # died, went to hideout, came back through the same portal (same seed)
+        ("MapWorldsArachnidNest", 69, 44 + 77, 2, 1),
+        ("MapWorldsCells", 68, 77, 1, 0),
+        ("MapWorldsSprings", 69, 82 + 20, 2, 1),
+        ("MapWorldsMesa", 70, 115, 1, 0),
+        # suicide + slain; closed by "Closing game gracefully" while in hideout
+        ("MapWorldsSpiderLair", 70, 10 + 70 + 52, 3, 2),
+    ]
+    assert [r.map_name for r in runs][2] == "Fungal Hollow"  # zone name, not the area id
+    assert all(r.status is RunStatus.FINISHED for r in runs)
+    assert runs[-1].ended_at == datetime(2026, 11, 1, 16, 7, 51)
+    assert svc.tracker.run is None
+    # the death before the first logged map generation has no run to belong to
+    deaths = store.list_events(kind="PlayerSlain", limit=10)
+    assert [d["run_id"] is None for d in reversed(deaths)] == [True, False, False, False, False]
+    assert len(store.list_events(kind="TradeAccepted", limit=20)) == 7

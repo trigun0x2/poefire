@@ -1,0 +1,300 @@
+2026/11/01 15:52:33 842736218 f22b6a0d [INFO Client 46384] Doodad hash: 4191543779
+2026/11/01 15:52:33 842736234 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:52:33 842736234 e001b752 [INFO Client 46384] [SCENE] Set Source [Arachnid Nest]
+2026/11/01 15:52:33 842736296 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 361 x 453
+2026/11/01 15:52:33 842736390 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:52:33 842736578 cffb065b [INFO Client 46384] : You have entered Arachnid Nest.
+2026/11/01 15:52:33 842736640 a15e960c [INFO Client 46384] [LOADING SCREEN] (Arachnid Nest) Duration = 0.673285 seconds
+2026/11/01 15:52:51 842754296 cffb065b [INFO Client 46384] : xyz_bow has been slain.
+2026/11/01 15:52:52 842755140 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:52:52 842755156 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:52:52 842755187 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 15:52:52 842755203 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 2089980874
+2026/11/01 15:52:52 842755203 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 15:52:52 842755250 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 15:52:52 842755250 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 15:52:52 842755265 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:52:52 842755265 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 15:52:52 842755281 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 15:52:52 842755500 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:52:52 842755718 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 15:52:52 842755843 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.702091 seconds
+2026/11/01 15:52:53 842756765 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:52:53 842756796 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:52:53 842756812 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 0ms
+2026/11/01 15:52:53 842756828 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 1712420699
+2026/11/01 15:52:53 842756828 1186a8a3 [DEBUG Client 46384] Generating level 69 area "MapWorldsArachnidNest" with seed 698346854
+2026/11/01 15:52:54 842757000 f22b6a02 [INFO Client 46384] Tile hash: 2776612000
+2026/11/01 15:52:54 842757000 f22b6a0d [INFO Client 46384] Doodad hash: 4191543779
+2026/11/01 15:52:54 842757000 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:52:54 842757000 e001b752 [INFO Client 46384] [SCENE] Set Source [Arachnid Nest]
+2026/11/01 15:52:54 842757046 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 361 x 453
+2026/11/01 15:52:54 842757109 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:52:54 842757265 cffb065b [INFO Client 46384] : You have entered Arachnid Nest.
+2026/11/01 15:52:54 842757343 a15e960c [INFO Client 46384] [LOADING SCREEN] (Arachnid Nest) Duration = 0.574757 seconds
+2026/11/01 15:53:36 842799343 cffb065b [INFO Client 46384] : xyz_bow has been slain.
+2026/11/01 15:53:37 842800921 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:53:37 842800937 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:53:38 842800953 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 15:53:38 842800984 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3070477755
+2026/11/01 15:53:38 842800984 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 15:53:38 842801031 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 15:53:38 842801031 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 15:53:38 842801031 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:53:38 842801031 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 15:53:38 842801046 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 15:53:38 842801359 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:53:38 842801656 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 15:53:38 842801781 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.868284 seconds
+2026/11/01 15:53:39 842802562 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:53:39 842802593 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:53:39 842802609 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 0ms
+2026/11/01 15:53:39 842802625 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 1712420699
+2026/11/01 15:53:39 842802625 1186a8a3 [DEBUG Client 46384] Generating level 69 area "MapWorldsArachnidNest" with seed 698346854
+2026/11/01 15:53:39 842802796 f22b6a02 [INFO Client 46384] Tile hash: 2776612000
+2026/11/01 15:53:39 842802796 f22b6a0d [INFO Client 46384] Doodad hash: 4191543779
+2026/11/01 15:53:39 842802812 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:53:39 842802812 e001b752 [INFO Client 46384] [SCENE] Set Source [Arachnid Nest]
+2026/11/01 15:53:39 842802859 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 361 x 453
+2026/11/01 15:53:40 842802984 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:53:40 842803156 cffb065b [INFO Client 46384] : You have entered Arachnid Nest.
+2026/11/01 15:53:40 842803218 a15e960c [INFO Client 46384] [LOADING SCREEN] (Arachnid Nest) Duration = 0.6562 seconds
+2026/11/01 15:54:09 842832734 cffb065b [INFO Client 46384] : You have received an Atlas Skill Point.
+2026/11/01 15:54:57 842880875 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:54:57 842880890 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:54:57 842880906 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 15:54:57 842880921 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 4273529363
+2026/11/01 15:54:57 842880921 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 15:54:58 842880953 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 15:54:58 842880953 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 15:54:58 842880953 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:54:58 842880968 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 15:54:58 842880968 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 15:54:58 842881218 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:54:58 842881500 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 15:54:58 842881625 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.75345 seconds
+2026/11/01 15:55:00 842883203 54ee9dc3 [INFO Client 46384] [WINDOW] Lost focus
+2026/11/01 15:55:01 842884343 54ee9d8c [INFO Client 46384] [WINDOW] Gained focus
+2026/11/01 15:55:02 842885093 54ee9dc3 [INFO Client 46384] [WINDOW] Lost focus
+2026/11/01 15:55:23 842906156 54ee9d8c [INFO Client 46384] [WINDOW] Gained focus
+2026/11/01 15:55:26 842909031 cffb065b [INFO Client 46384] : 6 Items identified
+2026/11/01 15:55:36 842919703 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 15:56:09 842952234 54ee9dc3 [INFO Client 46384] [WINDOW] Lost focus
+2026/11/01 15:56:11 842954500 54ee9d8c [INFO Client 46384] [WINDOW] Gained focus
+2026/11/01 15:56:11 842954781 54ee9dc3 [INFO Client 46384] [WINDOW] Lost focus
+2026/11/01 15:56:22 842965515 54ee9d8c [INFO Client 46384] [WINDOW] Gained focus
+2026/11/01 15:56:27 842970468 8da7eadb [INFO Client 46384] Successfully allocated passive skill id: atlas_path_23_, name: Map Drop Chance
+2026/11/01 15:56:32 842975718 54ee9dc3 [INFO Client 46384] [WINDOW] Lost focus
+2026/11/01 15:56:38 842981828 54ee9d8c [INFO Client 46384] [WINDOW] Gained focus
+2026/11/01 15:56:39 842982921 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:56:40 842982953 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:56:40 842982968 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 15:56:40 842983000 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 4152789341
+2026/11/01 15:56:40 842983000 1186a8a3 [DEBUG Client 46384] Generating level 68 area "MapWorldsCells" with seed 1972045227
+2026/11/01 15:56:40 842983234 f22b6a02 [INFO Client 46384] Tile hash: 3165966456
+2026/11/01 15:56:40 842983234 f22b6a0d [INFO Client 46384] Doodad hash: 3131755935
+2026/11/01 15:56:40 842983234 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:56:40 842983234 e001b752 [INFO Client 46384] [SCENE] Set Source [Cells]
+2026/11/01 15:56:40 842983296 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 453 x 391
+2026/11/01 15:56:40 842983359 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:56:40 842983546 cffb065b [INFO Client 46384] : You have entered Cells.
+2026/11/01 15:56:40 842983656 a15e960c [INFO Client 46384] [LOADING SCREEN] (Cells) Duration = 0.722668 seconds
+2026/11/01 15:57:35 843037984 cffb065b [INFO Client 46384] : xyz_bow (Deadeye) is now level 66
+2026/11/01 15:57:51 843054781 cffb065b [INFO Client 46384] : You have received an Atlas Skill Point.
+2026/11/01 15:57:57 843060515 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:57:57 843060515 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:57:57 843060531 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 15:57:57 843060562 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3697303380
+2026/11/01 15:57:57 843060562 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 15:57:57 843060609 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 15:57:57 843060609 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 15:57:57 843060625 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:57:57 843060640 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 15:57:57 843060640 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 15:57:57 843060890 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:57:58 843061171 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 15:57:58 843061312 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.804326 seconds
+2026/11/01 15:58:00 843063937 cffb065b [INFO Client 46384] : 4 Items identified
+2026/11/01 15:58:04 843067031 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 15:58:31 843094859 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 15:58:40 843103234 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 15:58:45 843108250 8da7eadb [INFO Client 46384] Successfully allocated passive skill id: atlas_boss_adjacent_maps_1, name: Map Drop Chance
+2026/11/01 15:58:55 843118312 fb7ae327 [INFO Client 46384] Successfully allocated passive skill id: dexterity872, name: Dexterity
+2026/11/01 15:58:56 843119546 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 15:58:56 843119562 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 15:58:56 843119578 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 15:58:56 843119625 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 1341652186
+2026/11/01 15:58:56 843119625 1186a8a3 [DEBUG Client 46384] Generating level 69 area "MapWorldsSprings" with seed 784449401
+2026/11/01 15:58:56 843119828 f22b6a02 [INFO Client 46384] Tile hash: 3561906753
+2026/11/01 15:58:56 843119828 f22b6a0d [INFO Client 46384] Doodad hash: 1259986062
+2026/11/01 15:58:56 843119843 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 15:58:56 843119843 e001b752 [INFO Client 46384] [SCENE] Set Source [Fungal Hollow]
+2026/11/01 15:58:56 843119906 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 422 x 514
+2026/11/01 15:58:57 843120000 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 15:58:57 843120187 cffb065b [INFO Client 46384] : You have entered Fungal Hollow.
+2026/11/01 15:58:57 843120328 a15e960c [INFO Client 46384] [LOADING SCREEN] (Fungal Hollow) Duration = 0.783544 seconds
+2026/11/01 16:00:17 843200421 cffb065b [INFO Client 46384] : xyz_bow has been slain.
+2026/11/01 16:00:19 843202015 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:00:19 843202031 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:00:19 843202046 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 16:00:19 843202078 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 2187043393
+2026/11/01 16:00:19 843202078 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 16:00:19 843202109 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 16:00:19 843202109 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 16:00:19 843202125 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:00:19 843202140 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 16:00:19 843202140 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 16:00:19 843202500 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:00:19 843202781 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 16:00:19 843202921 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.913402 seconds
+2026/11/01 16:00:20 843203765 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:00:20 843203781 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:00:20 843203796 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 16:00:20 843203812 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 1341652186
+2026/11/01 16:00:20 843203812 1186a8a3 [DEBUG Client 46384] Generating level 69 area "MapWorldsSprings" with seed 784449401
+2026/11/01 16:00:21 843204046 f22b6a02 [INFO Client 46384] Tile hash: 3561906753
+2026/11/01 16:00:21 843204046 f22b6a0d [INFO Client 46384] Doodad hash: 1259986062
+2026/11/01 16:00:21 843204062 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:00:21 843204062 e001b752 [INFO Client 46384] [SCENE] Set Source [Fungal Hollow]
+2026/11/01 16:00:21 843204140 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 422 x 514
+2026/11/01 16:00:21 843204203 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:00:21 843204390 cffb065b [INFO Client 46384] : You have entered Fungal Hollow.
+2026/11/01 16:00:21 843204484 a15e960c [INFO Client 46384] [LOADING SCREEN] (Fungal Hollow) Duration = 0.718272 seconds
+2026/11/01 16:00:33 843216171 cffb065b [INFO Client 46384] : You have received an Atlas Skill Point.
+2026/11/01 16:00:41 843224093 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:00:41 843224093 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:00:41 843224125 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 16:00:41 843224140 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 2187043393
+2026/11/01 16:00:41 843224140 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 16:00:41 843224171 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 16:00:41 843224171 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 16:00:41 843224187 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:00:41 843224187 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 16:00:41 843224187 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 16:00:41 843224500 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:00:41 843224718 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 16:00:41 843224843 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.759099 seconds
+2026/11/01 16:00:42 843225765 cffb065b [INFO Client 46384] : 2 Items identified
+2026/11/01 16:00:46 843229203 8da7eadb [INFO Client 46384] Successfully allocated passive skill id: atlas_boss_adjacent_maps_8, name: Map Drop Chance
+2026/11/01 16:00:59 843242531 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:00:59 843242546 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:00:59 843242562 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 16:00:59 843242593 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3695809505
+2026/11/01 16:00:59 843242593 1186a8a3 [DEBUG Client 46384] Generating level 70 area "MapWorldsMesa" with seed 171131426
+2026/11/01 16:01:00 843243687 f22b6a02 [INFO Client 46384] Tile hash: 3689301997
+2026/11/01 16:01:00 843243687 f22b6a0d [INFO Client 46384] Doodad hash: 4001767716
+2026/11/01 16:01:00 843243703 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:01:00 843243703 e001b752 [INFO Client 46384] [SCENE] Set Source [Mesa]
+2026/11/01 16:01:00 843243812 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 667 x 1204
+2026/11/01 16:01:00 843243937 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:01:01 843244125 cffb065b [INFO Client 46384] : You have entered Mesa.
+2026/11/01 16:01:01 843244312 a15e960c [INFO Client 46384] [LOADING SCREEN] (Mesa) Duration = 1.77887 seconds
+2026/11/01 16:01:39 843282375 cffb065b [INFO Client 46384] : You have received an Atlas Skill Point.
+2026/11/01 16:01:50 843293765 cffb065b [INFO Client 46384] Tujen, the Haggler: Local! Need your aid!
+2026/11/01 16:02:19 843322843 cffb065b [INFO Client 46384] The Envoy: They fought with such ferocity to protect the tree which held their nest. Now the woods burn, and smoke billows through the air, and their flapping wings only draw the flames closer. The fire is coming, Nomad, and it will consume us all.
+2026/11/01 16:02:55 843358687 54ee9dc3 [INFO Client 46384] [WINDOW] Lost focus
+2026/11/01 16:02:56 843359093 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:02:56 843359109 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:02:56 843359125 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 16:02:56 843359156 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 1890163215
+2026/11/01 16:02:56 843359156 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 16:02:56 843359203 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 16:02:56 843359203 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 16:02:56 843359203 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:02:56 843359218 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 16:02:56 843359218 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 16:02:56 843359562 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:02:56 843359890 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 16:02:57 843360046 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.952464 seconds
+2026/11/01 16:04:15 843438359 54ee9d8c [INFO Client 46384] [WINDOW] Gained focus
+2026/11/01 16:04:21 843444578 8da7eadb [INFO Client 46384] Successfully allocated passive skill id: atlas_mod_effect_17, name: Map Rare Monsters
+2026/11/01 16:04:22 843445796 cffb065b [INFO Client 46384] : 2 Items identified
+2026/11/01 16:04:28 843451531 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 16:05:12 843495000 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 16:05:34 843517937 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:05:35 843518000 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:05:35 843518015 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 16:05:35 843518031 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3053050573
+2026/11/01 16:05:35 843518031 1186a8a3 [DEBUG Client 46384] Generating level 70 area "MapWorldsSpiderLair" with seed 616541807
+2026/11/01 16:05:35 843518343 f22b6a02 [INFO Client 46384] Tile hash: 1320482474
+2026/11/01 16:05:35 843518343 f22b6a0d [INFO Client 46384] Doodad hash: 2753186869
+2026/11/01 16:05:35 843518359 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:05:35 843518359 e001b752 [INFO Client 46384] [SCENE] Set Source [Spider Lair]
+2026/11/01 16:05:35 843518468 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 713 x 483
+2026/11/01 16:05:35 843518562 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:05:35 843518750 cffb065b [INFO Client 46384] : You have entered Spider Lair.
+2026/11/01 16:05:35 843518859 a15e960c [INFO Client 46384] [LOADING SCREEN] (Spider Lair) Duration = 0.920201 seconds
+2026/11/01 16:05:44 843527078 cffb065b [INFO Client 46384] : xyz_bow has committed suicide.
+2026/11/01 16:05:45 843528203 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:05:45 843528218 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:05:45 843528234 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 0ms
+2026/11/01 16:05:45 843528250 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 1890163215
+2026/11/01 16:05:45 843528250 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 16:05:45 843528296 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 16:05:45 843528296 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 16:05:45 843528296 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:05:45 843528296 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 16:05:45 843528312 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 16:05:45 843528625 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:05:45 843528843 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 16:05:46 843528968 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.764581 seconds
+2026/11/01 16:05:46 843529921 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:05:47 843529953 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:05:47 843529968 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 16:05:47 843530000 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3053050573
+2026/11/01 16:05:47 843530000 1186a8a3 [DEBUG Client 46384] Generating level 70 area "MapWorldsSpiderLair" with seed 616541807
+2026/11/01 16:05:47 843530296 f22b6a02 [INFO Client 46384] Tile hash: 1320482474
+2026/11/01 16:05:47 843530296 f22b6a0d [INFO Client 46384] Doodad hash: 2753186869
+2026/11/01 16:05:47 843530312 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:05:47 843530312 e001b752 [INFO Client 46384] [SCENE] Set Source [Spider Lair]
+2026/11/01 16:05:47 843530421 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 713 x 483
+2026/11/01 16:05:47 843530500 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:05:47 843530671 cffb065b [INFO Client 46384] : You have entered Spider Lair.
+2026/11/01 16:05:47 843530750 a15e960c [INFO Client 46384] [LOADING SCREEN] (Spider Lair) Duration = 0.835847 seconds
+2026/11/01 16:06:14 843557296 cffb065b [INFO Client 46384] : xyz_bow (Deadeye) is now level 67
+2026/11/01 16:06:55 843598843 cffb065b [INFO Client 46384] : xyz_bow has been slain.
+2026/11/01 16:06:57 843600218 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:06:57 843600218 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:06:57 843600250 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 0ms
+2026/11/01 16:06:57 843600281 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3750262028
+2026/11/01 16:06:57 843600281 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 16:06:57 843600312 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 16:06:57 843600312 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 16:06:57 843600328 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:06:57 843600328 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 16:06:57 843600343 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 16:06:57 843600671 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:06:58 843600953 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 16:06:58 843601078 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 0.861354 seconds
+2026/11/01 16:06:59 843602015 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:06:59 843602046 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:06:59 843602062 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 16ms
+2026/11/01 16:06:59 843602093 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 3053050573
+2026/11/01 16:06:59 843602093 1186a8a3 [DEBUG Client 46384] Generating level 70 area "MapWorldsSpiderLair" with seed 616541807
+2026/11/01 16:06:59 843602390 f22b6a02 [INFO Client 46384] Tile hash: 1320482474
+2026/11/01 16:06:59 843602390 f22b6a0d [INFO Client 46384] Doodad hash: 2753186869
+2026/11/01 16:06:59 843602390 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:06:59 843602390 e001b752 [INFO Client 46384] [SCENE] Set Source [Spider Lair]
+2026/11/01 16:06:59 843602515 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 713 x 483
+2026/11/01 16:06:59 843602578 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:06:59 843602750 cffb065b [INFO Client 46384] : You have entered Spider Lair.
+2026/11/01 16:06:59 843602843 a15e960c [INFO Client 46384] [LOADING SCREEN] (Spider Lair) Duration = 0.82447 seconds
+2026/11/01 16:07:03 843606062 fb7ae327 [INFO Client 46384] Successfully allocated passive skill id: life1119, name: Evasion and Life
+2026/11/01 16:07:46 843649687 cffb065b [INFO Client 46384] : You have received an Atlas Skill Point.
+2026/11/01 16:07:50 843653890 88a90547 [DEBUG Client 46384] Got Instance Details from login server
+2026/11/01 16:07:50 843653906 ca3a6b7d [INFO Client 46384] Connecting to instance server at 64.87.41.75:6112
+2026/11/01 16:07:50 843653921 ca3a54f2 [DEBUG Client 46384] Connect time to instance server was 15ms
+2026/11/01 16:07:51 843653937 11869d8b [DEBUG Client 46384] Client-Safe Instance ID = 2720023032
+2026/11/01 16:07:51 843653937 1186a8a3 [DEBUG Client 46384] Generating level 60 area "HideoutSpace" with seed 1
+2026/11/01 16:07:51 843653984 f22b6a02 [INFO Client 46384] Tile hash: 2718197086
+2026/11/01 16:07:51 843653984 f22b6a0d [INFO Client 46384] Doodad hash: 0
+2026/11/01 16:07:51 843653984 e001b752 [INFO Client 46384] [SCENE] Set Source [(null)]
+2026/11/01 16:07:51 843653984 e001b752 [INFO Client 46384] [SCENE] Set Source [Celestial Nebula Hideout]
+2026/11/01 16:07:51 843654000 df74e03b [DEBUG Client 46384] [SCENE] Static Walkability Texture: 238 x 238
+2026/11/01 16:07:51 843654468 1187b046 [DEBUG Client 46384] Joined guild named nvidia5090 with 15 members
+2026/11/01 16:07:51 843654796 cffb065b [INFO Client 46384] : You have entered Celestial Nebula Hideout.
+2026/11/01 16:07:51 843654921 a15e960c [INFO Client 46384] [LOADING SCREEN] (Celestial Nebula Hideout) Duration = 1.01724 seconds
+2026/11/01 16:07:53 843656296 cffb065b [INFO Client 46384] : 3 Items identified
+2026/11/01 16:08:07 843670875 cffb065b [INFO Client 46384] : Trade accepted.
+2026/11/01 16:08:53 843716203 8da7eadb [INFO Client 46384] Successfully allocated passive skill id: atlas_mod_effect_notable_2, name: Mounting Modifiers
+2026/11/01 16:08:54 843717921 f9532a48 [INFO Client 46384] Closing game gracefully

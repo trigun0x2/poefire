@@ -6,7 +6,7 @@ Rules:
   one whose ID looks like a map) is treated as a side area of it.
 - Time counts while in the run's map or in zones reached from it (side areas).
 - Hideout/town pauses the run; returning to the same instance (same seed) resumes it.
-- The run finishes when a different map instance is generated, or the client restarts.
+- The run finishes when a different map instance is generated, or the client closes or restarts.
 - A segment closes when the next area starts loading (`Generating`), opens on `You have entered`,
   so loading screens are not counted.
 """
@@ -21,7 +21,14 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from poefire.events import AreaGenerated, LogEvent, LogOpened, PlayerSlain, ZoneEntered
+from poefire.events import (
+    AreaGenerated,
+    ClientClosed,
+    LogEvent,
+    LogOpened,
+    PlayerSlain,
+    ZoneEntered,
+)
 from poefire.zones import ZoneKind, ZoneRules
 
 
@@ -155,7 +162,11 @@ class RunTracker:
             case PlayerSlain():
                 self._on_slain(event, notices)
             case LogOpened():
+                # After a crash the last logged event is the best guess for when play stopped.
                 self._finish(self.state.last_ts or event.ts, notices)
+                self.state.current = self.state.pending = None
+            case ClientClosed():
+                self._finish(event.ts, notices)
                 self.state.current = self.state.pending = None
             case _:
                 pass

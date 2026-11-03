@@ -3,7 +3,14 @@ from __future__ import annotations
 import itertools
 from datetime import datetime, timedelta
 
-from poefire.events import AreaGenerated, LogEvent, LogOpened, PlayerSlain, ZoneEntered
+from poefire.events import (
+    AreaGenerated,
+    ClientClosed,
+    LogEvent,
+    LogOpened,
+    PlayerSlain,
+    ZoneEntered,
+)
 from poefire.tracker import (
     NoticeKind,
     RunNotice,
@@ -233,3 +240,21 @@ def test_state_roundtrip_mid_run() -> None:
     assert restored.state == t.state
     feed(restored, Script().go("MapWorldsStrand", "Strand", 111).events)
     assert restored.run is not None and restored.run.status is RunStatus.ACTIVE
+
+
+def test_client_closed_finishes_run_at_close_time() -> None:
+    s = Script().go("MapWorldsStrand", "Strand", 111).wait(40)
+    t = tracker()
+    feed(t, s.events)
+    notices = feed(t, [ClientClosed(s.t)])
+    assert kinds(notices) == [("run1", NoticeKind.FINISHED)]
+    assert notices[0].run.active_seconds() == 40
+    assert t.run is None and t.state.current is None
+
+
+def test_suicide_counts_as_death() -> None:
+    s = Script().go("MapWorldsStrand", "Strand", 111).wait(5)
+    t = tracker(characters=("Me",))
+    feed(t, s.events)
+    feed(t, [PlayerSlain(s.t, "Me", suicide=True)])
+    assert t.run is not None and t.run.deaths == 1
