@@ -11,7 +11,7 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from poefire import wiring
+from poefire import __version__, wiring
 from poefire.api.ratelimit import RateLimiter
 from poefire.api.session import SessionApi, SessionError, SessionExpiredError, SessionStore
 from poefire.config import Config
@@ -216,7 +216,7 @@ def test_account_api_session_default(tmp_path: Path, monkeypatch: pytest.MonkeyP
     SessionStore(cfg.session_path).save(COOKIE)
     api = wiring.account_api(cfg)
     assert isinstance(api, SessionApi)
-    assert api.user_agent == "poefire/0.1.0 (+https://github.com/trigun0x2/poefire)"
+    assert api.user_agent == f"poefire/{__version__} (+https://github.com/trigun0x2/poefire)"
 
 
 def test_network_error_is_a_session_error() -> None:
