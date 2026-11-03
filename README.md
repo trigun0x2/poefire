@@ -22,7 +22,7 @@ uv run poefire paths                  # show the resolved Client.txt and databas
 uv run poefire track                  # tail Client.txt live and record runs
 uv run poefire runs                   # list recorded runs
 uv run poefire replay path/to/Client.txt   # parse a whole log into a throwaway DB, list runs
-uv run poefire login                  # connect your PoE account (browser, OAuth)
+uv run poefire set-session            # save your POESESSID cookie (hidden prompt)
 uv run poefire tabs                   # list stash tabs, to choose which ones to watch
 uv run poefire snapshot               # take a snapshot now and show what changed
 uv run poefire loot                   # loot per recent run
@@ -45,27 +45,52 @@ extra_town_ids = []           # extra area IDs that pause a run
 excluded_area_ids = []        # IDs matching a map prefix that should not start a run
 
 # Loot tracking
-oauth_client_id = "yourclientid"     # from registering an app with GGG
-contact = "you@example.com"          # required by GGG in the User-Agent
-league = "Settlers"
+auth = "session"                     # "session" (POESESSID, default) or "oauth"
+account_name = "Exile#1234"          # full account name, with the #1234 part
+league = "Keepers"
 character = "MyWitch"                # default: the account's current character in the league
 stash_tabs = ["Dump", "Currency"]    # tab names or ids to include in snapshots
 snapshot_delay = 3.0                 # seconds to wait after reaching the hideout
 snapshot_on_run_start = true         # also snapshot on map entry (see below)
 # realm = "pc"                       # or "xbox" / "sony"
+# contact = "you@example.com"        # optional; added to the User-Agent
+# For auth = "oauth" only (needs an app registered with GGG):
+# oauth_client_id = "yourclientid"
 # oauth_redirect_uri = "http://127.0.0.1:8462/oauth/callback"   # must match your app
 ```
 
 ## Loot tracking
 
-poefire uses GGG's official API with OAuth 2.1 (authorization code + PKCE, as a public client)
-and only the `account:stashes` and `account:characters` scopes.
+There are two ways to read your inventory and stash:
 
-**Setup.** The API requires an application registered with GGG (email
-`oauth@grindinggear.com`; registration can be paused at times). Register it as a public
-client with the redirect URI above, put the client ID in `config.toml`, then run
-`poefire login`. The token is stored in `token.json` next to the database, readable only by
-you. If unused for about a week, the refresh token expires and you need to log in again.
+- **`auth = "session"` (default).** Uses your POESESSID cookie with the endpoints the
+  pathofexile.com website itself uses (`character-window/get-stash-items`, `get-items`,
+  `get-characters`, and `/api/stash` for map and unique tab sections). Use this while GGG
+  isn't accepting new OAuth apps.
+- **`auth = "oauth"`.** GGG's official developer API with OAuth 2.1 (authorization code +
+  PKCE, public client, `account:stashes` and `account:characters` scopes). Needs an app
+  registered with GGG (`oauth@grindinggear.com`). Set `oauth_client_id` and `contact`, then
+  run `poefire login`.
+
+**Session setup.** Log in on pathofexile.com in your browser and copy the `POESESSID` cookie
+(dev tools → Storage/Application → Cookies). Set `account_name` in `config.toml` to your full
+account name, including the `#1234` part. Then run `poefire set-session` and paste the cookie
+at the hidden prompt; it checks the cookie by listing your characters. The cookie is saved in
+`session.json` next to the database, readable only by you, and never in `config.toml`. You can
+use the `POE_SESSID` environment variable instead. When you log out of the website or the
+session expires, you'll get an HTTP 401: set a new cookie.
+
+**What the cookie means.** POESESSID is your whole logged-in website session, not a
+read-only key. Anyone who has it can act as you on pathofexile.com, so never share it or
+paste it into chats or screenshots. poefire keeps it out of every log line and error message.
+These endpoints aren't the documented developer API, so GGG can change or restrict them at
+any time.
+
+**Rate limits.** The website endpoints have tight per-IP limits. poefire waits at least 1.5s
+between requests, follows the rate-limit headers, and never retries a 429: it skips that
+snapshot and waits out `Retry-After` before the next one. poefire also identifies itself in
+its User-Agent instead of posing as a browser. If GGG's edge protection starts rejecting it,
+that's their call.
 
 **How it works.** Each snapshot holds your character's inventory plus the watched stash tabs.
 Equipped gear is not included. Snapshots form one chain, and each change is labelled by what
@@ -111,7 +136,7 @@ src/poefire/
   store.py    SQLite persistence
   service.py  tailer -> parser -> tracker -> store
   config.py   TOML config and default paths
-  api/        OAuth (PKCE + loopback redirect), rate limiter, API client
+  api/        POESESSID client, OAuth (PKCE + loopback redirect), rate limiter, API client
   loot/       item identity, snapshots, diffing, run attribution (recorder)
   wiring.py   builds API/loot objects from the config
   cli.py      `poefire` command

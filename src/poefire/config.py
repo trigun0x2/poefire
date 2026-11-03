@@ -9,9 +9,9 @@ Example `config.toml`:
     extra_town_ids = []
     excluded_area_ids = []
 
-    # Loot tracking (official API)
-    oauth_client_id = "myregisteredclient"
-    contact = "me@example.com"           # goes into the User-Agent, as GGG requires
+    # Loot tracking
+    auth = "session"                     # "session" (POESESSID) or "oauth"
+    account_name = "MyAccount#1234"      # session auth: your full account name
     league = "Settlers"
     character = "MyWitch"                # default: the account's current character
     stash_tabs = ["Dump", "Currency"]    # names or ids of tabs to include in snapshots
@@ -53,7 +53,10 @@ class Config:
     extra_map_prefixes: list[str] = field(default_factory=list)
     extra_town_ids: list[str] = field(default_factory=list)
     excluded_area_ids: list[str] = field(default_factory=list)
-    # --- loot tracking via the official API ---
+    # --- loot tracking ---
+    auth: str = "session"  # "session": POESESSID cookie; "oauth": official API app
+    account_name: str | None = None  # session auth: full name with discriminator (Name#1234)
+    session_path: Path = field(default_factory=lambda: default_data_dir() / "session.json")
     oauth_client_id: str | None = None
     oauth_redirect_uri: str = DEFAULT_REDIRECT_URI
     contact: str | None = None

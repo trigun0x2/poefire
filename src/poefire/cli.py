@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import getpass
+import re
 import signal
 import sys
 import threading
@@ -11,9 +13,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 from poefire import wiring
 from poefire.api.client import ApiError
 from poefire.api.oauth import NotLoggedInError, OAuthError, TokenStore, login
+from poefire.api.session import SessionError, SessionStore
 from poefire.config import Config
 from poefire.loot.diff import ItemDelta
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
@@ -85,14 +90,13 @@ def _print_loot(r: LootResult) -> None:
         _print_deltas(r.deltas)
 
 
+_ACCOUNT_ERRORS = (wiring.ConfigError, NotLoggedInError, ApiError, SessionError, httpx.HTTPError)
+
+
 def _loot_recorder(cfg: Config) -> LootRecorder | None:
     """None (with a message) when loot tracking isn't set up; run tracking still works."""
     try:
-        poe = wiring.api(cfg)
-        if not poe.tokens.logged_in:
-            print("loot tracking off: not logged in (run `poefire login`)")
-            return None
-        return wiring.recorder(cfg, poe)
+        return wiring.recorder(cfg, wiring.account_api(cfg))
     except wiring.ConfigError as e:
         print(f"loot tracking off: {e}")
         return None
@@ -146,18 +150,50 @@ def cmd_login(args: argparse.Namespace) -> int:
 def cmd_logout(args: argparse.Namespace) -> int:
     cfg = _config(args)
     TokenStore(cfg.token_path).clear()
-    print("logged out (local token deleted)")
+    SessionStore(cfg.session_path).clear()
+    print("logged out (saved OAuth token and POESESSID deleted)")
+    return 0
+
+
+_POESESSID_RE = re.compile(r"[0-9a-f]{32}")
+
+
+def cmd_set_session(args: argparse.Namespace) -> int:
+    cfg = _config(args)
+    print(
+        "Paste your POESESSID cookie (pathofexile.com > browser dev tools > Storage/Application "
+        "> Cookies).\nIt is a full login session for your account: never share it. "
+        "Input is hidden."
+    )
+    value = getpass.getpass("POESESSID: ").strip()
+    if not value:
+        print("nothing entered; unchanged", file=sys.stderr)
+        return 1
+    if not _POESESSID_RE.fullmatch(value):
+        print("warning: a POESESSID is usually 32 hex characters; saving anyway")
+    SessionStore(cfg.session_path).save(value)
+    print(f"saved to {cfg.session_path} (readable only by you)")
+    if cfg.auth != "session" or not cfg.account_name:
+        print('set auth = "session" and account_name in config.toml to use it')
+        return 0
+    try:
+        chars = wiring.account_api(cfg).list_characters()
+    except _ACCOUNT_ERRORS as e:
+        print(f"saved, but the check failed: {e}", file=sys.stderr)
+        return 1
+    names = ", ".join(f"{c.get('name')} ({c.get('league')})" for c in chars[:8])
+    print(f"works: {len(chars)} characters: {names}")
     return 0
 
 
 def cmd_tabs(args: argparse.Namespace) -> int:
     cfg = _config(args)
     try:
-        poe = wiring.api(cfg)
+        poe = wiring.account_api(cfg)
         if not cfg.league:
             raise wiring.ConfigError("set league in config.toml")
         tabs = poe.list_stashes(cfg.league)
-    except (wiring.ConfigError, NotLoggedInError, ApiError) as e:
+    except _ACCOUNT_ERRORS as e:
         print(e, file=sys.stderr)
         return 1
 
@@ -174,11 +210,11 @@ def cmd_tabs(args: argparse.Namespace) -> int:
 def cmd_snapshot(args: argparse.Namespace) -> int:
     cfg = _config(args)
     try:
-        poe = wiring.api(cfg)
+        poe = wiring.account_api(cfg)
         with Store(cfg.db_path) as store:
             rec = LootRecorder(wiring.snapshotter(cfg, poe), lambda: store)
             result = rec.record(Trigger.MANUAL)
-    except (wiring.ConfigError, NotLoggedInError) as e:
+    except _ACCOUNT_ERRORS as e:
         print(e, file=sys.stderr)
         return 1
     _print_loot(result)
@@ -251,8 +287,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("paths", help="show resolved paths").set_defaults(fn=cmd_paths)
 
-    sub.add_parser("login", help="log in with your PoE account (OAuth)").set_defaults(fn=cmd_login)
-    sub.add_parser("logout", help="forget the saved token").set_defaults(fn=cmd_logout)
+    sub.add_parser("set-session", help="save your POESESSID cookie (session auth)").set_defaults(
+        fn=cmd_set_session
+    )
+    sub.add_parser("login", help="log in with a registered OAuth app (auth = oauth)").set_defaults(
+        fn=cmd_login
+    )
+    sub.add_parser("logout", help="forget the saved POESESSID and OAuth token").set_defaults(
+        fn=cmd_logout
+    )
     sub.add_parser("tabs", help="list stash tabs in the configured league").set_defaults(
         fn=cmd_tabs
     )

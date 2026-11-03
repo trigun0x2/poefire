@@ -12,6 +12,9 @@ from poefire.loot.items import ItemEntry, Json
 
 log = logging.getLogger(__name__)
 
+# Tabs whose items live only in sections (each section is fetched separately).
+SECTIONED_TAB_TYPES = frozenset({"MapStash", "UniqueStash"})
+
 
 class AccountApi(Protocol):
     def list_characters(self) -> list[Json]: ...
@@ -116,6 +119,14 @@ class Snapshotter:
             if name in wanted or tab_id in wanted:
                 missing.discard(name)
                 missing.discard(tab_id)
+                list_children = getattr(self.api, "list_tab_children", None)
+                if (
+                    not tab.get("children")
+                    and tab.get("type") in SECTIONED_TAB_TYPES
+                    and list_children
+                ):
+                    # The POESESSID tab list doesn't include map/unique tab sections.
+                    tab = {**tab, "children": list_children(self.league, tab["id"])}
                 add(tab, parent if parent and parent.get("type") != "Folder" else None)
         if missing:
             log.warning("stash tabs not found in %s: %s", self.league, ", ".join(sorted(missing)))
