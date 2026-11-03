@@ -38,7 +38,7 @@ def test_partial_lines_wait_for_newline(tmp_path: Path) -> None:
 
 def test_end_offsets_are_resumable(tmp_path: Path) -> None:
     log = tmp_path / "Client.txt"
-    log.write_text("a\nbb\nccc\n")
+    log.write_bytes(b"a\nbb\nccc\n")
     lines = LogTailer(log, start_offset=0).poll()
     assert [line.end_offset for line in lines] == [2, 5, 9]
     assert texts(LogTailer(log, start_offset=lines[0].end_offset)) == ["bb", "ccc"]
@@ -91,7 +91,7 @@ def test_max_read_chunks(tmp_path: Path) -> None:
 
 def test_find_last_line_offset(tmp_path: Path) -> None:
     log = tmp_path / "Client.txt"
-    log.write_text("a\nGen 1\nb\nGen 2\nc\n")
+    log.write_bytes(b"a\nGen 1\nb\nGen 2\nc\n")
     off = find_last_line_offset(log, b"Gen ")
     assert off == len("a\nGen 1\nb\n")
     assert find_last_line_offset(log, b"nope") is None
@@ -102,3 +102,10 @@ def test_head_fingerprint(tmp_path: Path) -> None:
     log.write_text("2024/01/01 00:00:00 ***** LOG FILE OPENING *****\n")
     assert head_fingerprint(log) == head_fingerprint(log)
     assert head_fingerprint(tmp_path / "missing") is None
+
+
+def test_crlf_lines(tmp_path: Path) -> None:
+    log = tmp_path / "Client.txt"
+    log.write_bytes(b"one\r\ntwo\r\n")
+    lines = LogTailer(log, start_offset=0).poll()
+    assert [(line.text, line.end_offset) for line in lines] == [("one", 5), ("two", 10)]
