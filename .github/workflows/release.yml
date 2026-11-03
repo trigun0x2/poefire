@@ -125,18 +125,24 @@ jobs:
 
       - name: Smoke test the self-update (packaged apply-update)
         shell: pwsh
+        timeout-minutes: 5
         run: |
           $env:APPDATA = "$PWD\appdata-upd"
           Copy-Item dist/poefire installed -Recurse
           Copy-Item dist/poefire staged -Recurse
           Set-Content staged/_internal/marker.txt "new version"
           $old = Start-Process ping -ArgumentList "-n","5","127.0.0.1" -WindowStyle Hidden -PassThru
-          $p = Start-Process staged/poefire-ui.exe -PassThru -Wait -ArgumentList `
+          # not -Wait: that also waits for the app apply-update restarts, which keeps running
+          $p = Start-Process staged/poefire-ui.exe -PassThru -ArgumentList `
             "apply-update","--source","$PWD\staged","--target","$PWD\installed","--pid",$old.Id,"--log","$PWD\update.log"
+          if (-not $p.WaitForExit(120000)) { Write-Error "apply-update did not finish"; exit 1 }
           Get-Content update.log
           Start-Sleep -Seconds 3
+          $restarted = Get-Process poefire-ui -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -like "$PWD\installed\*" }
           Get-Process poefire-ui -ErrorAction SilentlyContinue | Stop-Process -Force
           if ($p.ExitCode -ne 0) { Write-Error "apply-update exited with $($p.ExitCode)"; exit 1 }
+          if (-not $restarted) { Write-Error "the updated app was not restarted"; exit 1 }
           if (-not $old.HasExited) { Write-Error "did not wait for the old process"; exit 1 }
           if (-not (Test-Path installed/_internal/marker.txt)) { Write-Error "files were not copied"; exit 1 }
           if (-not (Select-String -Path update.log -Pattern "update applied" -Quiet)) { Write-Error "no log"; exit 1 }
