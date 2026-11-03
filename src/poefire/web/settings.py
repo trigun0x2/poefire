@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from poefire.api.session import SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config
+from poefire.leagues import is_private
 from poefire.web.runtime import AppRuntime
 
 POESESSID_RE = re.compile(r"[0-9a-fA-F]{32}")
@@ -25,6 +26,7 @@ class SettingsIn(BaseModel):
     log_path: str | None = None  # "" = detect automatically
     account_name: str | None = None
     league: str | None = None
+    price_league: str | None = None  # "" = automatic
     character: str | None = None  # "" = the account's current character
     characters: list[str] | None = None  # whose deaths count; [] = everyone's
     stash_tabs: list[str] | None = None
@@ -61,6 +63,10 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "session_from_env": from_env,
         "auth": cfg.auth,
         "league": rt.league,
+        "league_is_private": rt.is_private,
+        "price_league": cfg.price_league or "",
+        "price_league_effective": rt.price_league,
+        "ninja_leagues": rt.ninja_leagues(),
         "character": cfg.character or "",
         "characters": cfg.characters,
         "stash_tabs": cfg.stash_tabs,
@@ -103,6 +109,13 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         if not league or len(league) > 100:
             raise SettingsError("league name is required")
         changes["league"] = league
+    if body.price_league is not None:
+        price = body.price_league.strip()
+        if len(price) > 100:
+            raise SettingsError("price league name is too long")
+        if price and is_private(price):
+            raise SettingsError("poe.ninja has no prices for private leagues; pick a public one")
+        changes["price_league"] = price or None
     if body.character is not None:
         changes["character"] = body.character.strip() or None
     if body.characters is not None:
@@ -148,6 +161,7 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
     try:
         api = rt.recorder.snapshotter.api if rt.recorder is not None else wiring.account_api(rt.cfg)
         chars = api.list_characters()
+        rt.note_account_leagues(str(c.get("league") or "") for c in chars)
         tabs = api.list_stashes(rt.league)
     except Exception as e:  # shown to the user as is (never contains the cookie)
         return {"ok": False, "error": str(e)}

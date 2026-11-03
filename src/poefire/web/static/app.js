@@ -66,7 +66,8 @@ function renderStatus() {
     ? "Updating prices…"
     : !p.fetched_at
       ? "No prices yet"
-      : `Prices ${ago(p.fetched_at)}` + (p.chaos_per_divine ? ` · 1d = ${nf0.format(p.chaos_per_divine)}c` : "");
+      : `Prices${p.league !== s.league ? ` (${p.league})` : ""} ${ago(p.fetched_at)}` +
+        (p.chaos_per_divine ? ` · 1d = ${nf0.format(p.chaos_per_divine)}c` : "");
   $("prices-pill").title = p.error ? `Last error: ${p.error}` : "Refresh prices from poe.ninja";
 
   const l = s.loot;
@@ -249,11 +250,18 @@ async function pollRuns() {
 
 async function loadLeagues() {
   const l = await api("/api/leagues");
-  $("league").innerHTML = l.options.map((o) => `<option${o === l.current ? " selected" : ""}>${esc(o)}</option>`).join("");
+  $("league").innerHTML = l.options.map((o) => `<option${o === l.current ? " selected" : ""}>${esc(o)}</option>`).join("") +
+    '<option value="__other__">Other league…</option>';
 }
 
 $("league").addEventListener("change", async (e) => {
-  await api("/api/league", { method: "POST", body: JSON.stringify({ league: e.target.value }) });
+  let league = e.target.value;
+  if (league === "__other__") {
+    league = (prompt("League name (private leagues look like \"My League (PL12345)\"):") || "").trim();
+    if (!league) { await loadLeagues(); return; }
+  }
+  await api("/api/league", { method: "POST", body: JSON.stringify({ league }) });
+  await loadLeagues();
   await pollStatus();
   await pollRuns();
 });
@@ -299,12 +307,43 @@ async function loadSettings() {
   $("set-session-clear").disabled = !s.session_saved || s.session_from_env;
 
   const leagues = (await api("/api/leagues")).options;
-  $("set-league").innerHTML = leagues.map((l) => `<option${l === s.league ? " selected" : ""}>${esc(l)}</option>`).join("");
+  $("set-league").value = s.league;
+  $("set-league-options").innerHTML = leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
+  $("set-price-league").value = s.price_league;
+  $("set-price-league").placeholder = `Automatic: ${s.price_league_effective}`;
+  $("set-price-options").innerHTML = s.ninja_leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
+  renderLeagueHints();
   $("set-run-start").checked = s.snapshot_on_run_start;
   $("set-delay").value = s.snapshot_delay;
   $("set-deaths").value = s.characters.join(", ");
   renderAccountPickers();
   setStatus("set-save-status", s.loot.enabled ? "Loot tracking is on." : `Loot tracking is off: ${s.loot.reason}`, s.loot.enabled ? "ok" : "warn");
+}
+
+const PRIVATE_RE = /\(PL\d+\)\s*$/;
+
+function renderLeagueHints() {
+  const league = $("set-league").value.trim();
+  const priv = PRIVATE_RE.test(league);
+  const chars = account?.characters || [];
+  const current = chars.find((c) => c.current);
+  let hint = priv ? "Private league: stash and inventory are read from it as usual. " : "";
+  if (current && current.league && current.league !== league) {
+    hint += `Your current character ${esc(current.name)} is in <a href="#" id="set-league-use">${esc(current.league)}</a>.`;
+  } else if (!priv) {
+    hint += 'For a private league, enter its full name, e.g. <code>My League (PL12345)</code>.';
+  }
+  $("set-league-hint").innerHTML = hint;
+  $("set-league-use")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    $("set-league").value = current.league;
+    renderLeagueHints();
+    renderAccountPickers();
+  });
+  $("set-price-hint").innerHTML = priv
+    ? "poe.ninja has no prices for private leagues. Leave empty to use the current challenge league, " +
+      "or pick the league yours is based on (e.g. the hardcore one for a hardcore private league)."
+    : "Leave empty to price from the league you play.";
 }
 
 function renderAccountPickers() {
@@ -341,6 +380,9 @@ async function checkAccount() {
     account = r;
     const inLeague = r.characters.filter((c) => c.league === $("set-league").value).length;
     setStatus("set-check-result", `✓ Connected: ${r.characters.length} characters (${inLeague} in ${$("set-league").value}), ${r.tabs.length} stash tabs`, "ok");
+    const leagues = (await api("/api/leagues")).options; // now includes your characters' leagues
+    $("set-league-options").innerHTML = leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
+    renderLeagueHints();
     renderAccountPickers();
   } catch (e) {
     setStatus("set-check-result", `✗ ${e.message}`, "bad");
@@ -356,7 +398,7 @@ function showWarnings(r, okText) {
 }
 
 $("set-log-use").addEventListener("click", () => { $("set-log").value = settings.log_path_detected; });
-$("set-league").addEventListener("change", renderAccountPickers);
+$("set-league").addEventListener("input", () => { renderLeagueHints(); renderAccountPickers(); });
 
 $("set-session-save").addEventListener("click", async () => {
   const value = $("set-session").value.trim();
@@ -389,7 +431,8 @@ $("settings-view").addEventListener("submit", async (e) => {
   const body = {
     log_path: $("set-log").value,
     account_name: $("set-account").value,
-    league: $("set-league").value,
+    league: $("set-league").value.trim(),
+    price_league: $("set-price-league").value.trim(),
     character: $("set-character").value,
     characters: $("set-deaths").value.split(",").map((x) => x.trim()).filter(Boolean),
     stash_tabs: [...$("set-tabs").querySelectorAll("input:checked")].map((i) => i.value),
@@ -398,8 +441,10 @@ $("settings-view").addEventListener("submit", async (e) => {
   };
   $("set-save").disabled = true;
   try {
+    const leagueChanged = settings && body.league !== settings.league;
     const r = await api("/api/settings", { method: "POST", body: JSON.stringify(body) });
     await loadSettings();
+    if (leagueChanged && account) await checkAccount(); // stash tabs are per league
     await loadLeagues().catch(() => {});
     showWarnings(r, "Saved.");
   } catch (err) {

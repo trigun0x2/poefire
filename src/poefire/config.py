@@ -78,6 +78,7 @@ class Config:
     contact: str | None = None
     token_path: Path = field(default_factory=lambda: default_data_dir() / "token.json")
     league: str | None = None
+    price_league: str | None = None  # poe.ninja league to price from; None = automatic
     realm: str = "pc"
     character: str | None = None
     stash_tabs: list[str] = field(default_factory=list)

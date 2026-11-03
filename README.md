@@ -155,6 +155,18 @@ Changes apply immediately, with no restart. They're saved to `config.toml` in th
 (`%APPDATA%\poefire`), which you can also edit by hand. Saving from the page rewrites the
 file, so any comments in it are lost.
 
+### Private leagues
+
+Enter the private league's full name, for example `Fire Party (PL12345)`, either in Settings
+or with "Other league…" in the top bar's league picker. After **Check connection**, Settings
+also offers the leagues your characters are in. Stash and inventory are read from the private
+league as usual.
+
+poe.ninja has no prices for private leagues, so **Prices from** decides where prices come
+from. Left empty, it uses the current softcore challenge league. Set it to the league yours is
+based on, for example the hardcore one for a hardcore private league. In `config.toml` this
+is `price_league`.
+
 ## Prices
 
 Prices come from poe.ninja's league data: the currency exchange for currency, plus the stash

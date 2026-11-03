@@ -87,13 +87,21 @@
       <div class="grid2">
         <label class="field">
           <span>League</span>
-          <select id="set-league"></select>
+          <input id="set-league" type="text" list="set-league-options" spellcheck="false">
+          <datalist id="set-league-options"></datalist>
         </label>
         <label class="field">
           <span>Character</span>
           <select id="set-character"></select>
         </label>
       </div>
+      <div class="hint" id="set-league-hint"></div>
+      <label class="field">
+        <span>Prices from <span class="muted">(poe.ninja league)</span></span>
+        <input id="set-price-league" type="text" list="set-price-options" spellcheck="false">
+        <datalist id="set-price-options"></datalist>
+      </label>
+      <div class="hint" id="set-price-hint"></div>
       <div class="field">
         <span>Stash tabs to watch</span>
         <div class="tabs-list" id="set-tabs"></div>

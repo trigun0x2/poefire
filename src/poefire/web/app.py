@@ -52,14 +52,14 @@ def create_app(rt: AppRuntime) -> FastAPI:
     def status() -> dict[str, Any]:
         now = rt.now()
         state = rt.state()
-        book = rt.prices.book(rt.league)
+        book = rt.prices.book(rt.price_league)
         cpd = book.chaos_per_divine
         run_json = None
         if state.run is not None:
             # loot so far = snapshots already taken during this run (hideout trips)
             with store() as s:
                 run_json = views.run_rows(s, book, [state.run], now)[0].to_json(cpd)
-        p = rt.prices.status(rt.league)
+        p = rt.prices.status(rt.price_league)
         last = rt.loot.last
         return {
             "now": now.isoformat(),
@@ -70,7 +70,9 @@ def create_app(rt: AppRuntime) -> FastAPI:
             else None,
             "in_run": state.in_run,
             "run": run_json,
+            "league_is_private": rt.is_private,
             "prices": {
+                "league": rt.price_league,
                 "entries": p.entries,
                 "fetched_at": p.fetched_at,
                 "refreshing": p.refreshing,
@@ -95,7 +97,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
     @app.get("/api/runs")
     def runs(limit: int = 50) -> dict[str, Any]:
         now = rt.now()
-        book = rt.prices.book(rt.league)
+        book = rt.prices.book(rt.price_league)
         cpd = book.chaos_per_divine
         with store() as s:
             rows = views.run_rows(s, book, s.list_runs(limit=min(limit, 500)), now)
@@ -111,7 +113,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
 
     @app.get("/api/runs/{run_id}")
     def run(run_id: str) -> dict[str, Any]:
-        book = rt.prices.book(rt.league)
+        book = rt.prices.book(rt.price_league)
         with store() as s:
             r = s.get_run(run_id)
             if r is None:

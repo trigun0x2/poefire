@@ -7,13 +7,15 @@ from __future__ import annotations
 import copy
 import logging
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from poefire import __version__, wiring
 from poefire.config import Config
+from poefire.leagues import default_price_league, is_private
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.pricing.ninja import NinjaClient
 from poefire.pricing.service import PriceService
@@ -69,6 +71,9 @@ class AppRuntime:
             lambda: Store(cfg.db_path),
         )
 
+        self._ninja_leagues: list[str] = []
+        self._ninja_leagues_at = float("-inf")
+        self._account_leagues: list[str] = []
         stored = self._store.get_json(LEAGUE_KEY)
         self._league: str = stored or cfg.league or FALLBACK_LEAGUES[0]
 
@@ -137,6 +142,8 @@ class AppRuntime:
             self._build_recorder()
         if cfg.league and cfg.league != self._league:
             self.set_league(cfg.league)
+        elif cfg.price_league != old.price_league:
+            self.refresh_prices()
 
     # --- league ---
 
@@ -153,10 +160,37 @@ class AppRuntime:
             self.recorder.snapshotter.set_league(league)
         self.refresh_prices()
 
+    def ninja_leagues(self) -> list[str]:
+        """League names poe.ninja has prices for (cached for an hour; 5 min after a failure)."""
+        now = time.monotonic()
+        ttl = 3600 if self._ninja_leagues else 300
+        if now - self._ninja_leagues_at >= ttl:
+            self._ninja_leagues = self.prices.client.leagues()
+            self._ninja_leagues_at = now
+        return self._ninja_leagues
+
+    def note_account_leagues(self, leagues: Iterable[str]) -> None:
+        """Leagues the account's characters are in (private leagues show up here)."""
+        self._account_leagues = list(dict.fromkeys(x for x in leagues if x))
+
     def leagues(self) -> list[str]:
-        known = self.prices.client.leagues()
-        out = [self._league, *(self.cfg.league or "",), *known, *FALLBACK_LEAGUES]
+        out = [self._league, self.cfg.league or "", *self._account_leagues,
+               *self.ninja_leagues(), *FALLBACK_LEAGUES]  # fmt: skip
         return list(dict.fromkeys(x for x in out if x))
+
+    @property
+    def is_private(self) -> bool:
+        return is_private(self._league)
+
+    @property
+    def price_league(self) -> str:
+        """The league prices come from: the configured one, else the played league, or for a
+        private league the challenge league it's most likely based on."""
+        if self.cfg.price_league:
+            return self.cfg.price_league
+        if not is_private(self._league):
+            return self._league
+        return default_price_league(self._league, self.ninja_leagues())
 
     # --- live state ---
 
@@ -178,7 +212,7 @@ class AppRuntime:
 
     def refresh_prices(self, force: bool = False) -> None:
         threading.Thread(
-            target=self.prices.refresh, args=(self._league, force), daemon=True
+            target=self.prices.refresh, args=(self.price_league, force), daemon=True
         ).start()
 
     # --- lifecycle ---
@@ -190,7 +224,9 @@ class AppRuntime:
         self._spawn("log-tail", self._tail_loop)
         if self.recorder is not None:
             self.recorder.start()
-        self._spawn("prices", lambda: self.prices.run_forever(lambda: self._league, self._stop))
+        self._spawn(
+            "prices", lambda: self.prices.run_forever(lambda: self.price_league, self._stop)
+        )
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)
