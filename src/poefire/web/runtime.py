@@ -4,8 +4,10 @@ loot snapshots, and price refreshes. The web layer only reads from this object, 
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import logging
+import os
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -31,9 +33,10 @@ from poefire.updater import (
     UpdateInfo,
     Updater,
     can_self_update,
+    cleanup_staging,
     install_dir,
-    launch_swap,
     staging_root,
+    start_install,
 )
 
 log = logging.getLogger(__name__)
@@ -44,6 +47,7 @@ FALLBACK_LEAGUES = ("Standard", "Hardcore")
 
 
 UPDATE_CHECK_EVERY = 6 * 3600
+EXIT_GRACE = 15  # seconds the app gets to close before an update force-exits it
 
 
 @dataclass
@@ -352,16 +356,26 @@ class AppRuntime:
                     progress=lambda done, total: setattr(self.update, "progress", (done, total)),
                 )  # fmt: skip
                 self.update.stage = "installing"
-                launch_swap(staged, folder, staging_root() / "update.log")
+                start_install(staged, folder, staging_root() / "update.log")
             except (UpdateError, OSError, AssertionError) as e:
                 self.update.stage, self.update.error = "failed", str(e) or type(e).__name__
                 return
             if self.request_exit is not None:
                 self.request_exit()
+            # The installer waits for this process to end; don't let a stuck thread or
+            # window keep it alive.
+            threading.Timer(EXIT_GRACE, self.hard_exit).start()
 
         threading.Thread(target=run, name="update", daemon=True).start()
 
+    def hard_exit(self) -> None:
+        log.warning("still running %ss after the update asked to exit; exiting now", EXIT_GRACE)
+        os._exit(0)
+
     def _update_loop(self) -> None:
+        if self.update.can_install:  # versions staged by earlier updates
+            with contextlib.suppress(OSError):
+                cleanup_staging(staging_root(), keep=install_dir())
         if self._stop.wait(10):  # let the app settle first
             return
         while True:

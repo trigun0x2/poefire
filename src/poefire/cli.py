@@ -259,6 +259,13 @@ def cmd_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_apply_update(args: argparse.Namespace) -> int:
+    """Internal: run by the updater from the staged new version (see poefire.updater)."""
+    from poefire.updater import apply_update
+
+    return apply_update(args.source, args.target, args.pid, args.log)
+
+
 def cmd_paths(args: argparse.Namespace) -> int:
     cfg = _config(args)
     print(f"log: {cfg.resolve_log_path() or '(not found)'}")
@@ -340,6 +347,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("track", help="tail Client.txt and record runs").set_defaults(fn=cmd_track)
+
+    ap = sub.add_parser("apply-update")  # internal, used by the self-updater
+    ap.add_argument("--source", type=Path, required=True)
+    ap.add_argument("--target", type=Path, required=True)
+    ap.add_argument("--pid", type=int, required=True)
+    ap.add_argument("--log", type=Path, required=True)
+    ap.set_defaults(fn=cmd_apply_update)
 
     rp = sub.add_parser("replay", help="parse a whole log file and list runs")
     rp.add_argument("logfile", type=Path)

@@ -162,6 +162,7 @@ def test_swap_script_waits_copies_and_restarts(tmp_path: Path) -> None:
                                         log=tmp_path / "u.log")  # fmt: skip
     assert 'tasklist /FI "PID eq %PID%"' in script and 'set "PID=1234"' in script
     assert "robocopy" in script and "poefire-ui.exe" in script
+    assert "timeout /t" not in script  # needs a console, which the script doesn't have
 
 
 # --- runtime + API ---
@@ -227,10 +228,82 @@ def test_install_flow_stages_swaps_and_exits(
     exited = threading.Event()
     monkeypatch.setattr("poefire.web.runtime.install_dir", lambda: installed)
     monkeypatch.setattr("poefire.web.runtime.staging_root", lambda: tmp_path / "updates")
-    monkeypatch.setattr("poefire.web.runtime.launch_swap",
+    monkeypatch.setattr("poefire.web.runtime.start_install",
                         lambda staged, target, log: swaps.append((staged, target)))  # fmt: skip
+    monkeypatch.setattr("poefire.web.runtime.EXIT_GRACE", 3600)
     rt.request_exit = exited.set
     assert client.post("/api/update/install", headers=H).json()["stage"] == "downloading"
     assert exited.wait(5)
     assert swaps == [(tmp_path / "updates" / "0.6.0", installed)]
     assert rt.update.stage == "installing"
+
+
+def test_apply_update_waits_copies_retries_and_restarts(tmp_path: Path) -> None:
+    src, dst, log = tmp_path / "staged", tmp_path / "app", tmp_path / "update.log"
+    (src / "_internal").mkdir(parents=True)
+    (src / "poefire-ui.exe").write_bytes(b"new ui")
+    (src / "_internal" / "lib.dll").write_bytes(b"new lib")
+    dst.mkdir()
+    (dst / "poefire-ui.exe").write_bytes(b"old ui")
+    (dst / "config-kept.txt").write_text("mine")
+    checks = iter([True, True, False])
+    restarted: list[Path] = []
+    code = updater.apply_update(src, dst, 42, log, sleep=lambda s: None,
+                                alive=lambda pid: next(checks), kill=lambda pid: None,
+                                restart=restarted.append)  # fmt: skip
+    assert code == 0 and restarted == [dst]
+    assert (dst / "poefire-ui.exe").read_bytes() == b"new ui"
+    assert (dst / "_internal" / "lib.dll").read_bytes() == b"new lib"
+    assert (dst / "config-kept.txt").read_text() == "mine"
+    assert "update applied: 2 files" in log.read_text()
+
+
+def test_apply_update_ends_a_hung_app_and_reports_locked_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src, dst, log = tmp_path / "staged", tmp_path / "app", tmp_path / "update.log"
+    src.mkdir()
+    (src / "poefire-ui.exe").write_bytes(b"new")
+    killed: list[int] = []
+    real_copy = updater.shutil.copy2
+
+    def locked(a: Any, b: Any) -> Any:
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(updater.shutil, "copy2", locked)
+    restarted: list[Path] = []
+    code = updater.apply_update(src, dst, 7, log, wait=2, retries=3, sleep=lambda s: None,
+                                alive=lambda pid: not killed, kill=killed.append,
+                                restart=restarted.append)  # fmt: skip
+    monkeypatch.setattr(updater.shutil, "copy2", real_copy)
+    assert killed == [7] and code == 1 and restarted == [dst]  # the old version still starts
+    text = log.read_text()
+    assert "still running after 2s" in text and "1 of 1 files not replaced" in text
+
+
+def test_start_install_falls_back_to_the_script(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[list[str]] = []
+
+    def popen(args: list[str], **kw: Any) -> None:
+        calls.append(args)
+        if args[0].endswith("poefire-ui.exe"):
+            raise FileNotFoundError(args[0])
+
+    monkeypatch.setattr(updater.subprocess, "Popen", popen)
+    staged = tmp_path / "updates" / "0.9.0"
+    staged.mkdir(parents=True)
+    how = updater.start_install(staged, tmp_path / "app", tmp_path / "updates" / "update.log")
+    assert how == "script"
+    assert calls[0][1:3] == ["apply-update", "--source"]  # tried the app first (2x: breakaway)
+    assert calls[-1][:2] == ["cmd.exe", "/c"]
+    assert (tmp_path / "updates" / "apply-update.cmd").exists()
+
+
+def test_cleanup_staging_keeps_the_running_copy(tmp_path: Path) -> None:
+    (tmp_path / "0.8.0").mkdir()
+    (tmp_path / "0.9.0").mkdir()
+    (tmp_path / "update.log").write_text("x")
+    updater.cleanup_staging(tmp_path, keep=tmp_path / "0.9.0")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["0.9.0", "update.log"]

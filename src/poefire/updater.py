@@ -4,9 +4,11 @@
    is on) and compares it with the running version.
 2. `stage()` downloads the release zip, verifies it against its .sha256 asset, and unpacks it
    into a staging folder (refusing any path that would land outside it).
-3. `launch_swap()` writes a small batch script and starts it detached: it waits for this
-   process to exit, copies the staged files over the install folder, and restarts the app.
-   A running .exe can't overwrite itself on Windows, hence the separate script.
+3. `start_install()` starts the *new* version from the staging folder with the hidden
+   `apply-update` command (`apply_update()`): it waits for this process to exit (ending it if
+   it hangs), copies itself over the install folder, and restarts the app, logging every step
+   to update.log. A running .exe can't overwrite itself on Windows, hence the second process.
+   If the staged exe can't be started, a batch script (`launch_swap()`) does the same.
 """
 
 from __future__ import annotations
@@ -18,9 +20,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -204,16 +208,18 @@ set "PID={pid}"
 set "SRC={src}"
 set "DST={dst}"
 set /a TRIES=0
+echo %DATE% %TIME% batch updater: waiting for %PID% >> "{log}"
 :wait
 tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul
 if not errorlevel 1 (
   set /a TRIES+=1
-  if %TRIES% GEQ 120 goto copy
-  timeout /t 1 /nobreak >nul
+  if %TRIES% GEQ 60 taskkill /F /PID %PID% >nul 2>&1
+  rem ping, not timeout: timeout needs a console
+  ping -n 2 127.0.0.1 >nul
   goto wait
 )
 :copy
-robocopy "%SRC%" "%DST%" /E /R:10 /W:1 /NFL /NDL /NJH /NJS /NP >> "{log}" 2>&1
+robocopy "%SRC%" "%DST%" /E /R:30 /W:1 /NFL /NDL /NJH /NJS /NP >> "{log}" 2>&1
 if %ERRORLEVEL% GEQ 8 (
   echo robocopy failed with %ERRORLEVEL% >> "{log}"
 ) else (
@@ -230,8 +236,149 @@ def launch_swap(staged: Path, target: Path, log: Path) -> Path:
     script.write_text(
         SWAP_SCRIPT.format(pid=os.getpid(), src=staged, dst=target, log=log), encoding="utf-8"
     )
-    flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED | NEW_PROCESS_GROUP | NO_WINDOW
-    subprocess.Popen(  # our own generated script
-        ["cmd.exe", "/c", str(script)], creationflags=flags, close_fds=True, cwd=staged.parent
-    )
+    # a hidden console (not DETACHED_PROCESS): batch commands need one
+    _spawn(["cmd.exe", "/c", str(script)], NEW_PROCESS_GROUP | NO_WINDOW, staged.parent)
     return script
+
+
+DETACHED = 0x00000008
+NEW_PROCESS_GROUP = 0x00000200
+BREAKAWAY_FROM_JOB = 0x01000000  # survive the parent's job object, when it allows that
+NO_WINDOW = 0x08000000
+
+
+def _spawn(args: list[str], flags: int, cwd: Path) -> None:
+    """Start a process that outlives us: outside our job object when allowed."""
+    try:
+        subprocess.Popen(args, creationflags=flags | BREAKAWAY_FROM_JOB, close_fds=True, cwd=cwd)
+    except OSError:  # the job doesn't allow breakaway
+        subprocess.Popen(args, creationflags=flags, close_fds=True, cwd=cwd)
+
+
+def launch_apply(staged: Path, target: Path, log: Path) -> None:
+    """Start the staged new version to install itself over `target` once we exit."""
+    exe = staged / "poefire-ui.exe"
+    args = [str(exe), "apply-update", "--source", str(staged), "--target", str(target),
+            "--pid", str(os.getpid()), "--log", str(log)]  # fmt: skip
+    _spawn(args, DETACHED | NEW_PROCESS_GROUP, staged)
+
+
+def start_install(staged: Path, target: Path, log: Path) -> str:
+    """Hand the install over to another process; returns how ("app" or "script")."""
+    try:
+        launch_apply(staged, target, log)
+        return "app"
+    except OSError as e:
+        _log(log, f"could not start {staged / 'poefire-ui.exe'} ({e}); using the batch updater")
+        launch_swap(staged, target, log)
+        return "script"
+
+
+# --- the apply-update command (runs from the staging folder) ---
+
+
+def _log(log: Path, msg: str) -> None:
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {msg}\n")
+    except OSError:
+        pass
+
+
+def pid_alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        import ctypes
+
+        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = k32.OpenProcess(0x00100000 | 0x1000, False, pid)  # SYNCHRONIZE | QUERY_LIMITED
+        if not handle:
+            return False
+        try:
+            return bool(k32.WaitForSingleObject(handle, 0) == 0x102)  # WAIT_TIMEOUT
+        finally:
+            k32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def kill_pid(pid: int) -> None:
+    if sys.platform == "win32":
+        import ctypes
+
+        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = k32.OpenProcess(0x0001, False, pid)  # PROCESS_TERMINATE
+        if handle:
+            k32.TerminateProcess(handle, 1)
+            k32.CloseHandle(handle)
+        return
+    import signal
+
+    os.kill(pid, signal.SIGTERM)
+
+
+def apply_update(
+    source: Path,
+    target: Path,
+    pid: int,
+    log: Path,
+    *,
+    wait: float = 60,
+    retries: int = 30,
+    sleep: Callable[[float], None] = time.sleep,
+    alive: Callable[[int], bool] = pid_alive,
+    kill: Callable[[int], None] = kill_pid,
+    restart: Callable[[Path], None] | None = None,
+) -> int:
+    """Copy `source` over `target` once process `pid` has exited, then restart the app."""
+    _log(log, f"applying update: {source} -> {target} (waiting for process {pid})")
+    waited = 0.0
+    while alive(pid):
+        if waited >= wait:
+            _log(log, f"process {pid} still running after {wait:.0f}s; ending it")
+            kill(pid)
+            sleep(2)
+            break
+        sleep(0.5)
+        waited += 0.5
+    failed: list[str] = []
+    files = [p for p in source.rglob("*") if p.is_file()]
+    for f in files:
+        dest = target / f.relative_to(source)
+        for attempt in range(retries):
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, dest)
+                break
+            except OSError as e:
+                if attempt == retries - 1:
+                    failed.append(f"{dest}: {e}")
+                else:
+                    sleep(1)
+    if failed:
+        _log(log, f"update failed, {len(failed)} of {len(files)} files not replaced:")
+        for line in failed[:20]:
+            _log(log, f"  {line}")
+    else:
+        _log(log, f"update applied: {len(files)} files")
+    (restart or _restart)(target)
+    return 1 if failed else 0
+
+
+def _restart(target: Path) -> None:
+    exe = target / "poefire-ui.exe"
+    _spawn([str(exe)], DETACHED | NEW_PROCESS_GROUP, target)
+
+
+def cleanup_staging(root: Path, keep: Path | None = None) -> None:
+    """Remove staged versions left after an update (the running app may be one of them)."""
+    if not root.is_dir():
+        return
+    for d in root.iterdir():
+        if d.is_dir() and (keep is None or d.resolve() != keep.resolve()):
+            shutil.rmtree(d, ignore_errors=True)

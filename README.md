@@ -26,8 +26,10 @@ to write there.
 
 **Updates.** poefire checks GitHub for a new release on start and every 6 hours, and shows a
 banner when one is out. **Install and restart** downloads the zip, checks it against its
-published SHA-256, unpacks it, and closes poefire. A small script then copies the new files
-over the old ones and starts poefire again. Your settings, cookie and history live in
+published SHA-256, unpacks it to `%LOCALAPPDATA%\poefire\updates`, and closes poefire. The
+downloaded new version then copies itself over the old one and starts poefire again; every
+step is logged to `%LOCALAPPDATA%\poefire\updates\update.log`. If an update didn't apply,
+that log says why (a file still in use, for example). Your settings, cookie and history live in
 `%APPDATA%\poefire` and aren't touched. The Updates section in Settings turns automatic checks
 on or off and switches between the stable and beta (pre-release) channels. Versions before
 v0.6.0 have no updater, so install v0.6.0 by hand once.
