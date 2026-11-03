@@ -139,6 +139,22 @@ inventory into a watched tab nets to zero.
 hard-coded. poefire keeps one hit of headroom under each window, counts hits made by other
 tools on the same account, and on HTTP 429 waits for `Retry-After`.
 
+## Settings
+
+Click **Settings** in the app's top bar to set up everything without editing files:
+
+- **Game log:** where `Client.txt` is. You can paste the game folder instead, or leave it empty
+  to detect it automatically.
+- **Account:** your account name and your POESESSID. The cookie is write-only: the page shows
+  whether one is saved, but never displays it again. **Check connection** lists your
+  characters and stash tabs.
+- **Loot tracking:** league, character, the stash tabs to watch (chosen from your real tab
+  list), the map-start snapshot, the hideout snapshot delay, and whose deaths count.
+
+Changes apply immediately, with no restart. They're saved to `config.toml` in the data folder
+(`%APPDATA%\poefire`), which you can also edit by hand. Saving from the page rewrites the
+file, so any comments in it are lost.
+
 ## Prices
 
 Prices come from poe.ninja's league data: the currency exchange for currency, plus the stash

@@ -48,7 +48,10 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { "Content-Type": "application/json", "X-Poefire": "1", ...(opts.headers || {}) },
   });
-  if (!r.ok) throw new Error(`${r.status} ${path}`);
+  if (!r.ok) {
+    const detail = await r.json().then((b) => b.detail).catch(() => null);
+    throw new Error(typeof detail === "string" ? detail : `${r.status} ${path}`);
+  }
   return r.json();
 }
 
@@ -72,7 +75,10 @@ function renderStatus() {
   $("loot-text").textContent = !l.enabled
     ? "Loot tracking off"
     : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
-  $("loot-pill").title = !l.enabled ? l.reason : l.last?.error || "Take a snapshot now";
+  $("loot-pill").title = !l.enabled ? `${l.reason} (click to open Settings)` : l.last?.error || "Take a snapshot now";
+  $("last-empty").innerHTML = s.log_path
+    ? "No map finished yet. Stats appear when you're back in your hideout."
+    : 'Client.txt not found. Set its location in <a href="#settings">Settings</a>.';
 
   // Current run: just the map and its elapsed time, in the top bar.
   const run = s.run;
@@ -254,6 +260,7 @@ $("league").addEventListener("change", async (e) => {
 $("prices-pill").addEventListener("click", () => api("/api/prices/refresh", { method: "POST" }).then(pollStatus));
 $("loot-pill").addEventListener("click", () => {
   if (status?.loot.enabled) api("/api/snapshot", { method: "POST" }).catch(() => {});
+  else location.hash = "#settings";
 });
 $("runs-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]");
@@ -263,7 +270,159 @@ $("runs-body").addEventListener("click", (e) => {
   renderDetail();
 });
 
+// --- settings page ---
+
+let settings = null;
+let account = null; // result of the last connection check: characters + tabs
+
+function setStatus(id, text, cls = "") {
+  const el = $(id);
+  el.className = `hint ${cls}`;
+  el.textContent = text;
+}
+
+async function loadSettings() {
+  settings = await api("/api/settings");
+  const s = settings;
+  $("set-log").value = s.log_path;
+  $("set-log").placeholder = s.log_path_detected || s.log_path_candidates[0];
+  if (s.log_path_exists) setStatus("set-log-status", `✓ Reading ${s.log_path_effective}`, "ok");
+  else if (s.log_path_effective) setStatus("set-log-status", `✗ ${s.log_path_effective} not found`, "bad");
+  else setStatus("set-log-status", "✗ Client.txt not found in the usual install folders; enter its location", "bad");
+  $("set-log-detected").hidden = !s.log_path_detected || s.log_path === s.log_path_detected;
+  $("set-log-detected-path").textContent = s.log_path_detected || "";
+
+  $("set-account").value = s.account_name;
+  const chip = $("set-session-chip");
+  chip.className = `chip${s.session_saved ? " ok" : ""}`;
+  chip.textContent = s.session_from_env ? "set by POE_SESSID variable" : s.session_saved ? "saved" : "not set";
+  $("set-session-clear").disabled = !s.session_saved || s.session_from_env;
+
+  const leagues = (await api("/api/leagues")).options;
+  $("set-league").innerHTML = leagues.map((l) => `<option${l === s.league ? " selected" : ""}>${esc(l)}</option>`).join("");
+  $("set-run-start").checked = s.snapshot_on_run_start;
+  $("set-delay").value = s.snapshot_delay;
+  $("set-deaths").value = s.characters.join(", ");
+  renderAccountPickers();
+  setStatus("set-save-status", s.loot.enabled ? "Loot tracking is on." : `Loot tracking is off: ${s.loot.reason}`, s.loot.enabled ? "ok" : "warn");
+}
+
+function renderAccountPickers() {
+  const s = settings;
+  const chars = account?.characters || [];
+  const opts = [`<option value="">Current character (auto)</option>`]
+    .concat(chars.filter((c) => c.league === $("set-league").value || c.name === s.character).map((c) =>
+      `<option value="${esc(c.name)}"${c.name === s.character ? " selected" : ""}>${esc(c.name)} · ${esc(c.class || "")} ${c.level ?? ""}</option>`));
+  if (s.character && !chars.some((c) => c.name === s.character)) {
+    opts.push(`<option value="${esc(s.character)}" selected>${esc(s.character)}</option>`);
+  }
+  $("set-character").innerHTML = opts.join("");
+
+  const chosen = new Set(s.stash_tabs.map((t) => t.toLowerCase()));
+  const tabs = account?.tabs || [];
+  const known = new Set();
+  let html = tabs.map((t) => {
+    const on = chosen.has(String(t.name).toLowerCase()) || chosen.has(String(t.id).toLowerCase());
+    if (on) { known.add(String(t.name).toLowerCase()); known.add(String(t.id).toLowerCase()); }
+    return `<label><input type="checkbox" value="${esc(t.name)}"${on ? " checked" : ""}>${esc(t.name)}<span class="type">${esc(String(t.type || "").replace(/Stash$/, ""))}</span></label>`;
+  }).join("");
+  // tabs saved earlier but not in the loaded list (or nothing loaded yet)
+  html += s.stash_tabs.filter((t) => !known.has(t.toLowerCase())).map((t) =>
+    `<label><input type="checkbox" value="${esc(t)}" checked>${esc(t)}</label>`).join("");
+  $("set-tabs").innerHTML = html || '<span class="hint">Check the connection above to load your stash tabs.</span>';
+}
+
+async function checkAccount() {
+  setStatus("set-check-result", "Checking…");
+  $("set-check").disabled = true;
+  try {
+    const r = await api("/api/settings/check-account", { method: "POST" });
+    if (!r.ok) { setStatus("set-check-result", `✗ ${r.error}`, "bad"); return; }
+    account = r;
+    const inLeague = r.characters.filter((c) => c.league === $("set-league").value).length;
+    setStatus("set-check-result", `✓ Connected: ${r.characters.length} characters (${inLeague} in ${$("set-league").value}), ${r.tabs.length} stash tabs`, "ok");
+    renderAccountPickers();
+  } catch (e) {
+    setStatus("set-check-result", `✗ ${e.message}`, "bad");
+  } finally {
+    $("set-check").disabled = false;
+  }
+}
+
+function showWarnings(r, okText) {
+  const w = r.warnings || [];
+  if (w.length) setStatus("set-save-status", `Saved. ${w.join(" ")}`, "warn");
+  else setStatus("set-save-status", r.loot.enabled ? okText : `${okText} Loot tracking is off: ${r.loot.reason}`, r.loot.enabled ? "ok" : "warn");
+}
+
+$("set-log-use").addEventListener("click", () => { $("set-log").value = settings.log_path_detected; });
+$("set-league").addEventListener("change", renderAccountPickers);
+
+$("set-session-save").addEventListener("click", async () => {
+  const value = $("set-session").value.trim();
+  if (!value) { setStatus("set-check-result", "Paste the cookie value first.", "warn"); return; }
+  try {
+    // save the account name too: the cookie is checked against it
+    await api("/api/settings", { method: "POST", body: JSON.stringify({ account_name: $("set-account").value }) });
+    const r = await api("/api/settings/session", { method: "POST", body: JSON.stringify({ poesessid: value }) });
+    $("set-session").value = "";
+    await loadSettings();
+    showWarnings(r, "Cookie saved.");
+    if (r.account_name) await checkAccount();
+  } catch (e) {
+    setStatus("set-check-result", `✗ ${e.message}`, "bad");
+  }
+});
+
+$("set-session-clear").addEventListener("click", async () => {
+  if (!confirm("Remove the saved POESESSID from this PC?")) return;
+  await api("/api/settings/session/clear", { method: "POST" });
+  account = null;
+  await loadSettings();
+  setStatus("set-check-result", "Cookie removed.");
+});
+
+$("set-check").addEventListener("click", checkAccount);
+
+$("settings-view").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    log_path: $("set-log").value,
+    account_name: $("set-account").value,
+    league: $("set-league").value,
+    character: $("set-character").value,
+    characters: $("set-deaths").value.split(",").map((x) => x.trim()).filter(Boolean),
+    stash_tabs: [...$("set-tabs").querySelectorAll("input:checked")].map((i) => i.value),
+    snapshot_on_run_start: $("set-run-start").checked,
+    snapshot_delay: Number($("set-delay").value || 0),
+  };
+  $("set-save").disabled = true;
+  try {
+    const r = await api("/api/settings", { method: "POST", body: JSON.stringify(body) });
+    await loadSettings();
+    await loadLeagues().catch(() => {});
+    showWarnings(r, "Saved.");
+  } catch (err) {
+    setStatus("set-save-status", `✗ ${err.message}`, "bad");
+  } finally {
+    $("set-save").disabled = false;
+  }
+});
+
+// --- routing: #settings shows the settings page, anything else the dashboard ---
+
+function route() {
+  const onSettings = location.hash === "#settings";
+  $("settings-view").hidden = !onSettings;
+  $("dashboard").hidden = onSettings;
+  $("nav-settings").hidden = onSettings;
+  $("nav-dashboard").hidden = !onSettings;
+  if (onSettings) loadSettings().catch((e) => setStatus("set-save-status", `✗ ${e.message}`, "bad"));
+}
+window.addEventListener("hashchange", route);
+
 (async function init() {
+  route();
   await loadLeagues().catch(() => {});
   await pollStatus();
   if (!runsData) await pollRuns();

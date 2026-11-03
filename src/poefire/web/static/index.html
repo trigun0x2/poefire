@@ -25,10 +25,102 @@
       <button class="pill" id="loot-pill" title="Take a snapshot now">
         <span class="dot"></span><span id="loot-text">Loot…</span>
       </button>
+      <a class="pill nav" id="nav-settings" href="#settings">Settings</a>
+      <a class="pill nav" id="nav-dashboard" href="#" hidden>← Dashboard</a>
     </div>
   </header>
 
-  <main>
+  <form class="settings" id="settings-view" hidden autocomplete="off">
+    <h1>Settings</h1>
+
+    <section class="card">
+      <div class="card-title">Game log</div>
+      <label class="field">
+        <span>Client.txt location</span>
+        <input id="set-log" type="text" spellcheck="false">
+      </label>
+      <div class="hint" id="set-log-status"></div>
+      <div class="hint">Usually <code>logs\Client.txt</code> in your Path of Exile folder. You can also paste
+        the game folder. Leave empty to detect it automatically.</div>
+      <div class="row" id="set-log-detected" hidden>
+        <button type="button" class="btn" id="set-log-use">Use detected path</button>
+        <code id="set-log-detected-path"></code>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Path of Exile account <span class="muted">for loot tracking</span></div>
+      <label class="field">
+        <span>Account name</span>
+        <input id="set-account" type="text" placeholder="Name#1234" spellcheck="false">
+      </label>
+      <div class="hint">Your full account name including the <code>#1234</code> part, as shown on pathofexile.com when you're logged in.</div>
+
+      <div class="field">
+        <span>POESESSID cookie <span class="chip" id="set-session-chip"></span></span>
+        <div class="row">
+          <input id="set-session" type="password" placeholder="Paste a new POESESSID to save it" spellcheck="false" autocomplete="new-password">
+          <button type="button" class="btn primary" id="set-session-save">Save cookie</button>
+          <button type="button" class="btn" id="set-session-clear">Remove</button>
+        </div>
+      </div>
+      <details class="hint">
+        <summary>How do I get it?</summary>
+        <ol>
+          <li>Log in on <b>pathofexile.com</b> in your browser.</li>
+          <li>Open developer tools (F12) → <b>Application</b> (Chrome/Edge) or <b>Storage</b> (Firefox) → Cookies → https://www.pathofexile.com.</li>
+          <li>Copy the value of <code>POESESSID</code> (32 characters) and paste it above.</li>
+        </ol>
+        It's your whole logged-in session: never share it or show it on stream. poefire stores it only on this
+        PC, readable by your Windows user, and never displays it again. Logging out of the website ends it;
+        then paste a new one.
+      </details>
+
+      <div class="row">
+        <button type="button" class="btn" id="set-check">Check connection</button>
+        <span class="hint" id="set-check-result"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Loot tracking</div>
+      <div class="grid2">
+        <label class="field">
+          <span>League</span>
+          <select id="set-league"></select>
+        </label>
+        <label class="field">
+          <span>Character</span>
+          <select id="set-character"></select>
+        </label>
+      </div>
+      <div class="field">
+        <span>Stash tabs to watch</span>
+        <div class="tabs-list" id="set-tabs"></div>
+        <div class="hint">Pick every tab your loot goes into, including the ones Ctrl+click sends items to
+          (currency, fragments…). Items moved to an unwatched tab count as lost. Each tab costs one request per snapshot.</div>
+      </div>
+      <label class="check">
+        <input id="set-run-start" type="checkbox">
+        <span>Also snapshot when a map starts <span class="muted">— keeps hideout trading and crafting out of a map's loot</span></span>
+      </label>
+      <label class="field narrow">
+        <span>Wait before the hideout snapshot (seconds)</span>
+        <input id="set-delay" type="number" min="0" max="60" step="0.5">
+      </label>
+      <label class="field">
+        <span>Count deaths for <span class="muted">(comma-separated; empty = everyone in the log, fine when playing solo)</span></span>
+        <input id="set-deaths" type="text" spellcheck="false">
+      </label>
+    </section>
+
+    <div class="save-bar">
+      <button type="submit" class="btn primary" id="set-save">Save settings</button>
+      <span id="set-save-status" class="hint"></span>
+    </div>
+  </form>
+
+  <main id="dashboard">
     <section class="card current" id="last">
       <div class="card-title">Last map</div>
       <div class="current-empty" id="last-empty">No map finished yet. Stats appear when you're back in your hideout.</div>

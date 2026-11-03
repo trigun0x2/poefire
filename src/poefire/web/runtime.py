@@ -1,5 +1,6 @@
 """Everything the UI shows, running in background threads: log tailing + run tracking,
-loot snapshots, and price refreshes. The web layer only reads from this object."""
+loot snapshots, and price refreshes. The web layer only reads from this object, except for
+`reconfigure()`, which the settings page uses to apply a new config without a restart."""
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from poefire.pricing.ninja import NinjaClient
 from poefire.pricing.service import PriceService
 from poefire.service import TrackerService
 from poefire.store import Store
-from poefire.tracker import TrackerState
+from poefire.tracker import Notice, TrackerState
 
 log = logging.getLogger(__name__)
 
@@ -43,48 +44,99 @@ class AppRuntime:
         recorder: LootRecorder | bool | None = True,
         log_path: Path | None = None,
         now: Callable[[], datetime] = datetime.now,
+        config_path: Path | None = None,
     ) -> None:
-        """`recorder=True` builds one from the config when possible; None disables it."""
+        """`recorder=True` builds one from the config when possible (and again on
+        reconfigure); a LootRecorder instance is used as is; None disables loot tracking.
+        `log_path` overrides the config's (tests, previews)."""
         self.cfg = cfg
+        self.config_path = config_path
         self.now = now
-        self._store = Store(cfg.db_path)  # owned by the tail thread after start()
+        self._store = Store(cfg.db_path)  # used by the tail thread, under _lock
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
+        self._started = False
+        self._log_override = log_path
+        self._auto_recorder = recorder is True
 
-        self.log_path = log_path or cfg.resolve_log_path()
+        self.log_path: Path | None = None
         self.service: TrackerService | None = None
-        if self.log_path is not None:
-            self.service = TrackerService(
-                self._store, self.log_path, cfg.zone_rules(), cfg.characters
-            )
+        self._build_service()
 
         self.prices = price_service or PriceService(
             NinjaClient(f"poefire/{__version__} (+{wiring.PROJECT_URL})"),
             lambda: Store(cfg.db_path),
         )
 
-        self.loot = LootStatus(enabled=False)
-        self.recorder: LootRecorder | None = None
-        if recorder is True:
-            try:
-                self.recorder = wiring.recorder(cfg, wiring.account_api(cfg))
-            except wiring.ConfigError as e:
-                self.loot.reason = str(e)
-        elif isinstance(recorder, LootRecorder):
-            self.recorder = recorder
-        if self.recorder is not None:
-            self.loot.enabled = True
-            self.recorder.handlers.append(self._on_loot)
-            if self.service is not None:
-                self.service.handlers.append(self.recorder.on_notice)
-        elif self.loot.reason is None:
-            self.loot.reason = "loot tracking disabled"
-
         stored = self._store.get_json(LEAGUE_KEY)
         self._league: str = stored or cfg.league or FALLBACK_LEAGUES[0]
-        if self.recorder is not None:
-            self.recorder.snapshotter.set_league(self._league)
+
+        self.loot = LootStatus(enabled=False)
+        self.recorder: LootRecorder | None = None
+        if isinstance(recorder, LootRecorder):
+            self._install_recorder(recorder)
+        elif recorder is True:
+            self._build_recorder()
+        else:
+            self.loot.reason = "loot tracking disabled"
+
+    # --- building blocks (rebuilt by reconfigure) ---
+
+    def _build_service(self) -> None:
+        self.log_path = self._log_override or self.cfg.resolve_log_path()
+        self.service = None
+        if self.log_path is not None:
+            self.service = TrackerService(
+                self._store, self.log_path, self.cfg.zone_rules(), self.cfg.characters
+            )
+            self.service.handlers.append(self._dispatch)
+            if self._started:
+                self.service.start()
+
+    def _build_recorder(self) -> None:
+        self.loot = LootStatus(enabled=False)
+        try:
+            rec = wiring.recorder(self.cfg, wiring.account_api(self.cfg))
+        except wiring.ConfigError as e:
+            self.loot.reason = str(e)
+            return
+        self._install_recorder(rec)
+
+    def _install_recorder(self, rec: LootRecorder) -> None:
+        self.recorder = rec
+        self.loot = LootStatus(enabled=True)
+        rec.handlers.append(self._on_loot)
+        rec.snapshotter.set_league(self._league)
+        if self._started:
+            rec.start()
+
+    def _dispatch(self, n: Notice) -> None:
+        rec = self.recorder
+        if rec is not None:
+            rec.on_notice(n)
+
+    def reconfigure(self, cfg: Config) -> None:
+        """Apply a new config: re-open the log if its path or tracking rules changed, and
+        rebuild loot tracking (account, session cookie, tabs...)."""
+        old = self.cfg
+        self.cfg = cfg
+        log_changed = (
+            old.resolve_log_path() != cfg.resolve_log_path()
+            or old.characters != cfg.characters
+            or old.zone_rules() != cfg.zone_rules()
+        )
+        if log_changed:
+            with self._lock:
+                self._build_service()
+        if self._auto_recorder:
+            previous = self.recorder
+            self.recorder = None
+            if previous is not None:
+                previous.stop()
+            self._build_recorder()
+        if cfg.league and cfg.league != self._league:
+            self.set_league(cfg.league)
 
     # --- league ---
 
@@ -109,9 +161,9 @@ class AppRuntime:
     # --- live state ---
 
     def state(self) -> TrackerState:
-        if self.service is None:
-            return TrackerState()
         with self._lock:
+            if self.service is None:
+                return TrackerState()
             return copy.deepcopy(self.service.tracker.state)
 
     def _on_loot(self, result: LootResult) -> None:
@@ -132,9 +184,10 @@ class AppRuntime:
     # --- lifecycle ---
 
     def start(self) -> None:
+        self._started = True
         if self.service is not None:
             self.service.start()
-            self._spawn("log-tail", self._tail_loop)
+        self._spawn("log-tail", self._tail_loop)
         if self.recorder is not None:
             self.recorder.start()
         self._spawn("prices", lambda: self.prices.run_forever(lambda: self._league, self._stop))
@@ -145,12 +198,13 @@ class AppRuntime:
         t.start()
 
     def _tail_loop(self) -> None:
-        assert self.service is not None
         while not self._stop.is_set():
             try:
                 with self._lock:
-                    notices = self.service.process_available()
-                self.service.dispatch(notices)
+                    service = self.service
+                    notices = service.process_available() if service is not None else []
+                if service is not None:
+                    service.dispatch(notices)
             except Exception:
                 log.exception("log tail failed")
             self._stop.wait(self.cfg.poll_interval)

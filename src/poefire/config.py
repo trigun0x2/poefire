@@ -19,6 +19,7 @@ Example `config.toml`:
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tomllib
@@ -42,6 +43,21 @@ def default_data_dir() -> Path:
         return Path(base) / "poefire" if base else Path.home() / "AppData" / "Roaming" / "poefire"
     base = os.environ.get("XDG_CONFIG_HOME")
     return (Path(base) if base else Path.home() / ".config") / "poefire"
+
+
+def default_config_path() -> Path:
+    return default_data_dir() / "config.toml"
+
+
+def _toml_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return repr(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(v) for v in value) + "]"
+    # JSON string escaping is valid TOML basic-string escaping (\\, \", \n, \uXXXX)
+    return json.dumps(str(value), ensure_ascii=False)
 
 
 @dataclass
@@ -70,7 +86,7 @@ class Config:
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
-        path = path or default_data_dir() / "config.toml"
+        path = path or default_config_path()
         if not path.exists():
             return cls()
         with open(path, "rb") as f:
@@ -96,6 +112,25 @@ class Config:
                 value = str(value)
             setattr(cfg, f.name, value)
         return cfg
+
+    def to_toml(self) -> str:
+        """Settings that differ from the defaults, as TOML."""
+        default = Config()
+        lines = ["# poefire settings (written by the Settings page; edits here also work)"]
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if value == getattr(default, f.name) or value is None:
+                continue
+            lines.append(f"{f.name} = {_toml_value(value)}")
+        return "\n".join(lines) + "\n"
+
+    def save(self, path: Path | None = None) -> Path:
+        path = path or default_config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(self.to_toml(), encoding="utf-8")
+        tmp.replace(path)
+        return path
 
     def zone_rules(self) -> ZoneRules:
         return ZoneRules.with_extras(

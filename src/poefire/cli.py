@@ -19,7 +19,7 @@ from poefire import wiring
 from poefire.api.client import ApiError
 from poefire.api.oauth import NotLoggedInError, OAuthError, TokenStore, login
 from poefire.api.session import SessionError, SessionStore
-from poefire.config import Config
+from poefire.config import Config, default_config_path
 from poefire.loot.diff import ItemDelta
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.service import TrackerService
@@ -274,7 +274,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
     from poefire.web.runtime import AppRuntime
 
     cfg = _config(args)
-    rt = AppRuntime(cfg)
+    rt = AppRuntime(cfg, config_path=args.config or default_config_path())
     if rt.log_path is None:
         print("Client.txt not found; run tracking is off (pass --log or set log_path)")
     elif rt.loot.reason:

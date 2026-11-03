@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from poefire import __version__
 from poefire.store import Store
 from poefire.tracker import RunStatus
-from poefire.web import views
+from poefire.web import settings, views
 from poefire.web.runtime import SESSION_GAP, AppRuntime
 
 STATIC = Path(__file__).parent / "static"
@@ -143,6 +143,37 @@ def create_app(rt: AppRuntime) -> FastAPI:
         if not rt.snapshot_now():
             raise HTTPException(409, rt.loot.reason or "loot tracking is off")
         return {"ok": True}
+
+    # --- settings ---
+
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, Any]:
+        return settings.settings_json(rt)
+
+    @app.post("/api/settings")
+    def post_settings(body: settings.SettingsIn) -> dict[str, Any]:
+        try:
+            warnings = settings.update_settings(rt, body)
+        except settings.SettingsError as e:
+            raise HTTPException(400, str(e)) from e
+        return {**settings.settings_json(rt), "warnings": warnings}
+
+    @app.post("/api/settings/session")
+    def post_session(body: settings.SessionIn) -> dict[str, Any]:
+        try:
+            warnings = settings.save_session(rt, body.poesessid)
+        except settings.SettingsError as e:
+            raise HTTPException(400, str(e)) from e
+        return {**settings.settings_json(rt), "warnings": warnings}
+
+    @app.post("/api/settings/session/clear")
+    def clear_session() -> dict[str, Any]:
+        settings.clear_session(rt)
+        return settings.settings_json(rt)
+
+    @app.post("/api/settings/check-account")
+    def check_account() -> dict[str, Any]:
+        return settings.check_account(rt)
 
     @app.get("/")
     def index() -> FileResponse:
