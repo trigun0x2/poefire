@@ -16,7 +16,7 @@ a = Analysis(  # noqa: F821
 )
 pyz = PYZ(a.pure)  # noqa: F821
 
-icon = str(root / "src" / "poefire" / "web" / "static" / "favicon.ico")  # Ember Gem, from logo.svg
+icon = str(root / "src" / "poefire" / "web" / "static" / "favicon.ico")  # Ember Gem app icon (same art as static/logo.png)
 common = dict(exclude_binaries=True, debug=False, strip=False, upx=False, icon=icon)
 cli = EXE(pyz, a.scripts, [], name="poefire", console=True, **common)  # noqa: F821
 gui = EXE(pyz, a.scripts, [], name="poefire-ui", console=False, **common)  # noqa: F821

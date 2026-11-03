@@ -189,4 +189,4 @@ def test_logo_and_favicon_served(app: TestClient) -> None:
     r = app.get("/favicon.ico")
     assert r.status_code == 200 and r.headers["content-type"] == "image/x-icon"
     assert r.content[:4] == b"\x00\x00\x01\x00"  # ICO header
-    assert "<svg" in app.get("/static/logo.svg").text
+    assert app.get("/static/logo.png").content[:8] == b"\x89PNG\r\n\x1a\n"
