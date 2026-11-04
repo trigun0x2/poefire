@@ -170,6 +170,12 @@ _MIGRATIONS = (
 )  # index i upgrades schema version i -> i + 1
 
 
+def _chunks(items: list[str], size: int = 500) -> Iterator[list[str]]:
+    """Slices for `IN (...)` lists, below SQLite's variable limit."""
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
+
 def _dt(v: datetime | None) -> str | None:
     return v.isoformat() if v else None
 
@@ -184,6 +190,8 @@ class Store:
         self.conn.execute("PRAGMA foreign_keys = ON")
         if str(path) != ":memory:":
             self.conn.execute("PRAGMA journal_mode = WAL")
+            # With WAL this is crash-safe; only a power cut can lose the last commit.
+            self.conn.execute("PRAGMA synchronous = NORMAL")
         self._migrate()
 
     def _migrate(self) -> None:
@@ -243,20 +251,36 @@ class Store:
 
     def get_run(self, run_id: str) -> Run | None:
         row = self.conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
-        return self._row_to_run(row) if row else None
+        return self._rows_to_runs([row])[0] if row else None
 
     def list_runs(self, limit: int = 100, offset: int = 0) -> list[Run]:
         rows = self.conn.execute(
             "SELECT * FROM runs ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
             (limit, offset),
         ).fetchall()
-        return [self._row_to_run(r) for r in rows]
+        return self._rows_to_runs(rows)
 
-    def _row_to_run(self, row: sqlite3.Row) -> Run:
-        segs = self.conn.execute(
-            "SELECT started_at, ended_at FROM run_segments WHERE run_id = ? ORDER BY idx",
-            (row["id"],),
-        ).fetchall()
+    def _rows_to_runs(self, rows: list[sqlite3.Row]) -> list[Run]:
+        """Runs with their segments, loaded in one query per 500 runs (not one per run)."""
+        segs: dict[str, list[Segment]] = {}
+        ids = [r["id"] for r in rows]
+        for chunk in _chunks(ids):
+            marks = ",".join("?" * len(chunk))
+            for s in self.conn.execute(
+                f"SELECT run_id, started_at, ended_at FROM run_segments "
+                f"WHERE run_id IN ({marks}) ORDER BY run_id, idx",
+                chunk,
+            ):
+                segs.setdefault(s["run_id"], []).append(
+                    Segment(
+                        datetime.fromisoformat(s["started_at"]),
+                        datetime.fromisoformat(s["ended_at"]) if s["ended_at"] else None,
+                    )
+                )
+        return [self._row_to_run(r, segs.get(r["id"], [])) for r in rows]
+
+    @staticmethod
+    def _row_to_run(row: sqlite3.Row, segments: list[Segment]) -> Run:
         return Run(
             id=row["id"],
             area_id=row["area_id"],
@@ -266,13 +290,7 @@ class Store:
             started_at=datetime.fromisoformat(row["started_at"]),
             status=RunStatus(row["status"]),
             deaths=row["deaths"],
-            segments=[
-                Segment(
-                    datetime.fromisoformat(s["started_at"]),
-                    datetime.fromisoformat(s["ended_at"]) if s["ended_at"] else None,
-                )
-                for s in segs
-            ],
+            segments=segments,
             ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
         )
 
@@ -283,6 +301,11 @@ class Store:
             "INSERT INTO events (ts, kind, run_id, payload) VALUES (?, ?, ?, ?)",
             (event.ts.isoformat(), event_kind(event), run_id, event_payload_json(event)),
         )
+
+    def prune_events(self, before: datetime) -> int:
+        """Delete log events older than `before` (nothing reads old ones); returns how many."""
+        cur = self.conn.execute("DELETE FROM events WHERE ts < ?", (before.isoformat(),))
+        return cur.rowcount
 
     def list_events(self, kind: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         sql = "SELECT ts, kind, run_id, payload FROM events"
@@ -319,6 +342,12 @@ class Store:
                 ],
             )  # fmt: skip
         return snapshot_id
+
+    def last_complete_snapshot_id(self) -> int | None:
+        row = self.conn.execute(
+            "SELECT id FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return int(row["id"]) if row else None
 
     def last_complete_snapshot(self) -> tuple[int, datetime, list[ItemEntry]] | None:
         row = self.conn.execute(
@@ -405,33 +434,59 @@ class Store:
 
     def run_loot(self, run_id: str, kind: str = "run") -> list[ItemDelta]:
         """Net loot of a run, summed over all its hideout returns."""
-        rows = self.conn.execute(
-            "SELECT key, name, frame_type, SUM(quantity) AS quantity, "
-            "(SELECT l2.sample FROM loot l2 WHERE l2.run_id = loot.run_id AND l2.kind = loot.kind "
-            " AND l2.key = loot.key ORDER BY l2.id DESC LIMIT 1) AS sample "
-            "FROM loot WHERE run_id = ? AND kind = ? GROUP BY key HAVING SUM(quantity) != 0 "
-            "ORDER BY SUM(quantity) DESC, name",
-            (run_id, kind),
-        ).fetchall()
-        deltas = [
-            ItemDelta(r["key"], r["name"], r["frame_type"], r["quantity"], json.loads(r["sample"]))
-            for r in rows
-        ]
-        # Gear isn't counted (see is_tracked); also hides it in loot recorded before that rule.
-        return [d for d in deltas if is_tracked(d.sample)]
+        return self.runs_loot([run_id], kind).get(run_id, [])
+
+    def runs_loot(self, run_ids: list[str], kind: str = "run") -> dict[str, list[ItemDelta]]:
+        """Net loot of many runs: per run and item, the summed quantity. Largest first.
+
+        Many runs hold the same few hundred kinds of items, so each kind's sample (its full
+        item JSON) is read and decoded once, from its newest row: same key = same kind of
+        item, so the same tracked/gear verdict, price and icon."""
+        totals: list[sqlite3.Row] = []
+        newest: dict[str, int] = {}  # key -> id of its newest row
+        for chunk in _chunks(run_ids):
+            marks = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"SELECT run_id, key, name, frame_type, SUM(quantity) AS total, MAX(id) AS last "
+                f"FROM loot WHERE kind = ? AND run_id IN ({marks}) "
+                f"GROUP BY run_id, key HAVING total != 0",
+                (kind, *chunk),
+            ).fetchall()
+            totals.extend(rows)
+            for r in rows:
+                newest[r["key"]] = max(newest.get(r["key"], 0), r["last"])
+        kinds: dict[str, dict[str, Any] | None] = {}
+        for ids in _chunks([str(i) for i in newest.values()]):
+            marks = ",".join("?" * len(ids))
+            for r in self.conn.execute(
+                f"SELECT key, sample FROM loot WHERE id IN ({marks})", [int(i) for i in ids]
+            ):
+                sample = json.loads(r["sample"])
+                # Gear isn't counted (see is_tracked); also hides it in loot recorded earlier.
+                kinds[r["key"]] = sample if is_tracked(sample) else None
+        out: dict[str, list[ItemDelta]] = {}
+        for r in totals:
+            if (sample := kinds.get(r["key"])) is not None:
+                out.setdefault(r["run_id"], []).append(
+                    ItemDelta(r["key"], r["name"], r["frame_type"], r["total"], sample)
+                )
+        for deltas in out.values():
+            deltas.sort(key=lambda d: (-d.quantity, d.name))
+        return out
 
     def runs_with_loot_data(self, run_ids: list[str]) -> set[str]:
         """Runs that have at least one complete return-to-hideout snapshot (so a loot value
         of 0 means "nothing dropped", not "not tracked")."""
-        if not run_ids:
-            return set()
-        marks = ",".join("?" * len(run_ids))
-        rows = self.conn.execute(
-            f"SELECT DISTINCT run_id FROM snapshots WHERE complete = 1 "
-            f"AND trigger = 'run_return' AND run_id IN ({marks})",
-            run_ids,
-        ).fetchall()
-        return {r["run_id"] for r in rows}
+        found: set[str] = set()
+        for chunk in _chunks(run_ids):
+            marks = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"SELECT DISTINCT run_id FROM snapshots WHERE complete = 1 "
+                f"AND trigger = 'run_return' AND run_id IN ({marks})",
+                chunk,
+            ).fetchall()
+            found.update(r["run_id"] for r in rows)
+        return found
 
     def list_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
         rows = self.conn.execute(
@@ -515,9 +570,19 @@ class Store:
             paused_ms=row["paused_ms"],
         )  # fmt: skip
 
-    def list_campaign_runs(self, limit: int = 200) -> list[CampaignRun]:
+    def list_campaign_runs(self, limit: int = 200, splits: bool = True) -> list[CampaignRun]:
+        """Newest first. `splits=False` skips decoding the splits (for lists and totals)."""
+        cols = (
+            "*"
+            if splits
+            else (
+                "id, started_at, ended_at, status, character, class, level, deaths, act, load_ms, "
+                "notes, paused_at, paused_ms, '[]' AS splits"
+            )
+        )
         rows = self.conn.execute(
-            "SELECT * FROM campaign_runs ORDER BY started_at DESC, id DESC LIMIT ?", (limit,)
+            f"SELECT {cols} FROM campaign_runs ORDER BY started_at DESC, id DESC LIMIT ?",
+            (limit,),
         )
         return [self._campaign_run(r) for r in rows]
 
@@ -555,12 +620,18 @@ class Store:
 
     def list_runs_between(self, start: datetime | None, end: datetime | None) -> list[Run]:
         """Runs that started in [start, end), newest first; None = unbounded."""
-        rows = self.conn.execute(
-            "SELECT * FROM runs WHERE (? IS NULL OR started_at >= ?) "
-            "AND (? IS NULL OR started_at < ?) ORDER BY started_at DESC, rowid DESC",
-            (_dt(start), _dt(start), _dt(end), _dt(end)),
-        ).fetchall()
-        return [self._row_to_run(r) for r in rows]
+        where, args = [], []
+        if start is not None:
+            where.append("started_at >= ?")
+            args.append(_dt(start))
+        if end is not None:
+            where.append("started_at < ?")
+            args.append(_dt(end))
+        sql = "SELECT * FROM runs"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        rows = self.conn.execute(sql + " ORDER BY started_at DESC, rowid DESC", args).fetchall()
+        return self._rows_to_runs(rows)
 
     def delete_runs(self, run_ids: list[str]) -> None:
         """Remove runs with their loot; their snapshots and log events are kept, unlinked."""

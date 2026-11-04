@@ -18,7 +18,6 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from poefire import __version__
-from poefire.api.session import SessionStore
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import overview, sessions, settings, views
@@ -64,13 +63,12 @@ def create_app(rt: AppRuntime) -> FastAPI:
         book = rt.prices.book(rt.price_league)
         cpd = book.chaos_per_divine
         run_json = None
-        if state.run is not None:
-            # loot so far = snapshots already taken during this run (hideout trips)
-            with store() as s:
-                run_json = views.run_rows(s, book, [state.run], now)[0].to_json(cpd)
-        p = rt.prices.status(rt.price_league)
         with store() as s:
+            if state.run is not None:
+                # loot so far = snapshots already taken during this run (hideout trips)
+                run_json = views.run_rows(s, book, [state.run], now)[0].to_json(cpd)
             latest = s.latest_value(rt.league)
+        p = rt.prices.status(rt.price_league)
         value = None
         if latest is not None:
             at, value_chaos, rate = latest
@@ -103,9 +101,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "loot": {
                 "enabled": rt.loot.enabled,
                 "reason": rt.loot.reason,
-                "session": SessionStore(rt.cfg.session_path).health()
-                if rt.cfg.auth == "session"
-                else None,
+                "session": rt.session_health(),
                 "last": None
                 if last is None
                 else {
@@ -127,7 +123,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             span = sessions.find(s, session)
             if span is None:
                 raise HTTPException(404, "no such session")
-            rows = views.run_rows(s, book, sessions.runs_of(s, span), now)
+            rows = views.run_rows(s, book, sessions.runs_of(s, span), now, rt.values)
         return {
             "chaos_per_divine": cpd,
             "runs": [r.to_json(cpd) for r in rows[: min(limit, 2000)]],
@@ -148,7 +144,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
         book = rt.prices.book(rt.price_league)
         with store() as s:
             return {"chaos_per_divine": book.chaos_per_divine,
-                    "sessions": sessions.history(s, book, rt.now())}  # fmt: skip
+                    "sessions": sessions.history(s, book, rt.now(), rt.values)}  # fmt: skip
 
     @app.post("/api/sessions/new")
     def new_session() -> dict[str, Any]:
@@ -273,7 +269,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
         book = rt.prices.book(rt.price_league)
         with store() as s:
             return {
-                **overview.holdings(s, book, tabs.split(",")),
+                **overview.holdings(s, book, tabs.split(","), cache=rt.values),
                 "loot_enabled": rt.loot.enabled,
             }
 

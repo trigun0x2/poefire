@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from poefire.pricing.book import PriceBook
 from poefire.store import Store
 from poefire.tracker import Run, RunStatus
+from poefire.web.cache import SETTLED_AFTER, BookCache
 from poefire.web.views import Json, RunRow, _iso, _round, run_rows
 
 INIT_KEY = "sessions_initialized"
@@ -100,12 +101,36 @@ def summary(span: Span, rows: list[RunRow], chaos_per_divine: float | None, now:
     }
 
 
-def history(store: Store, book: PriceBook, now: datetime) -> list[Json]:
-    """Every session with at least one map (and the current one), newest first."""
+def history(store: Store, book: PriceBook, now: datetime,
+            cache: BookCache | None = None) -> list[Json]:  # fmt: skip
+    """Every session with at least one map (and the current one), newest first. A past
+    session's summary is kept in `cache` once all its maps have settled: it only changes
+    with the prices."""
     out = []
     for span in reversed(spans(store)):
+        key = ("session", span.id, span.start, span.end)
+        if cache is not None and not span.current:
+            hit = cache.get(book, key)
+            if hit is not None:
+                if hit["maps"]:
+                    out.append(hit)
+                continue
         runs = runs_of(store, span)
         if not runs and not span.current:
+            if cache is not None:
+                cache.put(book, key, {"maps": 0})
             continue
-        out.append(summary(span, run_rows(store, book, runs, now), book.chaos_per_divine, now))
+        rows = run_rows(store, book, runs, now, cache)
+        result = summary(span, rows, book.chaos_per_divine, now)
+        if (
+            cache is not None
+            and not span.current
+            and all(
+                now - (r.run.ended_at or r.run.last_activity) > SETTLED_AFTER
+                and r.run.status is RunStatus.FINISHED
+                for r in rows
+            )
+        ):
+            cache.put(book, key, result)
+        out.append(result)
     return out

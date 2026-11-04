@@ -444,7 +444,9 @@ let viewSession = null; // a past session's id; null = the current session
 let currentRuns = null; // the current session (the sidebar always shows it)
 let sessionsData = null;
 
-async function pollRuns() {
+/** Refreshes the Session page. The session history is only fetched when it can have changed
+ * (a map ended, sessions changed, the page was opened), not on the 15 s timer. */
+async function pollRuns({ sessions = true } = {}) {
   currentRuns = await api("/api/runs?limit=200");
   runsData = viewSession == null ? currentRuns : await api(`/api/runs?session=${viewSession}&limit=500`);
   renderSession();
@@ -452,7 +454,7 @@ async function pollRuns() {
   renderSidebarStats();
   renderRuns();
   await renderDetail();
-  loadSessions().catch(() => {});
+  if (sessions || !sessionsData) loadSessions().catch(() => {});
 }
 
 async function loadSessions() {
@@ -1349,6 +1351,7 @@ function route() {
   if (name === "settings") loadSettings().catch((e) => setStatus("set-save-status", `✗ ${e.message}`, "bad"));
   if (name === "overview") loadOverview().catch(() => {});
   if (name === "campaign") loadCampaign().catch(() => {});
+  if (name === "session" && runsData) loadSessions().catch(() => {});
 }
 window.addEventListener("hashchange", route);
 
@@ -1362,10 +1365,20 @@ makeSortable("ov-items-table", "items", itemsSort, () => { if (ovItems) renderHo
   await loadLeagues().catch(() => {});
   await pollStatus();
   if (!runsData) await pollRuns();
-  setInterval(pollStatus, 1000);
-  setInterval(pollRuns, 15000);
-  setInterval(tickTimer, 250);
-  setInterval(() => { if (!$("campaign-view").hidden) tickCampaign(); }, 250);
-  setInterval(() => { if (!$("campaign-view").hidden) loadCampaign().catch(() => {}); }, 2000);
-  setInterval(() => { if (!$("overview-view").hidden) loadOverview().catch(() => {}); }, 60000);
+  // Polling only redraws the page: tracking, snapshots and prices run in the app itself.
+  // While the window is minimized or hidden nothing is fetched or drawn; it catches up at once
+  // when it's shown again.
+  const shown = (view) => !document.hidden && (!view || !$(view).hidden);
+  setInterval(() => { if (shown()) pollStatus(); }, 1000);
+  setInterval(() => { if (shown()) pollRuns({ sessions: false }); }, 15000);
+  setInterval(() => { if (shown()) tickTimer(); }, 250);
+  setInterval(() => { if (shown("campaign-view")) tickCampaign(); }, 250);
+  setInterval(() => { if (shown("campaign-view")) loadCampaign().catch(() => {}); }, 2000);
+  setInterval(() => { if (shown("overview-view")) loadOverview().catch(() => {}); }, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    pollStatus().then(() => pollRuns()).catch(() => {});
+    if (shown("campaign-view")) loadCampaign().catch(() => {});
+    if (shown("overview-view")) loadOverview().catch(() => {});
+  });
 })();

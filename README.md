@@ -350,7 +350,8 @@ Every event carries `ts`, the client's local time as logged. System messages mus
 SQLite tables: `runs`, `run_segments` (active intervals), `events` (every parsed event, tagged
 with the run it happened in), `kv` (log cursor and tracker state), `snapshots` and
 `snapshot_items` (only the latest snapshots keep their items), `loot` (per-item changes,
-tagged with run and kind), and `price_cache` (poe.ninja tables per league).
+tagged with run and kind), and `price_cache` (poe.ninja tables per league). Log events older
+than 90 days are deleted once a day; nothing reads them.
 
 Each poll commits its events, run updates, byte offset and tracker state in one transaction.
 On restart, the tracker resumes from the saved offset if the log file is unchanged, so

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from poefire.loot.diff import ItemDelta
 from poefire.loot.items import ItemEntry
-from poefire.pricing.book import PriceBook
+from poefire.pricing.book import PriceBook, Quote
 
 
 @dataclass(frozen=True)
@@ -34,10 +34,18 @@ class Valuation:
         return self.chaos / chaos_per_divine if chaos_per_divine else None
 
 
-def value_deltas(deltas: Iterable[ItemDelta], book: PriceBook) -> Valuation:
+def value_deltas(deltas: Iterable[ItemDelta], book: PriceBook,
+                 quotes: dict[str, Quote | None] | None = None) -> Valuation:  # fmt: skip
+    """`quotes` (item key -> price) lets many valuations share lookups. Only for loot, which
+    never holds uniques: for every other item the key covers what the price depends on."""
     v = Valuation()
     for d in deltas:
-        q = book.price(d.sample)
+        if quotes is None:
+            q = book.price(d.sample)
+        elif d.key in quotes:
+            q = quotes[d.key]
+        else:
+            q = quotes[d.key] = book.price(d.sample)
         item = ValuedItem(
             d.key, d.name, d.quantity, q.chaos_each if q else None, d.sample.get("icon"),
             q.source if q else None,

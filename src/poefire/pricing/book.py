@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import re
 from collections import defaultdict
 from collections.abc import Iterable
@@ -40,10 +41,15 @@ def _links(raw: Json) -> int:
     return max(groups.values(), default=0)
 
 
+_versions = itertools.count(1)
+
+
 class PriceBook:
-    """Built from (source, type, lines) triples. Exchange prices override stash prices."""
+    """Built from (source, type, lines) triples. Exchange prices override stash prices.
+    Each book gets a new `version`: caches of values keyed by it go stale with the prices."""
 
     def __init__(self, tables: Iterable[tuple[str, str, list[PriceLine]]]) -> None:
+        self.version = next(_versions)
         self.fungible: dict[str, Quote] = {}  # name -> quote
         self.uniques: dict[str, list[tuple[PriceLine, str]]] = defaultdict(list)
         self.maps: dict[tuple[str, int | None], Quote] = {}

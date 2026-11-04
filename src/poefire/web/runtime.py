@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from poefire import __version__, campaign, wiring
+from poefire.api.session import SessionStore
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
 from poefire.hotkey import GlobalHotkey, HotkeyError, beep
@@ -40,6 +41,7 @@ from poefire.updater import (
     start_install,
 )
 from poefire.web import sessions
+from poefire.web.cache import BookCache
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,7 @@ FALLBACK_LEAGUES = ("Standard", "Hardcore")
 
 
 UPDATE_CHECK_EVERY = 6 * 3600
+EVENT_RETENTION = timedelta(days=90)
 EXIT_GRACE = 15  # seconds the app gets to close before an update force-exits it
 
 
@@ -112,6 +115,8 @@ class AppRuntime:
         self._auto_recorder = recorder is True
 
         self.campaign = CampaignTracker(self._store, now)  # under _lock, like the tail
+        self.values = BookCache()  # loot values of settled maps, sessions, stash (per prices)
+        self._session_health: tuple[Any, dict[str, Any]] | None = None
         self.hotkey: GlobalHotkey | None = None  # registered by start()
         self.hotkey_error: str | None = None
         self.hotkey_last: tuple[str, datetime] | None = None
@@ -311,15 +316,21 @@ class AppRuntime:
                 self._store.delete_runs([r.id for r in runs])
                 if span.id:
                     self._store.delete_session(span.id)
+            self.values.clear()  # cached values of the deleted maps and session
 
     # --- campaign runs (shares the tail thread's connection and lock) ---
+
+    def _personal_best(self, runs: list[campaign.CampaignRun]) -> campaign.CampaignRun | None:
+        """The best finished run, with its splits (the list is read without them)."""
+        pb = campaign.personal_best(runs)
+        return self._store.get_campaign_run(pb.id) if pb is not None and pb.id else pb
 
     def campaign_overview(self, limit: int = 200) -> dict[str, Any]:
         now = self.now()
         with self._lock:
-            runs = self._store.list_campaign_runs(limit)
+            runs = self._store.list_campaign_runs(limit, splits=False)
             active = self.campaign.active
-        pb = campaign.personal_best(runs)
+            pb = self._personal_best(runs) if active else campaign.personal_best(runs)
         return {
             "active": campaign.run_detail(active, now, pb) if active else None,
             "pb": campaign.run_summary(pb, now) if pb else None,
@@ -329,10 +340,10 @@ class AppRuntime:
     def campaign_run(self, run_id: int) -> dict[str, Any] | None:
         with self._lock:
             run = self._store.get_campaign_run(run_id)
-            runs = self._store.list_campaign_runs(1000)
+            pb = self._personal_best(self._store.list_campaign_runs(1000, splits=False))
         if run is None:
             return None
-        return campaign.run_detail(run, self.now(), campaign.personal_best(runs))
+        return campaign.run_detail(run, self.now(), pb)
 
     def campaign_start(self, character: str | None = None) -> None:
         with self._lock:
@@ -449,6 +460,37 @@ class AppRuntime:
         log.warning("still running %ss after the update asked to exit; exiting now", EXIT_GRACE)
         os._exit(0)
 
+    def session_health(self) -> dict[str, Any] | None:
+        """The POESESSID's health for the status bar; re-read only when its file changes."""
+        if self.cfg.auth != "session":
+            return None
+        path = self.cfg.session_path
+        try:
+            st = path.stat()
+            stamp: Any = (str(path), st.st_mtime_ns, st.st_size, os.environ.get("POESESSID"))
+        except OSError:
+            stamp = (str(path), None, None, os.environ.get("POESESSID"))
+        cached = self._session_health
+        if cached is None or cached[0] != stamp:
+            cached = (stamp, SessionStore(path).health())
+            self._session_health = cached
+        return cached[1]
+
+    def _maintenance_loop(self) -> None:
+        """Once a day: drop log events older than EVENT_RETENTION (nothing reads them)."""
+        if self._stop.wait(30):
+            return
+        while True:
+            try:
+                with Store(self.cfg.db_path) as store:
+                    removed = store.prune_events(self.now() - EVENT_RETENTION)
+                if removed:
+                    log.info("removed %d log events older than %s", removed, EVENT_RETENTION)
+            except Exception:
+                log.exception("event clean-up failed")
+            if self._stop.wait(24 * 3600):
+                return
+
     def _update_loop(self) -> None:
         if self.update.can_install:  # versions staged by earlier updates
             with contextlib.suppress(OSError):
@@ -479,6 +521,7 @@ class AppRuntime:
             "prices", lambda: self.prices.run_forever(lambda: self.price_league, self._stop)
         )
         self._spawn("updates", self._update_loop)
+        self._spawn("maintenance", self._maintenance_loop)
         self._build_hotkey()
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:

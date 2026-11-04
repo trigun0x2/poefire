@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from poefire.pricing.book import PriceBook
+from poefire.pricing.book import PriceBook, Quote
 from poefire.pricing.valuation import Valuation, is_worth_showing, value_deltas
 from poefire.store import Store
 from poefire.tracker import Run, RunStatus
+from poefire.web.cache import SETTLED_AFTER, BookCache
 
 type Json = dict[str, Any]
 
@@ -49,15 +50,34 @@ def _round(v: float | None, nd: int = 2) -> float | None:
     return None if v is None else round(v, nd)
 
 
-def run_rows(store: Store, book: PriceBook, runs: Sequence[Run], now: datetime) -> list[RunRow]:
-    tracked = store.runs_with_loot_data([r.id for r in runs])
+def _settled(run: Run, now: datetime) -> bool:
+    """Finished long enough ago that its loot can't change any more."""
+    end = run.ended_at or run.last_activity
+    return run.status is RunStatus.FINISHED and now - end > SETTLED_AFTER
+
+
+def run_rows(store: Store, book: PriceBook, runs: Sequence[Run], now: datetime,
+             cache: BookCache | None = None) -> list[RunRow]:  # fmt: skip
+    """Runs with their loot value. Loot is loaded for all runs at once; values of settled
+    runs come from `cache` when given."""
+    values: dict[str, tuple[Valuation, bool]] = {}
+    if cache is not None:
+        for r in runs:
+            if (hit := cache.get(book, ("run", r.id))) is not None:
+                values[r.id] = hit
+    missing = [r for r in runs if r.id not in values]
+    if missing:
+        ids = [r.id for r in missing]
+        tracked = store.runs_with_loot_data(ids)
+        loot = store.runs_loot(ids)
+        quotes: dict[str, Quote | None] = {}
+        for r in missing:
+            value = (value_deltas(loot.get(r.id, []), book, quotes), r.id in tracked)
+            values[r.id] = value
+            if cache is not None and _settled(r, now):
+                cache.put(book, ("run", r.id), value)
     return [
-        RunRow(
-            r,
-            value_deltas(store.run_loot(r.id), book),
-            r.id in tracked,
-            r.active_seconds(now if r.status is RunStatus.ACTIVE else None),
-        )
+        RunRow(r, *values[r.id], r.active_seconds(now if r.status is RunStatus.ACTIVE else None))
         for r in runs
     ]
 
