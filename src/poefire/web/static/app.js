@@ -1149,6 +1149,8 @@ function renderCampaign() {
   $("cp-char").innerHTML = r?.character
     ? `${esc(r.character)} <a href="#builds" class="cp-builds" data-char="${esc(r.character)}" title="This character's build at each level">builds</a>`
     : "—";
+  $("cp-mule").hidden = !r?.mule;
+  $("cp-mule").title = r?.mule ? `This run started with a Ranger mule (${r.mule}); the timer kept running and its splits were dropped.` : "";
   $("cp-class").textContent = r?.class || "—";
   $("cp-class").title = r?.base_class && r.base_class !== r.class ? r.base_class : "";
   $("cp-level").textContent = r?.level ?? "—";
@@ -1229,7 +1231,7 @@ function renderCampaignRuns() {
     const t = r.status === "running" ? cpLive(r) : r;
     return `<tr data-id="${r.id}" class="${r.id === shownId ? "selected" : ""}">
       <td>${mark}${dateTimeOf(r.started_at)}</td>
-      <td>${esc(r.character || "—")}</td>
+      <td>${esc(r.character || "—")}${r.mule ? ` <span class="chip mule" title="Started with a Ranger mule (${esc(r.mule)})">muled</span>` : ""}</td>
       <td>${classLabel(r)}</td>
       <td class="num">${r.level ?? "—"}</td>
       <td class="num">${r.act ? (r.act > 10 ? "E" : r.act) : "—"}</td>

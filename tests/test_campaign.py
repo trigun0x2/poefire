@@ -253,3 +253,79 @@ def test_toggle_api(env: tuple[TestClient, AppRuntime, Path]) -> None:
     assert client.post("/api/campaign/resume", headers=H).json()["active"]["paused"] is False
     assert rt.hotkey_json()["last_action"] == "paused"
     rt.stop()
+
+
+def test_ranger_mule_is_tagged_and_the_timer_keeps_going(tmp_path: Path) -> None:
+    store = Store(tmp_path / "db.sqlite3")
+    tracker = CampaignTracker(store, lambda: T0)
+    run = tracker.start()
+    log = Log()
+    log.wait(1)
+    log.enter("1_1_1", "The Twilight Strand")  # the mule
+    log.wait(20)
+    log.level(2, "Ranger", "MuleBoy")
+    log.line(": MuleBoy has been slain.")
+    log.enter("1_1_town", "Lioneye's Watch")
+    log.wait(30)
+    log.enter("1_1_1", "The Twilight Strand")  # the real character, a new one
+    real_entry = log.t
+    log.wait(25)
+    log.level(2, "Witch", "RealDeal")
+    log.wait(40)
+    log.enter("1_1_town", "Lioneye's Watch")
+    log.level(3, "Witch", "RealDeal")
+    feed(tracker, log)
+    assert tracker.active is run and run.status == "running"  # the timer kept going
+    assert (run.character, run.char_class, run.level, run.mule) == (
+        "RealDeal",
+        "Witch",
+        3,
+        "MuleBoy",
+    )
+    assert run.deaths == 0  # the mule's death doesn't count
+    zones = [(s.name, s.at) for s in run.splits if s.kind == "zone"]
+    assert zones[0] == ("The Twilight Strand", real_entry)  # the real character's first visit
+    assert [s.name for s in run.splits if s.kind == "zone"] == ["The Twilight Strand",
+                                                                "Lioneye's Watch"]  # fmt: skip
+    assert [s.level for s in run.splits if s.kind == "level"] == [2, 3]
+    saved = store.get_campaign_run(run.id or 0)
+    assert saved is not None and saved.mule == "MuleBoy"
+    store.close()
+
+
+def test_mule_before_a_named_character(tmp_path: Path) -> None:
+    store = Store(tmp_path / "db.sqlite3")
+    tracker = CampaignTracker(store, lambda: T0)
+    run = tracker.start("RealDeal")
+    log = Log()
+    log.wait(1)
+    log.enter("1_1_1", "The Twilight Strand")
+    log.level(2, "Ranger", "MuleBoy")
+    log.wait(30)
+    log.enter("1_1_1", "The Twilight Strand")
+    log.level(2, "Witch", "RealDeal")
+    feed(tracker, log)
+    assert (run.character, run.mule, run.level) == ("RealDeal", "MuleBoy", 2)
+    store.close()
+
+
+def test_not_a_mule(tmp_path: Path) -> None:
+    store = Store(tmp_path / "db.sqlite3")
+    tracker = CampaignTracker(store, lambda: T0)
+    run = tracker.start()
+    log = Log()
+    log.enter("1_1_1", "The Twilight Strand")
+    log.level(2, "Ranger", "Speedy")
+    log.line(": Friend (Witch) is now level 2")  # a party member's fresh character
+    log.level(3, "Ranger", "Speedy")  # the "mule" keeps levelling: it was the real one
+    feed(tracker, log)
+    assert (run.character, run.mule, run.level) == ("Speedy", None, 3)
+    # a Ranger that went past Lioneye's Watch isn't a mule either
+    run2 = tracker.start()
+    log.enter("1_1_1", "The Twilight Strand")
+    log.level(2, "Ranger", "Speedy")
+    log.enter("1_1_2", "The Coast")
+    log.line(": Other (Witch) is now level 2")
+    feed(tracker, log)
+    assert (run2.character, run2.mule) == ("Speedy", None)
+    store.close()

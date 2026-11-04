@@ -20,7 +20,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -177,6 +177,11 @@ CREATE TABLE build_snapshots (
 CREATE INDEX build_snapshots_character ON build_snapshots(character, level)
 """
 
+_SCHEMA_V9 = """
+-- Campaign runs started with a Ranger mule: its name.
+ALTER TABLE campaign_runs ADD COLUMN mule TEXT
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -186,6 +191,7 @@ _MIGRATIONS = (
     _SCHEMA_V6,
     _SCHEMA_V7,
     _SCHEMA_V8,
+    _SCHEMA_V9,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -561,12 +567,13 @@ class Store:
             _dt(run.started_at), _dt(run.ended_at), run.status, run.character, run.char_class,
             run.level, run.deaths, run.act, run.load_ms, run.notes,
             json.dumps([s.to_json() for s in run.splits]), _dt(run.paused_at), run.paused_ms,
+            run.mule,
         )  # fmt: skip
         if run.id is None:
             cur = self.conn.execute(
                 "INSERT INTO campaign_runs (started_at, ended_at, status, character, class, "
-                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms, mule) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
             run.id = int(cur.lastrowid or 0)
@@ -574,7 +581,7 @@ class Store:
             self.conn.execute(
                 "UPDATE campaign_runs SET started_at=?, ended_at=?, status=?, character=?, "
                 "class=?, level=?, deaths=?, act=?, load_ms=?, notes=?, splits=?, paused_at=?, "
-                "paused_ms=? WHERE id=?",
+                "paused_ms=?, mule=? WHERE id=?",
                 (*values, run.id),
             )
         return run.id
@@ -590,6 +597,7 @@ class Store:
             notes=row["notes"], splits=[Split.from_json(s) for s in json.loads(row["splits"])],
             paused_at=datetime.fromisoformat(row["paused_at"]) if row["paused_at"] else None,
             paused_ms=row["paused_ms"],
+            mule=row["mule"],
         )  # fmt: skip
 
     def list_campaign_runs(self, limit: int = 200, splits: bool = True) -> list[CampaignRun]:
@@ -599,7 +607,7 @@ class Store:
             if splits
             else (
                 "id, started_at, ended_at, status, character, class, level, deaths, act, load_ms, "
-                "notes, paused_at, paused_ms, '[]' AS splits"
+                "notes, paused_at, paused_ms, mule, '[]' AS splits"
             )
         )
         rows = self.conn.execute(

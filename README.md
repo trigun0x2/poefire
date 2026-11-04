@@ -193,6 +193,11 @@ The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit 
   millisecond counter, from `Got Instance Details` to `You have entered ...`.
 - **Class:** from the level-up lines (`Name (Class) is now level N`), so it shows the
   ascendancy once you've ascended. Level-ups and deaths are recorded too.
+- **Ranger mule:** a run that starts with a throwaway Ranger (level 2 at most, never past
+  Lioneye's Watch) before the real character is made keeps its timer running and is tagged
+  "muled". The mule's level-ups, zones and deaths are dropped, so the real character's first
+  visits are the splits. If the "mule" keeps levelling, it was the real character after all and
+  the tag is removed.
 - Each act split shows the difference to your best finished run (PB). Every run is kept with its
   notes, which you can edit at any time; past runs can be deleted.
 

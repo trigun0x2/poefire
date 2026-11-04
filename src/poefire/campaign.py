@@ -102,6 +102,7 @@ class CampaignRun:
     splits: list[Split] = field(default_factory=list)
     paused_at: datetime | None = None  # set while the timer is paused
     paused_ms: int = 0  # earlier pauses, in total
+    mule: str | None = None  # the Ranger mule this run started with (its name)
 
     @property
     def running(self) -> bool:
@@ -127,6 +128,36 @@ class CampaignRun:
         return [s for s in self.splits if s.kind == SplitKind.ACT]
 
 
+# A "mule": a throwaway Ranger made at the start of a run (to grab early items), which only
+# reaches level 2 and at most Lioneye's Watch before the real character is created.
+MULE_CLASS = "Ranger"
+MULE_MAX_LEVEL = 2
+MULE_ZONES = frozenset({"The Twilight Strand", "Lioneye's Watch"})
+
+
+def _mule_zones_only(run: CampaignRun) -> bool:
+    zones = {s.name for s in run.splits if s.kind == SplitKind.ZONE}
+    return (run.act or 1) <= 1 and zones <= MULE_ZONES
+
+
+def is_mule_of(run: CampaignRun) -> bool:
+    """The run's character looks like a mule (another character just levelled up)."""
+    return (
+        run.char_class == MULE_CLASS
+        and (run.level or 1) <= MULE_MAX_LEVEL
+        and _mule_zones_only(run)
+    )
+
+
+def is_mule(event: LevelUp, run: CampaignRun) -> bool:
+    """`event` is a mule's level-up (before the run's named character levelled)."""
+    return (
+        event.character_class == MULE_CLASS
+        and event.level <= MULE_MAX_LEVEL
+        and _mule_zones_only(run)
+    )
+
+
 class CampaignTracker:
     """Feeds log lines into the active campaign run and saves it after every change.
     Not thread-safe: the runtime calls it under its lock."""
@@ -137,6 +168,7 @@ class CampaignTracker:
         self.active: CampaignRun | None = store.active_campaign_run()
         self._load_start: int | None = None
         self._next_act: int | None = None
+        self._last_zone: tuple[str, int, datetime] | None = None  # campaign zone you're in
 
     # --- manual controls ---
 
@@ -147,7 +179,7 @@ class CampaignTracker:
         run = CampaignRun(started_at=now, character=(character or "").strip() or None)
         run.id = self.store.save_campaign_run(run)
         self.active = run
-        self._load_start = self._next_act = None
+        self._load_start = self._next_act = self._last_zone = None
         return run
 
     def finish(self) -> CampaignRun | None:
@@ -245,6 +277,8 @@ class CampaignTracker:
                 self.store.save_campaign_run(run)
                 self._end("finished", event.ts)
                 return
+        if act is not None and act == run.act:
+            self._last_zone = (event.zone, act, event.ts)
         if (
             act is not None
             and act == run.act
@@ -256,11 +290,45 @@ class CampaignTracker:
             self._split(run, SplitKind.ZONE, event.zone, event.ts)
         self.store.save_campaign_run(run)
 
+    def _drop_mule(self, run: CampaignRun, mule: str) -> None:
+        """The timer keeps running; the mule's level-ups, zones and deaths don't count, so the
+        real character's first visits are its splits. The real character is already in its
+        first zone (it levels there), so that visit is kept."""
+        run.mule = mule
+        run.splits = [s for s in run.splits if s.kind == SplitKind.ACT]
+        run.deaths = 0
+        run.level = None
+        if self._last_zone is not None:
+            zone, act, at = self._last_zone
+            run.splits.append(Split(SplitKind.ZONE, zone, act, at, run.rta(at), run.igt(at)))
+
     def _levelled(self, run: CampaignRun, event: LevelUp) -> None:
         if run.character is None:
             run.character = event.character
         elif event.character.casefold() != run.character.casefold():
-            return  # another character
+            if run.level is None and run.mule is None and is_mule(event, run):
+                # The run was started for a named character and a Ranger mule levelled first.
+                self._drop_mule(run, event.character)
+                self.store.save_campaign_run(run)
+                return
+            elif (
+                run.level is not None
+                and run.mule is None
+                and is_mule_of(run)
+                and event.level <= MULE_MAX_LEVEL
+            ):  # a freshly made character
+                # The run's character was a Ranger mule; this is the real character.
+                self._drop_mule(run, run.character)
+                run.character = event.character
+            elif (
+                run.mule is not None
+                and event.character.casefold() == run.mule.casefold()
+                and event.level > MULE_MAX_LEVEL
+            ):
+                # The "mule" kept levelling: it was the real character after all.
+                run.character, run.mule = event.character, None
+            else:
+                return  # another character
         run.character = event.character
         run.char_class = event.character_class
         run.level = event.level
@@ -292,6 +360,7 @@ def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
         "igt": round(run.igt(now), 1),
         "load_seconds": round(run.load_ms / 1000, 1),
         "paused": run.paused,
+        "mule": run.mule,
         "notes": run.notes,
     }
 
