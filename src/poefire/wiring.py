@@ -51,7 +51,9 @@ def account_api(cfg: Config) -> AccountApi:
         sessions = SessionStore(cfg.session_path)
         poesessid = sessions.load()
         if not poesessid:
-            raise ConfigError("no POESESSID saved; paste it in Settings (or run `poefire-cli set-session`)")
+            raise ConfigError(
+                "no POESESSID saved; paste it in Settings (or run `poefire-cli set-session`)"
+            )
         return SessionApi(
             poesessid, cfg.account_name, session_user_agent(cfg), cfg.realm,
             on_auth=sessions.record_auth,
