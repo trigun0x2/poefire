@@ -31,6 +31,7 @@ from typing import Any
 import httpx
 
 REPO = "trigun0x2/poefire"
+APP_EXE = "poefire.exe"  # the windowed app (poefire-cli.exe is the command line)
 API = f"https://api.github.com/repos/{REPO}/releases"
 ASSET_RE = re.compile(r"^poefire-(?P<version>[^/]+)-windows-x64\.zip$")
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?$")
@@ -168,8 +169,8 @@ class Updater:
                     raise UpdateError(f"unsafe path in update archive: {member.filename}")
             z.extractall(target)
         archive.unlink(missing_ok=True)
-        if not (target / "poefire-ui.exe").exists():
-            raise UpdateError("the update archive doesn't contain poefire-ui.exe")
+        if not (target / APP_EXE).exists():
+            raise UpdateError(f"the update archive doesn't contain {APP_EXE}")
         return target
 
 
@@ -225,7 +226,7 @@ if %ERRORLEVEL% GEQ 8 (
 ) else (
   rmdir /S /Q "%SRC%"
 )
-start "" "%DST%\poefire-ui.exe"
+start "" "%DST%\{app}"
 (goto) 2>nul & del "%~f0"
 """
 
@@ -234,7 +235,8 @@ def launch_swap(staged: Path, target: Path, log: Path) -> Path:
     """Start the detached script that installs `staged` over `target` once we exit."""
     script = staged.parent / "apply-update.cmd"
     script.write_text(
-        SWAP_SCRIPT.format(pid=os.getpid(), src=staged, dst=target, log=log), encoding="utf-8"
+        SWAP_SCRIPT.format(pid=os.getpid(), src=staged, dst=target, log=log, app=APP_EXE),
+        encoding="utf-8",
     )
     # a hidden console (not DETACHED_PROCESS): batch commands need one
     _spawn(["cmd.exe", "/c", str(script)], NEW_PROCESS_GROUP | NO_WINDOW, staged.parent)
@@ -257,7 +259,7 @@ def _spawn(args: list[str], flags: int, cwd: Path) -> None:
 
 def launch_apply(staged: Path, target: Path, log: Path) -> None:
     """Start the staged new version to install itself over `target` once we exit."""
-    exe = staged / "poefire-ui.exe"
+    exe = staged / APP_EXE
     args = [str(exe), "apply-update", "--source", str(staged), "--target", str(target),
             "--pid", str(os.getpid()), "--log", str(log)]  # fmt: skip
     _spawn(args, DETACHED | NEW_PROCESS_GROUP, staged)
@@ -269,7 +271,7 @@ def start_install(staged: Path, target: Path, log: Path) -> str:
         launch_apply(staged, target, log)
         return "app"
     except OSError as e:
-        _log(log, f"could not start {staged / 'poefire-ui.exe'} ({e}); using the batch updater")
+        _log(log, f"could not start {staged / APP_EXE} ({e}); using the batch updater")
         launch_swap(staged, target, log)
         return "script"
 
@@ -371,7 +373,7 @@ def apply_update(
 
 
 def _restart(target: Path) -> None:
-    exe = target / "poefire-ui.exe"
+    exe = target / APP_EXE
     _spawn([str(exe)], DETACHED | NEW_PROCESS_GROUP, target)
 
 

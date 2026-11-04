@@ -100,8 +100,9 @@ jobs:
 
       - name: Smoke test the build
         run: |
-          ./dist/poefire/poefire.exe --help
-          ./dist/poefire/poefire.exe ui --no-browser --port 8460 &
+          ls dist/poefire/poefire.exe dist/poefire/poefire-cli.exe dist/poefire/poefire-ui.exe
+          ./dist/poefire/poefire-cli.exe --help
+          ./dist/poefire/poefire-cli.exe ui --no-browser --port 8460 &
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8460/ -o page.html && break
             sleep 1
@@ -109,7 +110,7 @@ jobs:
           grep -q "<title>poefire</title>" page.html
           curl -fsS -o /dev/null http://127.0.0.1:8460/static/app.js
           curl -fsS http://127.0.0.1:8460/api/status
-          taskkill //F //IM poefire.exe
+          taskkill //F //IM poefire-cli.exe
 
       - name: Smoke test the native window (DLLs marked as downloaded, like an extracted zip)
         shell: pwsh
@@ -118,7 +119,8 @@ jobs:
             Set-Content -Path $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
           }
           $env:APPDATA = "$PWD\appdata"
-          $p = Start-Process dist/poefire/poefire.exe -ArgumentList "ui","--window","--port","8461" `
+          # the console build prints to stdout; the windowed poefire.exe runs in the next step
+          $p = Start-Process dist/poefire/poefire-cli.exe -ArgumentList "ui","--window","--port","8461" `
             -RedirectStandardOutput win.out -RedirectStandardError win.err -PassThru
           Start-Sleep -Seconds 20
           Get-Content win.out, win.err
@@ -140,15 +142,17 @@ jobs:
           Copy-Item dist/poefire staged -Recurse
           Set-Content staged/_internal/marker.txt "new version"
           $old = Start-Process ping -ArgumentList "-n","5","127.0.0.1" -WindowStyle Hidden -PassThru
-          # not -Wait: that also waits for the app apply-update restarts, which keeps running
+          # Run it the way v0.11.0 and older install updates (staged poefire-ui.exe). Not -Wait:
+          # that also waits for the app apply-update restarts, which keeps running.
           $p = Start-Process staged/poefire-ui.exe -PassThru -ArgumentList `
             "apply-update","--source","$PWD\staged","--target","$PWD\installed","--pid",$old.Id,"--log","$PWD\update.log"
           if (-not $p.WaitForExit(120000)) { Write-Error "apply-update did not finish"; exit 1 }
           Get-Content update.log
           Start-Sleep -Seconds 3
-          $restarted = Get-Process poefire-ui -ErrorAction SilentlyContinue |
-            Where-Object { $_.Path -like "$PWD\installed\*" }
-          Get-Process poefire-ui -ErrorAction SilentlyContinue | Stop-Process -Force
+          # the updated app restarts as poefire.exe
+          $restarted = Get-Process poefire -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -eq "$PWD\installed\poefire.exe" }
+          Get-Process poefire, poefire-ui -ErrorAction SilentlyContinue | Stop-Process -Force
           if ($p.ExitCode -ne 0) { Write-Error "apply-update exited with $($p.ExitCode)"; exit 1 }
           if (-not $restarted) { Write-Error "the updated app was not restarted"; exit 1 }
           if (-not $old.HasExited) { Write-Error "did not wait for the old process"; exit 1 }

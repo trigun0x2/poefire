@@ -43,7 +43,7 @@ def account_api(cfg: Config) -> AccountApi:
     if cfg.auth == "oauth":
         tokens = token_manager(cfg)
         if not tokens.logged_in:
-            raise ConfigError("not logged in; run `poefire login`")
+            raise ConfigError("not logged in; run `poefire-cli login`")
         return PoeApi(tokens, tokens.oauth.user_agent, cfg.realm)
     if cfg.auth == "session":
         if not cfg.account_name:
@@ -51,7 +51,7 @@ def account_api(cfg: Config) -> AccountApi:
         sessions = SessionStore(cfg.session_path)
         poesessid = sessions.load()
         if not poesessid:
-            raise ConfigError("no POESESSID saved; paste it in Settings (or `poefire set-session`)")
+            raise ConfigError("no POESESSID saved; paste it in Settings (or run `poefire-cli set-session`)")
         return SessionApi(
             poesessid, cfg.account_name, session_user_agent(cfg), cfg.realm,
             on_auth=sessions.record_auth,

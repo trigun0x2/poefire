@@ -53,7 +53,7 @@ def make_zip(files: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
-GOOD_ZIP = make_zip({"poefire-ui.exe": b"MZ new ui", "poefire.exe": b"MZ new cli",
+GOOD_ZIP = make_zip({"poefire.exe": b"MZ new ui", "poefire-cli.exe": b"MZ new cli",
                      "_internal/base_library.zip": b"x"})  # fmt: skip
 
 
@@ -119,7 +119,7 @@ def test_stage_downloads_verifies_and_unpacks(tmp_path: Path) -> None:
     progress: list[tuple[int, int]] = []
     staged = u.stage(info, tmp_path, progress=lambda d, t: progress.append((d, t)))
     assert staged == tmp_path / "0.6.0"
-    assert (staged / "poefire-ui.exe").read_bytes() == b"MZ new ui"
+    assert (staged / "poefire.exe").read_bytes() == b"MZ new ui"
     assert (staged / "_internal" / "base_library.zip").exists()
     assert not list(tmp_path.glob("*.zip"))  # archive removed after unpacking
     assert progress[-1][0] == len(GOOD_ZIP)
@@ -135,7 +135,7 @@ def test_stage_rejects_bad_checksum(tmp_path: Path) -> None:
 
 
 def test_stage_rejects_path_traversal(tmp_path: Path) -> None:
-    evil = make_zip({"poefire-ui.exe": b"x", "../../evil.txt": b"pwned"})
+    evil = make_zip({"poefire.exe": b"x", "../../evil.txt": b"pwned"})
     u = make_updater(GitHub([release("0.6.0")], zip_bytes=evil))
     info = u.check()
     assert info is not None
@@ -148,7 +148,7 @@ def test_stage_requires_the_app(tmp_path: Path) -> None:
     u = make_updater(GitHub([release("0.6.0")], zip_bytes=make_zip({"readme.txt": b"hi"})))
     info = u.check()
     assert info is not None
-    with pytest.raises(UpdateError, match=r"poefire-ui\.exe"):
+    with pytest.raises(UpdateError, match=r"poefire\.exe"):
         u.stage(info, tmp_path)
 
 
@@ -159,9 +159,9 @@ def test_cannot_self_update_from_source() -> None:
 
 def test_swap_script_waits_copies_and_restarts(tmp_path: Path) -> None:
     script = updater.SWAP_SCRIPT.format(pid=1234, src=tmp_path / "s", dst=tmp_path / "d",
-                                        log=tmp_path / "u.log")  # fmt: skip
+                                        log=tmp_path / "u.log", app="poefire.exe")  # fmt: skip
     assert 'tasklist /FI "PID eq %PID%"' in script and 'set "PID=1234"' in script
-    assert "robocopy" in script and "poefire-ui.exe" in script
+    assert "robocopy" in script and '"%DST%\\poefire.exe"' in script
     assert "timeout /t" not in script  # needs a console, which the script doesn't have
 
 
@@ -241,10 +241,10 @@ def test_install_flow_stages_swaps_and_exits(
 def test_apply_update_waits_copies_retries_and_restarts(tmp_path: Path) -> None:
     src, dst, log = tmp_path / "staged", tmp_path / "app", tmp_path / "update.log"
     (src / "_internal").mkdir(parents=True)
-    (src / "poefire-ui.exe").write_bytes(b"new ui")
+    (src / "poefire.exe").write_bytes(b"new ui")
     (src / "_internal" / "lib.dll").write_bytes(b"new lib")
     dst.mkdir()
-    (dst / "poefire-ui.exe").write_bytes(b"old ui")
+    (dst / "poefire.exe").write_bytes(b"old ui")
     (dst / "config-kept.txt").write_text("mine")
     checks = iter([True, True, False])
     restarted: list[Path] = []
@@ -252,7 +252,7 @@ def test_apply_update_waits_copies_retries_and_restarts(tmp_path: Path) -> None:
                                 alive=lambda pid: next(checks), kill=lambda pid: None,
                                 restart=restarted.append)  # fmt: skip
     assert code == 0 and restarted == [dst]
-    assert (dst / "poefire-ui.exe").read_bytes() == b"new ui"
+    assert (dst / "poefire.exe").read_bytes() == b"new ui"
     assert (dst / "_internal" / "lib.dll").read_bytes() == b"new lib"
     assert (dst / "config-kept.txt").read_text() == "mine"
     assert "update applied: 2 files" in log.read_text()
@@ -263,7 +263,7 @@ def test_apply_update_ends_a_hung_app_and_reports_locked_files(
 ) -> None:
     src, dst, log = tmp_path / "staged", tmp_path / "app", tmp_path / "update.log"
     src.mkdir()
-    (src / "poefire-ui.exe").write_bytes(b"new")
+    (src / "poefire.exe").write_bytes(b"new")
     killed: list[int] = []
 
     def locked(a: Any, b: Any) -> Any:
@@ -287,7 +287,7 @@ def test_start_install_falls_back_to_the_script(
 
     def popen(args: list[str], **kw: Any) -> None:
         calls.append(args)
-        if args[0].endswith("poefire-ui.exe"):
+        if args[0].endswith("poefire.exe"):
             raise FileNotFoundError(args[0])
 
     monkeypatch.setattr("subprocess.Popen", popen)

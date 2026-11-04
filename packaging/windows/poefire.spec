@@ -1,4 +1,8 @@
-# PyInstaller spec for the Windows release: one folder, two executables sharing it.
+# PyInstaller spec for the Windows release: one folder, executables sharing it:
+#   poefire.exe      the app (its own window, no console), with the app icon
+#   poefire-cli.exe  the command line (console), no icon
+#   poefire-ui.exe   the same as poefire.exe, under its old name: installs from v0.11.0 and
+#                    earlier look for it to update themselves, and old shortcuts point at it
 # Build from the repository root:  pyinstaller packaging/windows/poefire.spec
 from pathlib import Path
 
@@ -17,8 +21,9 @@ a = Analysis(  # noqa: F821
 pyz = PYZ(a.pure)  # noqa: F821
 
 icon = str(root / "src" / "poefire" / "web" / "static" / "favicon.ico")  # Ember Gem app icon (same art as static/logo.png)
-common = dict(exclude_binaries=True, debug=False, strip=False, upx=False, icon=icon)
-cli = EXE(pyz, a.scripts, [], name="poefire", console=True, **common)  # noqa: F821
-gui = EXE(pyz, a.scripts, [], name="poefire-ui", console=False, **common)  # noqa: F821
+common = dict(exclude_binaries=True, debug=False, strip=False, upx=False)
+app = EXE(pyz, a.scripts, [], name="poefire", console=False, icon=icon, **common)  # noqa: F821
+cli = EXE(pyz, a.scripts, [], name="poefire-cli", console=True, **common)  # noqa: F821
+legacy = EXE(pyz, a.scripts, [], name="poefire-ui", console=False, icon=icon, **common)  # noqa: F821
 
-COLLECT(cli, gui, a.binaries, a.datas, name="poefire", strip=False, upx=False)  # noqa: F821
+COLLECT(app, cli, legacy, a.binaries, a.datas, name="poefire", strip=False, upx=False)  # noqa: F821

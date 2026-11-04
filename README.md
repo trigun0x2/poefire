@@ -20,8 +20,11 @@ Download `poefire-<version>-windows-x64.zip` from the latest
 own, for example `%LOCALAPPDATA%\Programs\poefire`. Avoid `Program Files`: the updater needs
 to write there.
 
-- `poefire-ui.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\poefire.log`.
-- `poefire.exe` is the command line, for example `poefire.exe set-session` or `poefire.exe runs`.
+- `poefire.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\poefire.log`.
+- `poefire-cli.exe` is the command line, for example `poefire-cli.exe set-session` or
+  `poefire-cli.exe runs`.
+- `poefire-ui.exe` is the old name of `poefire.exe`, kept so installs from v0.11.0 and earlier can
+  update themselves and old shortcuts keep working.
   Run with no arguments, it opens the window too.
 
 **Updates.** poefire checks GitHub for a new release on start and every 6 hours, and shows a
@@ -102,7 +105,8 @@ There are two ways to read your inventory and stash:
 
 **Session setup.** Log in on pathofexile.com in your browser and copy the `POESESSID` cookie
 (dev tools → Storage/Application → Cookies). Set `account_name` in `config.toml` to your full
-account name, including the `#1234` part. Then run `poefire set-session` and paste the cookie
+account name, including the `#1234` part. Then run `poefire-cli.exe set-session` (from source:
+`uv run poefire set-session`) and paste the cookie
 at the hidden prompt; it checks the cookie by listing your characters. The cookie is saved in
 `session.json` next to the database, readable only by you, and never in `config.toml`. You can
 use the `POE_SESSID` environment variable instead. When you log out of the website or the
