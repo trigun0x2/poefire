@@ -37,6 +37,7 @@ class SettingsIn(BaseModel):
     check_updates: bool | None = None
     update_channel: Literal["stable", "beta"] | None = None
     campaign_hotkey: str | None = None
+    build_snapshots: bool | None = None
     campaign_hotkey_sound: bool | None = None
 
 
@@ -107,6 +108,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "check_updates": cfg.check_updates,
         "update_channel": cfg.update_channel,
         "campaign_hotkey": cfg.campaign_hotkey,
+        "build_snapshots": cfg.build_snapshots,
         "campaign_hotkey_sound": cfg.campaign_hotkey_sound,
         "version": rt.update.current,
     }
@@ -181,6 +183,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
             except hotkey.HotkeyError as e:
                 raise SettingsError(f"campaign hotkey: {e}") from e
         changes["campaign_hotkey"] = spec
+    if body.build_snapshots is not None:
+        changes["build_snapshots"] = body.build_snapshots
     if body.campaign_hotkey_sound is not None:
         changes["campaign_hotkey_sound"] = body.campaign_hotkey_sound
     if body.snapshot_delay is not None:

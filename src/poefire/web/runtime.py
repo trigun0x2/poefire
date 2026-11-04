@@ -18,6 +18,7 @@ from typing import Any
 
 from poefire import __version__, campaign, wiring
 from poefire.api.session import SessionStore
+from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
 from poefire.hotkey import GlobalHotkey, HotkeyError, beep
@@ -115,6 +116,8 @@ class AppRuntime:
         self._auto_recorder = recorder is True
 
         self.campaign = CampaignTracker(self._store, now)  # under _lock, like the tail
+        self.builds = BuildWatcher(self._build_api, lambda: Store(cfg.db_path), now)
+        self.builds.enabled = cfg.build_snapshots
         self.values = BookCache()  # loot values of settled maps, sessions, stash (per prices)
         self._session_health: tuple[Any, dict[str, Any]] | None = None
         self.hotkey: GlobalHotkey | None = None  # registered by start()
@@ -164,6 +167,7 @@ class AppRuntime:
             )
             self.service.handlers.append(self._dispatch)
             self.service.line_observers.append(self.campaign.handle)
+            self.service.line_observers.append(self.builds.handle)
             if self._started:
                 self.service.start()
 
@@ -175,6 +179,12 @@ class AppRuntime:
             self.loot.reason = str(e)
             return
         self._install_recorder(rec)
+
+    def _build_api(self) -> Any:
+        """The loot tracker's website connection, shared so both respect one rate limit."""
+        rec = self.recorder
+        api = getattr(rec.snapshotter, "api", None) if rec is not None else None
+        return api if api is not None and hasattr(api, "get_build") else None
 
     def _install_recorder(self, rec: LootRecorder) -> None:
         self.recorder = rec
@@ -195,6 +205,7 @@ class AppRuntime:
         rebuild loot tracking (account, session cookie, tabs...)."""
         old = self.cfg
         self.cfg = cfg
+        self.builds.enabled = cfg.build_snapshots
         log_changed = (
             old.resolve_log_path() != cfg.resolve_log_path()
             or old.characters != cfg.characters
@@ -543,6 +554,7 @@ class AppRuntime:
 
     def stop(self) -> None:
         self._stop.set()
+        self.builds.stop()
         if self.hotkey is not None:
             self.hotkey.stop()
         if self.recorder is not None:

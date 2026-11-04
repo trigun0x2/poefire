@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from poefire.builds import BuildSnapshot
 from poefire.campaign import CampaignRun, Split
 from poefire.events import LogEvent, event_kind, event_payload_json
 from poefire.loot.diff import ItemDelta
@@ -18,7 +20,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -159,6 +161,22 @@ ALTER TABLE campaign_runs ADD COLUMN paused_at TEXT;
 ALTER TABLE campaign_runs ADD COLUMN paused_ms INTEGER NOT NULL DEFAULT 0
 """
 
+_SCHEMA_V8 = """
+-- Build snapshots (poefire.builds): raw website responses as zlib-compressed JSON, or the
+-- reason a level was missed (data NULL).
+CREATE TABLE build_snapshots (
+    id         INTEGER PRIMARY KEY,
+    character  TEXT NOT NULL,
+    league     TEXT,
+    class      TEXT,
+    level      INTEGER NOT NULL,
+    taken_at   TEXT NOT NULL,
+    data       BLOB,
+    error      TEXT
+);
+CREATE INDEX build_snapshots_character ON build_snapshots(character, level)
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -167,6 +185,7 @@ _MIGRATIONS = (
     _SCHEMA_V5,
     _SCHEMA_V6,
     _SCHEMA_V7,
+    _SCHEMA_V8,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -208,7 +227,10 @@ class Store:
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
-        self.conn.execute("BEGIN")
+        # IMMEDIATE takes the write lock up front: with several threads writing (log tail,
+        # loot snapshots, build snapshots), a deferred transaction that reads first can fail
+        # at once with "database is locked" instead of waiting its turn.
+        self.conn.execute("BEGIN IMMEDIATE")
         try:
             yield
         except BaseException:
@@ -644,3 +666,55 @@ class Store:
                     f"UPDATE {table} SET run_id = NULL WHERE run_id IN ({marks})", chunk
                 )
             self.conn.execute(f"DELETE FROM runs WHERE id IN ({marks})", chunk)
+
+    # --- build snapshots ---
+
+    def add_build_snapshot(self, snap: BuildSnapshot) -> int:
+        data = zlib.compress(json.dumps(snap.data).encode()) if snap.data is not None else None
+        cur = self.conn.execute(
+            "INSERT INTO build_snapshots (character, league, class, level, taken_at, data, error) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (snap.character, snap.league, snap.char_class, snap.level, _dt(snap.taken_at), data,
+             snap.error),
+        )  # fmt: skip
+        return int(cur.lastrowid or 0)
+
+    def build_characters(self) -> list[dict[str, Any]]:
+        """Characters with snapshots, most recently captured first."""
+        rows = self.conn.execute(
+            "SELECT character, MAX(taken_at) AS last_at, MAX(level) AS level, "
+            "COUNT(data) AS snapshots, COUNT(*) - COUNT(data) AS missed, "
+            "(SELECT class FROM build_snapshots b2 WHERE b2.character = b.character "
+            " ORDER BY id DESC LIMIT 1) AS class, "
+            "(SELECT league FROM build_snapshots b3 WHERE b3.character = b.character "
+            " AND league IS NOT NULL ORDER BY id DESC LIMIT 1) AS league "
+            "FROM build_snapshots b GROUP BY character ORDER BY last_at DESC"
+        )
+        return [dict(r) for r in rows]
+
+    def list_build_snapshots(self, character: str) -> list[BuildSnapshot]:
+        """A character's snapshots by level (without their data)."""
+        rows = self.conn.execute(
+            "SELECT id, character, league, class, level, taken_at, error, data IS NOT NULL AS ok "
+            "FROM build_snapshots WHERE character = ? ORDER BY level, id",
+            (character,),
+        )
+        return [
+            BuildSnapshot(r["character"], r["level"], datetime.fromisoformat(r["taken_at"]),
+                          r["league"], r["class"], {} if r["ok"] else None, r["error"], r["id"])
+            for r in rows
+        ]  # fmt: skip
+
+    def get_build_snapshot(self, snapshot_id: int) -> BuildSnapshot | None:
+        r = self.conn.execute(
+            "SELECT * FROM build_snapshots WHERE id = ?", (snapshot_id,)
+        ).fetchone()
+        if r is None:
+            return None
+        data = json.loads(zlib.decompress(r["data"])) if r["data"] is not None else None
+        return BuildSnapshot(r["character"], r["level"], datetime.fromisoformat(r["taken_at"]),
+                             r["league"], r["class"], data, r["error"], r["id"])  # fmt: skip
+
+    def delete_build_snapshot(self, snapshot_id: int) -> bool:
+        cur = self.conn.execute("DELETE FROM build_snapshots WHERE id = ?", (snapshot_id,))
+        return cur.rowcount > 0

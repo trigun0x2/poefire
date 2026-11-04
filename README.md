@@ -196,6 +196,23 @@ The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit 
 - Each act split shows the difference to your best finished run (PB). Every run is kept with its
   notes, which you can edit at any time; past runs can be deleted.
 
+## Build snapshots
+
+The **Builds** tab keeps each character's build as it levels: at levels 5 and 10, then at every
+level from 15. The website only sees gear and passive changes once the game saves them, on a
+zone change, so a level is captured at your first zone change after reaching it (two levels in
+one zone make one snapshot, labelled with the higher one).
+
+- Any character on your account is captured; a party member's level-up is ignored. Lines read
+  while catching up on the log after a restart never trigger a snapshot (the website only has
+  the build as it is now).
+- Each snapshot stores the website's item and passive-tree data, compressed. The tab shows a
+  level slider with the gear, gem links and passive counts at each level; **Snapshot now**
+  captures the current build on demand.
+- A failed fetch is retried once after 3 minutes; then the level is marked as missed, with the
+  reason. Uses the account connection set up for loot (same rate limits). Turn it off under
+  Settings → Campaign.
+
 ## Settings
 
 Click **Settings** in the app's top bar to set up everything without editing files:

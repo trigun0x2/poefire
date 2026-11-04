@@ -43,6 +43,10 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 17V3M5 4h9l-2 3 2 3H5"/></svg>
         <span>Campaign</span>
       </a>
+      <a class="nav-item" id="nav-builds" href="#builds">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5zM10 2.5v15M3.5 6.25L16.5 13.75M16.5 6.25L3.5 13.75"/></svg>
+        <span>Builds</span>
+      </a>
 
       <section class="side-block side-now" id="side-now" hidden aria-label="Current map">
         <div class="label">Now</div>
@@ -188,6 +192,45 @@
     </section>
   </section>
 
+  <section class="view builds" id="builds-view" hidden>
+    <section class="card bd-head">
+      <div class="bd-top">
+        <label class="field narrow" style="margin:0">
+          <span>Character</span>
+          <select id="bd-character" aria-label="Character"></select>
+        </label>
+        <div class="bd-level">
+          <div class="label">Level</div>
+          <div class="bd-level-row">
+            <button type="button" class="btn small" id="bd-prev" aria-label="Previous snapshot">‹</button>
+            <input type="range" id="bd-slider" min="0" max="0" value="0" aria-label="Snapshot">
+            <button type="button" class="btn small" id="bd-next" aria-label="Next snapshot">›</button>
+            <b class="bd-level-value" id="bd-level"></b>
+          </div>
+          <div class="bd-ticks" id="bd-ticks" aria-hidden="true"></div>
+        </div>
+        <button type="button" class="btn" id="bd-now" title="Fetch this character's build as it is now">Snapshot now</button>
+      </div>
+      <div class="hint" id="bd-status"></div>
+    </section>
+
+    <section class="card bd-detail">
+      <div class="empty" id="bd-empty">No build snapshots yet. They're taken at levels 5 and 10, then every level from 15, at your next zone change after the level-up.</div>
+      <div id="bd-body" hidden>
+        <div class="current-head">
+          <div>
+            <div class="map-name" id="bd-title"></div>
+            <div class="map-meta" id="bd-meta"></div>
+          </div>
+          <button type="button" class="btn link danger" id="bd-delete">Delete snapshot</button>
+        </div>
+        <div class="current-stats bd-stats" id="bd-stats"></div>
+        <div class="bd-missed hint bad" id="bd-missed" hidden></div>
+        <div class="bd-gear" id="bd-gear"></div>
+      </div>
+    </section>
+  </section>
+
   <form class="view settings" id="settings-view" hidden autocomplete="off">
     <h1>Settings</h1>
 
@@ -297,6 +340,10 @@
         <span>Beep when the hotkey is pressed <span class="muted">— high: started or resumed, low: paused</span></span>
       </label>
       <div class="hint">Works while the game has focus. poefire only listens for the key; it never sends input to the game.</div>
+      <label class="check">
+        <input id="set-build-snapshots" type="checkbox">
+        <span>Take build snapshots <span class="muted">— gear, gems and passive tree at levels 5 and 10, then every level from 15 (uses the account connection set up for loot)</span></span>
+      </label>
     </section>
 
     <section class="card">

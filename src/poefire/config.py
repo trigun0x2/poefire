@@ -86,6 +86,7 @@ class Config:
     check_updates: bool = True
     update_channel: str = "stable"  # "stable": public releases; "beta": also pre-releases
     snapshot_on_run_start: bool = True
+    build_snapshots: bool = True  # gear/gems/tree at levels 5, 10 and 15+ (needs loot setup)
     # --- campaign ---
     campaign_hotkey: str = "Ctrl+Alt+R"  # start / pause / resume the campaign timer; "" = off
     campaign_hotkey_sound: bool = True  # beep when the hotkey is pressed

@@ -83,6 +83,10 @@ class PoeApi:
         char: Json = self._get("character", self._path("character", name))["character"]
         return char
 
+    def get_build(self, name: str) -> Json:
+        """The character with equipment, jewels and passives (one OAuth request)."""
+        return {"source": "oauth", "character": self.get_character(name)}
+
     def list_stashes(self, league: str) -> list[Json]:
         tabs: list[Json] = self._get("stash", self._path("stash", league))["stashes"]
         return tabs

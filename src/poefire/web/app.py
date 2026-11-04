@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from poefire import __version__
+from poefire import __version__, builds
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import overview, sessions, settings, views
@@ -231,6 +231,53 @@ def create_app(rt: AppRuntime) -> FastAPI:
     def campaign_delete(run_id: int) -> dict[str, Any]:
         if not rt.campaign_delete(run_id):
             raise HTTPException(404, "no such campaign run")
+        return {"ok": True}
+
+    # --- build snapshots ---
+
+    @app.get("/api/builds")
+    def builds_overview() -> dict[str, Any]:
+        with store() as s:
+            chars = s.build_characters()
+        return {
+            "characters": chars,
+            "enabled": rt.cfg.build_snapshots,
+            "connected": rt._build_api() is not None,
+            "reason": None if rt._build_api() is not None else rt.loot.reason,
+            "pending": [{"character": c, "level": lv} for c, (lv, _) in rt.builds.pending.items()],
+            "last_error": rt.builds.last_error,
+        }
+
+    @app.get("/api/builds/character/{character}")
+    def build_levels(character: str) -> dict[str, Any]:
+        with store() as s:
+            snaps = s.list_build_snapshots(character)
+        return {"character": character, "snapshots": [
+            {"id": b.id, "level": b.level, "taken_at": b.taken_at.isoformat(), "ok": b.ok,
+             "error": b.error}
+            for b in snaps
+        ]}  # fmt: skip
+
+    @app.get("/api/builds/snapshot/{snapshot_id}")
+    def build_snapshot(snapshot_id: int) -> dict[str, Any]:
+        with store() as s:
+            snap = s.get_build_snapshot(snapshot_id)
+        if snap is None:
+            raise HTTPException(404, "no such build snapshot")
+        return builds.summarize(snap)
+
+    @app.post("/api/builds/character/{character}/snapshot")
+    def build_snapshot_now(character: str) -> dict[str, Any]:
+        if rt._build_api() is None:
+            raise HTTPException(409, "build snapshots need the account connection (Settings)")
+        rt.builds.request(character)
+        return {"ok": True}
+
+    @app.post("/api/builds/snapshot/{snapshot_id}/delete")
+    def build_snapshot_delete(snapshot_id: int) -> dict[str, Any]:
+        with store() as s:
+            if not s.delete_build_snapshot(snapshot_id):
+                raise HTTPException(404, "no such build snapshot")
         return {"ok": True}
 
     @app.get("/api/leagues")

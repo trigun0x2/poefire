@@ -292,6 +292,19 @@ class SessionApi:
         ]
         return char
 
+    def get_build(self, name: str) -> Json:
+        """Everything Path of Building's "Import from website" reads: equipped items with
+        their socketed gems, and the passive tree with jewels, masteries and bandit."""
+        items = self._get(
+            "character", "/character-window/get-items", {**self._common(), "character": name}
+        )
+        passives = self._get(
+            "character",
+            "/character-window/get-passive-skills",
+            {**self._common(), "character": name},
+        )
+        return {"source": "website", "items": items, "passives": passives}
+
     def list_stashes(self, league: str) -> list[Json]:
         data = self._get(
             "stash",
