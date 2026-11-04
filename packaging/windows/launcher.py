@@ -5,7 +5,6 @@ The executables share one bundle:
                    folder (%APPDATA%\\poefire), since there is no console to print to.
 - poefire-cli.exe  console app: the full CLI (`poefire-cli.exe set-session`, `... runs`);
                    with no arguments it opens the UI.
-- poefire-ui.exe   the old name of poefire.exe, kept so older installs can update themselves.
 """
 
 import sys
@@ -20,7 +19,7 @@ if __name__ == "__main__":
 
         unblock_dlls(Path(sys._MEIPASS))  # type: ignore[attr-defined]
     argv = sys.argv[1:]
-    if Path(sys.executable).stem.lower() in ("poefire", "poefire-ui"):  # the windowed app
+    if Path(sys.executable).stem.lower() == "poefire":  # the windowed app
         log_dir = default_data_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
         log = open(log_dir / "poefire.log", "a", encoding="utf-8", buffering=1)  # noqa: SIM115

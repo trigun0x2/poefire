@@ -23,8 +23,8 @@ to write there.
 - `poefire.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\poefire.log`.
 - `poefire-cli.exe` is the command line, for example `poefire-cli.exe set-session` or
   `poefire-cli.exe runs`.
-- `poefire-ui.exe` is the old name of `poefire.exe`, kept so installs from v0.11.0 and earlier can
-  update themselves and old shortcuts keep working.
+- Updating from v0.11.0 or earlier (where the app was `poefire-ui.exe`): install by hand once,
+  since those versions can't install this layout themselves.
   Run with no arguments, it opens the window too.
 
 **Updates.** poefire checks GitHub for a new release on start and every 6 hours, and shows a
