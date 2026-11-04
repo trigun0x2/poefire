@@ -19,6 +19,7 @@ from typing import Any
 from poefire import __version__, campaign, wiring
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
+from poefire.hotkey import GlobalHotkey, HotkeyError, beep
 from poefire.leagues import default_price_league, is_private
 from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
@@ -111,6 +112,9 @@ class AppRuntime:
         self._auto_recorder = recorder is True
 
         self.campaign = CampaignTracker(self._store, now)  # under _lock, like the tail
+        self.hotkey: GlobalHotkey | None = None  # registered by start()
+        self.hotkey_error: str | None = None
+        self.hotkey_last: tuple[str, datetime] | None = None
         self.log_path: Path | None = None
         self.service: TrackerService | None = None
         self._build_service()
@@ -200,6 +204,8 @@ class AppRuntime:
             if previous is not None:
                 previous.stop()
             self._build_recorder()
+        if self._started and cfg.campaign_hotkey != old.campaign_hotkey:
+            self._build_hotkey()
         if cfg.league and cfg.league != self._league:
             self.set_league(cfg.league)
         elif cfg.price_league != old.price_league:
@@ -332,6 +338,47 @@ class AppRuntime:
         with self._lock:
             self.campaign.start(character)
 
+    def campaign_toggle(self, from_hotkey: bool = False) -> str:
+        """Start a run if none is going, else pause / resume it. Returns what happened."""
+        with self._lock:
+            action = self.campaign.toggle()
+        self.hotkey_last = (action, self.now())
+        if from_hotkey and self.cfg.campaign_hotkey_sound:
+            beep(high=action != "paused")
+        return action
+
+    def campaign_pause(self, pause: bool) -> bool:
+        with self._lock:
+            return self.campaign.pause() if pause else self.campaign.resume()
+
+    def _build_hotkey(self) -> None:
+        if self.hotkey is not None:
+            self.hotkey.stop()
+            self.hotkey = None
+        self.hotkey_error = None
+        spec = self.cfg.campaign_hotkey.strip()
+        if not spec:
+            return
+        try:
+            hk = GlobalHotkey(spec, lambda: self.campaign_toggle(from_hotkey=True))
+        except HotkeyError as e:
+            self.hotkey_error = str(e)
+            return
+        if hk.start():
+            self.hotkey = hk
+        else:
+            self.hotkey_error = hk.error
+
+    def hotkey_json(self) -> dict[str, Any]:
+        last = self.hotkey_last
+        return {
+            "key": self.cfg.campaign_hotkey.strip() or None,
+            "active": self.hotkey is not None and self.hotkey.active,
+            "error": self.hotkey_error,
+            "last_action": last[0] if last else None,
+            "last_at": last[1].isoformat() if last else None,
+        }
+
     def campaign_end(self, finished: bool) -> bool:
         with self._lock:
             run = self.campaign.finish() if finished else self.campaign.stop()
@@ -432,6 +479,7 @@ class AppRuntime:
             "prices", lambda: self.prices.run_forever(lambda: self.price_league, self._stop)
         )
         self._spawn("updates", self._update_loop)
+        self._build_hotkey()
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)
@@ -452,6 +500,8 @@ class AppRuntime:
 
     def stop(self) -> None:
         self._stop.set()
+        if self.hotkey is not None:
+            self.hotkey.stop()
         if self.recorder is not None:
             self.recorder.stop()
         for t in self._threads:

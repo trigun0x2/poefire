@@ -89,6 +89,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "run": run_json,
             "league_is_private": rt.is_private,
             "update": rt.update.to_json(),
+            "hotkey": rt.hotkey_json(),
             "value": value,
             "prices": {
                 "league": rt.price_league,
@@ -179,7 +180,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
 
     @app.get("/api/campaign")
     def campaign_overview() -> dict[str, Any]:
-        return rt.campaign_overview()
+        return {**rt.campaign_overview(), "hotkey": rt.hotkey_json()}
 
     @app.get("/api/campaign/runs/{run_id}")
     def campaign_run(run_id: int) -> dict[str, Any]:
@@ -191,6 +192,23 @@ def create_app(rt: AppRuntime) -> FastAPI:
     @app.post("/api/campaign/start")
     def campaign_start(body: CampaignStartIn) -> dict[str, Any]:
         rt.campaign_start(body.character)
+        return rt.campaign_overview()
+
+    @app.post("/api/campaign/toggle")
+    def campaign_toggle() -> dict[str, Any]:
+        """What the hotkey does: start, pause or resume."""
+        return {"action": rt.campaign_toggle(), **rt.campaign_overview()}
+
+    @app.post("/api/campaign/pause")
+    def campaign_pause() -> dict[str, Any]:
+        if not rt.campaign_pause(True):
+            raise HTTPException(409, "no running campaign run to pause")
+        return rt.campaign_overview()
+
+    @app.post("/api/campaign/resume")
+    def campaign_resume() -> dict[str, Any]:
+        if not rt.campaign_pause(False):
+            raise HTTPException(409, "no paused campaign run")
         return rt.campaign_overview()
 
     @app.post("/api/campaign/finish")

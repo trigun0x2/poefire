@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from poefire import hotkey
 from poefire.api.session import SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config
 from poefire.leagues import is_private
@@ -35,6 +36,8 @@ class SettingsIn(BaseModel):
     snapshot_delay: float | None = Field(default=None, ge=0, le=60)
     check_updates: bool | None = None
     update_channel: Literal["stable", "beta"] | None = None
+    campaign_hotkey: str | None = None
+    campaign_hotkey_sound: bool | None = None
 
 
 class SessionIn(BaseModel):
@@ -103,6 +106,8 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "loot": {"enabled": rt.loot.enabled, "reason": rt.loot.reason},
         "check_updates": cfg.check_updates,
         "update_channel": cfg.update_channel,
+        "campaign_hotkey": cfg.campaign_hotkey,
+        "campaign_hotkey_sound": cfg.campaign_hotkey_sound,
         "version": rt.update.current,
     }
 
@@ -168,6 +173,16 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["check_updates"] = body.check_updates
     if body.update_channel is not None:
         changes["update_channel"] = body.update_channel
+    if body.campaign_hotkey is not None:
+        spec = body.campaign_hotkey.strip()
+        if spec:
+            try:
+                spec = hotkey.normalize(spec)
+            except hotkey.HotkeyError as e:
+                raise SettingsError(f"campaign hotkey: {e}") from e
+        changes["campaign_hotkey"] = spec
+    if body.campaign_hotkey_sound is not None:
+        changes["campaign_hotkey_sound"] = body.campaign_hotkey_sound
     if body.snapshot_delay is not None:
         changes["snapshot_delay"] = float(body.snapshot_delay)
 

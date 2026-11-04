@@ -341,6 +341,10 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
 .cp-timer { font-size: 46px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; margin: 4px 0 2px; }
 .cp-timer.live { color: var(--accent); }
 .cp-timer.abandoned { color: var(--muted); }
+.cp-timer.paused { color: var(--warn); }
+.cp-timer .paused-tag { font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-left: 10px; vertical-align: middle; }
+#set-hotkey { cursor: pointer; flex: 0 1 220px; }
+#set-hotkey.capturing { border-color: var(--accent); }
 .cp-igt { font-variant-numeric: tabular-nums; margin-bottom: 12px; }
 .cp-igt .label { display: inline; }
 .cp-stats { display: flex; flex-wrap: wrap; }

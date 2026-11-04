@@ -100,14 +100,25 @@ class CampaignRun:
     load_ms: int = 0
     notes: str = ""
     splits: list[Split] = field(default_factory=list)
+    paused_at: datetime | None = None  # set while the timer is paused
+    paused_ms: int = 0  # earlier pauses, in total
 
     @property
     def running(self) -> bool:
         return self.status == "running"
 
+    @property
+    def paused(self) -> bool:
+        return self.paused_at is not None
+
+    def paused_seconds(self, now: datetime) -> float:
+        current = (now - self.paused_at).total_seconds() if self.paused_at else 0.0
+        return self.paused_ms / 1000 + max(0.0, current)
+
     def rta(self, now: datetime) -> float:
+        """Timer time: from the start, without the time spent paused."""
         end = self.ended_at or now
-        return max(0.0, (end - self.started_at).total_seconds())
+        return max(0.0, (end - self.started_at).total_seconds() - self.paused_seconds(end))
 
     def igt(self, now: datetime) -> float:
         return max(0.0, self.rta(now) - self.load_ms / 1000)
@@ -142,6 +153,39 @@ class CampaignTracker:
     def finish(self) -> CampaignRun | None:
         return self._end("finished", self.now())
 
+    def pause(self) -> bool:
+        run = self.active
+        if run is None or run.paused:
+            return False
+        run.paused_at = self.now()
+        self.store.save_campaign_run(run)
+        return True
+
+    def resume(self) -> bool:
+        run = self.active
+        if run is None or not run.paused:
+            return False
+        self._unpause(run, self.now())
+        self.store.save_campaign_run(run)
+        return True
+
+    def toggle(self) -> str:
+        """The hotkey: start a run if none is going, else pause / resume it."""
+        if self.active is None:
+            self.start()
+            return "started"
+        if self.active.paused:
+            self.resume()
+            return "resumed"
+        self.pause()
+        return "paused"
+
+    @staticmethod
+    def _unpause(run: CampaignRun, at: datetime) -> None:
+        if run.paused_at is not None:
+            run.paused_ms += max(0, int((at - run.paused_at).total_seconds() * 1000))
+            run.paused_at = None
+
     def stop(self) -> CampaignRun | None:
         return self._end("abandoned", self.now())
 
@@ -149,6 +193,9 @@ class CampaignTracker:
         run = self.active
         if run is None:
             return None
+        if run.paused_at is not None:
+            at = max(at, run.paused_at)
+            self._unpause(run, at)
         run.status, run.ended_at = status, at
         self.store.save_campaign_run(run)
         self.active = None
@@ -186,7 +233,7 @@ class CampaignTracker:
     def _entered(self, run: CampaignRun, event: ZoneEntered, tick: int | None) -> None:
         if self._load_start is not None and tick is not None:
             load = tick - self._load_start
-            if 0 <= load <= MAX_LOAD_MS:
+            if 0 <= load <= MAX_LOAD_MS and not run.paused:  # paused: the timer is stopped
                 run.load_ms += load
         self._load_start = None
         act, self._next_act = self._next_act, None
@@ -244,6 +291,7 @@ def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
         "rta": round(run.rta(now), 1),
         "igt": round(run.igt(now), 1),
         "load_seconds": round(run.load_ms / 1000, 1),
+        "paused": run.paused,
         "notes": run.notes,
     }
 

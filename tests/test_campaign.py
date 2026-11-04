@@ -162,7 +162,9 @@ def env(tmp_path: Path) -> tuple[TestClient, AppRuntime, Path]:
 
 def test_campaign_api_flow(env: tuple[TestClient, AppRuntime, Path]) -> None:
     client, rt, path = env
-    assert client.get("/api/campaign").json() == {"active": None, "pb": None, "runs": []}
+    first = client.get("/api/campaign").json()
+    assert (first["active"], first["pb"], first["runs"]) == (None, None, [])
+    assert first["hotkey"]["key"] == "Ctrl+Alt+R" and first["hotkey"]["active"] is False
     assert client.post("/api/campaign/finish", headers=H).status_code == 409
     d = client.post("/api/campaign/start", json={}, headers=H).json()
     run_id = d["active"]["id"]
@@ -207,4 +209,47 @@ def test_campaign_api_flow(env: tuple[TestClient, AppRuntime, Path]) -> None:
 
     assert client.post(f"/api/campaign/runs/{run_id}/delete", headers=H).json() == {"ok": True}
     assert client.get(f"/api/campaign/runs/{run_id}").status_code == 404
+    rt.stop()
+
+
+def test_pause_resume_and_toggle(tmp_path: Path) -> None:
+    store = Store(tmp_path / "db.sqlite3")
+    clock = [T0]
+    tracker = CampaignTracker(store, lambda: clock[0])
+    assert tracker.toggle() == "started"
+    run = tracker.active
+    assert run is not None
+    clock[0] = T0 + timedelta(seconds=100)
+    assert tracker.toggle() == "paused" and run.paused
+    log = Log()
+    log.t, log.tick = T0 + timedelta(seconds=110), 2_000_000
+    log.enter("1_1_1", "The Twilight Strand", load=4)  # entered while paused
+    feed(tracker, log)
+    clock[0] = T0 + timedelta(seconds=400)
+    assert run.rta(clock[0]) == 100  # frozen while paused
+    assert run.load_ms == 0  # loads don't count while the timer is stopped
+    assert run.splits[0].rta == 100  # a split while paused gets the frozen time
+    assert tracker.toggle() == "resumed" and not run.paused
+    clock[0] = T0 + timedelta(seconds=430)
+    assert run.rta(clock[0]) == 130
+    # saved: a restart keeps the pause bookkeeping
+    again = CampaignTracker(store, lambda: clock[0])
+    assert again.active is not None and again.active.rta(clock[0]) == 130
+    # finishing while paused ends the run at the pause
+    tracker.pause()
+    clock[0] = T0 + timedelta(seconds=900)
+    done = tracker.finish()
+    assert done is not None and done.rta(clock[0]) == 130 and not done.paused
+    store.close()
+
+
+def test_toggle_api(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    client, rt, _ = env
+    assert client.post("/api/campaign/pause", headers=H).status_code == 409
+    assert client.post("/api/campaign/toggle", headers=H).json()["action"] == "started"
+    d = client.post("/api/campaign/toggle", headers=H).json()
+    assert d["action"] == "paused" and d["active"]["paused"] is True
+    assert client.post("/api/campaign/pause", headers=H).status_code == 409
+    assert client.post("/api/campaign/resume", headers=H).json()["active"]["paused"] is False
+    assert rt.hotkey_json()["last_action"] == "paused"
     rt.stop()

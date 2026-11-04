@@ -390,6 +390,7 @@ async function pollStatus() {
     status = await api("/api/status");
     statusAt = performance.now();
     renderStatus();
+    if (!$("settings-view").hidden) renderHotkeyStatus();
     const key = (status.run ? `${status.run.id}:${status.run.status}:${status.run.deaths}:${status.run.chaos}` : "") +
       `:${status.loot.last?.at}`;
     if (key !== lastRunKey) {
@@ -563,6 +564,9 @@ async function loadSettings() {
   $("set-run-start").checked = s.snapshot_on_run_start;
   $("set-version").textContent = `v${s.version}`;
   $("set-check-updates").checked = s.check_updates;
+  $("set-hotkey").value = s.campaign_hotkey || "";
+  $("set-hotkey-sound").checked = s.campaign_hotkey_sound;
+  renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
   $("set-delay").value = s.snapshot_delay;
   $("set-deaths").value = s.characters.join(", ");
@@ -726,6 +730,8 @@ $("settings-view").addEventListener("submit", async (e) => {
     snapshot_on_run_start: $("set-run-start").checked,
     snapshot_delay: Number($("set-delay").value || 0),
     check_updates: $("set-check-updates").checked,
+    campaign_hotkey: $("set-hotkey").value,
+    campaign_hotkey_sound: $("set-hotkey-sound").checked,
     update_channel: $("set-update-channel").value,
   };
   $("set-save").disabled = true;
@@ -1042,7 +1048,7 @@ function cpShown() {
 }
 function cpLive(r) {
   // running runs tick locally between polls
-  const extra = r && r.status === "running" ? (performance.now() - cpFetchedAt) / 1000 : 0;
+  const extra = r && r.status === "running" && !r.paused ? (performance.now() - cpFetchedAt) / 1000 : 0;
   return r ? { rta: r.rta + extra, igt: r.igt + extra } : null;
 }
 
@@ -1071,12 +1077,19 @@ function renderCampaign() {
     : active ? "Current run" : "Campaign run";
   $("cp-finish").hidden = $("cp-stop").hidden = !active || cpSelected != null;
   $("cp-start").textContent = active ? "Restart" : "Start new run";
-  $("cp-character").hidden = cpSelected != null;
+  $("cp-character").hidden = cpSelected != null || !!active;
   $("cp-start").hidden = cpSelected != null;
   $("cp-hint").hidden = !!active || cpSelected != null;
   $("cp-past-actions").hidden = cpSelected == null;
   $("cp-notes-field").hidden = !r;
-  $("cp-timer").className = "cp-timer" + (r?.status === "running" ? " live" : r?.status === "abandoned" ? " abandoned" : "");
+  $("cp-timer").className = "cp-timer" + (r?.paused ? " paused" : r?.status === "running" ? " live" : r?.status === "abandoned" ? " abandoned" : "");
+  const live = !!active && cpSelected == null;
+  $("cp-pause").hidden = !live;
+  $("cp-pause").textContent = active?.paused ? "Resume" : "Pause";
+  const hk = cpData.hotkey;
+  $("cp-hotkey-hint").innerHTML = !hk?.key ? 'No timer hotkey set (<a href="#settings">Settings</a>).'
+    : hk.error ? `<span class="neg">Hotkey ${esc(hk.key)} isn't working: ${esc(hk.error)}</span>`
+    : `<b>${esc(hk.key)}</b> ${active ? (active.paused ? "resumes" : "pauses") : "starts a run"}, even while you're in the game.`;
   $("cp-char").textContent = r?.character || "—";
   $("cp-class").textContent = r?.class || "—";
   $("cp-class").title = r?.base_class && r.base_class !== r.class ? r.base_class : "";
@@ -1096,8 +1109,9 @@ function renderCampaign() {
 }
 
 function tickCampaign() {
-  const t = cpLive(cpShown());
-  $("cp-timer").textContent = t ? duration(t.rta) : "—";
+  const r = cpShown();
+  const t = cpLive(r);
+  $("cp-timer").innerHTML = t ? duration(t.rta) + (r.paused ? '<span class="paused-tag">Paused</span>' : "") : "—";
   $("cp-igt").textContent = t ? duration(t.igt) : "—";
   const now = $("cp-acts-body").querySelector("tr.now");
   if (now && t) {
@@ -1185,6 +1199,7 @@ $("cp-start").addEventListener("click", () => {
   cpAction("/api/campaign/start", { character: $("cp-character").value.trim() || null });
 });
 $("cp-finish").addEventListener("click", () => cpAction("/api/campaign/finish"));
+$("cp-pause").addEventListener("click", () => cpAction(cpData?.active?.paused ? "/api/campaign/resume" : "/api/campaign/pause"));
 $("cp-stop").addEventListener("click", () => {
   if (confirm("Stop this run? It stays in the list, marked as stopped.")) cpAction("/api/campaign/stop");
 });
@@ -1217,6 +1232,43 @@ $("cp-notes").addEventListener("input", () => {
   }, 700);
 });
 makeSortable("cp-runs-table", "campaign", cpSort, () => { if (cpData) renderCampaignRuns(); });
+
+// --- hotkey field: click it, then press the combination ---
+
+function renderHotkeyStatus() {
+  const hk = status?.hotkey;
+  const el = $("set-hotkey-status");
+  const value = $("set-hotkey").value;
+  if (!value) { el.className = "hint"; el.textContent = "Off."; return; }
+  if (!hk || hk.key !== value) { el.className = "hint"; el.textContent = "Save to apply."; return; }
+  el.className = `hint ${hk.error ? "bad" : hk.active ? "ok" : ""}`;
+  el.textContent = hk.error ? `✗ ${hk.error}` : hk.active ? `✓ ${hk.key} is active.` : "Not active (global hotkeys need the Windows app).";
+}
+const KEY_NAMES = { " ": "Space", PageUp: "PgUp", PageDown: "PgDn", Insert: "Insert", Delete: "Delete", Home: "Home", End: "End", Pause: "Pause", ScrollLock: "ScrollLock" };
+function keyName(e) {
+  if (/^F\d{1,2}$/.test(e.key)) return e.key;
+  if (e.code.startsWith("Numpad")) {
+    const rest = e.code.slice(6);
+    return /^\d$/.test(rest) ? `Num${rest}` : null;
+  }
+  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
+  if (/^Digit\d$/.test(e.code)) return e.code.slice(5);
+  return KEY_NAMES[e.key] || null;
+}
+$("set-hotkey").addEventListener("focus", (e) => e.target.classList.add("capturing"));
+$("set-hotkey").addEventListener("blur", (e) => e.target.classList.remove("capturing"));
+$("set-hotkey").addEventListener("keydown", (e) => {
+  if (e.key === "Tab") return;
+  e.preventDefault();
+  if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return; // wait for the main key
+  if (e.key === "Escape") { e.target.blur(); return; }
+  const key = keyName(e);
+  if (!key) return;
+  const mods = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Win"].filter(Boolean);
+  e.target.value = [...mods, key].join("+");
+  renderHotkeyStatus();
+});
+$("set-hotkey-clear").addEventListener("click", () => { $("set-hotkey").value = ""; renderHotkeyStatus(); });
 
 // --- routing: #session (default), #overview, #campaign, #settings ---
 

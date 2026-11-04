@@ -174,6 +174,11 @@ current session.
 The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit auto-splitter does
 (based on [POE-LiveSplit-Component](https://github.com/brandondong/POE-LiveSplit-Component)).
 
+- **Hotkey (default `Ctrl+Alt+R`):** works while the game has focus. Press it to start a run, then
+  again to pause and resume the timer; a beep confirms (high: started/resumed, low: paused).
+  Pick another key or turn it off under Settings → Campaign. poefire only listens for the key
+  (Windows `RegisterHotKey`, like LiveSplit); it never sends input to the game. While paused, the
+  timer and load time stand still.
 - **Start new run** starts the timer (optionally for a named character; otherwise the first
   character that levels up). Starting again stops the run in progress. **Finish** / **Stop** end
   it by hand; entering the epilogue after act 10 finishes it automatically.

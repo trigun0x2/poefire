@@ -144,10 +144,12 @@
       <div class="row cp-controls" id="cp-controls">
         <input type="text" id="cp-character" placeholder="Character (optional)" title="Leave empty to use the first character that levels up" aria-label="Character name" maxlength="64">
         <button type="button" class="btn primary" id="cp-start">Start new run</button>
+        <button type="button" class="btn" id="cp-pause" hidden>Pause</button>
         <button type="button" class="btn" id="cp-finish" hidden>Finish</button>
         <button type="button" class="btn" id="cp-stop" hidden>Stop</button>
       </div>
       <div class="hint" id="cp-hint">Start a run, then play: splits come from your Client.txt. Entering the epilogue after act 10 finishes the run.</div>
+      <div class="hint" id="cp-hotkey-hint"></div>
       <label class="field cp-notes-field" id="cp-notes-field" hidden>
         <span>Notes <span class="muted" id="cp-notes-status"></span></span>
         <textarea id="cp-notes" rows="4" maxlength="20000" placeholder="Route, mistakes, RNG, gem setup…"></textarea>
@@ -279,6 +281,23 @@
         <input id="set-deaths" type="text" spellcheck="false">
       </label>
       <div class="name-chips" id="set-deaths-seen"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Campaign</div>
+      <label class="field narrow">
+        <span>Timer hotkey <span class="muted">— starts a run, then pauses and resumes it</span></span>
+        <div class="row" style="margin-top:0">
+          <input id="set-hotkey" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-hotkey-status">
+          <button type="button" class="btn" id="set-hotkey-clear">Turn off</button>
+        </div>
+      </label>
+      <div class="hint" id="set-hotkey-status"></div>
+      <label class="check">
+        <input id="set-hotkey-sound" type="checkbox">
+        <span>Beep when the hotkey is pressed <span class="muted">— high: started or resumed, low: paused</span></span>
+      </label>
+      <div class="hint">Works while the game has focus. poefire only listens for the key; it never sends input to the game.</div>
     </section>
 
     <section class="card">

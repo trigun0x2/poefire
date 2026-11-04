@@ -183,3 +183,14 @@ def test_death_names_seen_in_log_and_unknown_name_warning(
 
     r = client.post("/api/settings", headers=H, json={"characters": ["XYZ_BOW"]}).json()
     assert r["warnings"] == [] and {c["name"]: c for c in r["log_characters"]}["xyz_bow"]["counted"]
+
+
+def test_campaign_hotkey_setting(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    client, rt, _ = env
+    assert client.get("/api/settings").json()["campaign_hotkey"] == "Ctrl+Alt+R"
+    r = client.post("/api/settings", headers=H, json={"campaign_hotkey": "shift+f9"})
+    assert r.json()["campaign_hotkey"] == "Shift+F9" and rt.cfg.campaign_hotkey == "Shift+F9"
+    bad = client.post("/api/settings", headers=H, json={"campaign_hotkey": "R"})
+    assert bad.status_code == 400 and "modifier" in bad.json()["detail"]
+    off = client.post("/api/settings", headers=H, json={"campaign_hotkey": ""})
+    assert off.json()["campaign_hotkey"] == ""

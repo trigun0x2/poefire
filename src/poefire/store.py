@@ -18,7 +18,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -153,6 +153,12 @@ CREATE TABLE sessions (
 CREATE INDEX sessions_started ON sessions(started_at);
 """
 
+_SCHEMA_V7 = """
+-- Campaign timer pauses (the hotkey / Pause button).
+ALTER TABLE campaign_runs ADD COLUMN paused_at TEXT;
+ALTER TABLE campaign_runs ADD COLUMN paused_ms INTEGER NOT NULL DEFAULT 0
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -160,6 +166,7 @@ _MIGRATIONS = (
     _SCHEMA_V4,
     _SCHEMA_V5,
     _SCHEMA_V6,
+    _SCHEMA_V7,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -476,19 +483,21 @@ class Store:
         values = (
             _dt(run.started_at), _dt(run.ended_at), run.status, run.character, run.char_class,
             run.level, run.deaths, run.act, run.load_ms, run.notes,
-            json.dumps([s.to_json() for s in run.splits]),
+            json.dumps([s.to_json() for s in run.splits]), _dt(run.paused_at), run.paused_ms,
         )  # fmt: skip
         if run.id is None:
             cur = self.conn.execute(
                 "INSERT INTO campaign_runs (started_at, ended_at, status, character, class, "
-                "level, deaths, act, load_ms, notes, splits) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
             run.id = int(cur.lastrowid or 0)
         else:
             self.conn.execute(
                 "UPDATE campaign_runs SET started_at=?, ended_at=?, status=?, character=?, "
-                "class=?, level=?, deaths=?, act=?, load_ms=?, notes=?, splits=? WHERE id=?",
+                "class=?, level=?, deaths=?, act=?, load_ms=?, notes=?, splits=?, paused_at=?, "
+                "paused_ms=? WHERE id=?",
                 (*values, run.id),
             )
         return run.id
@@ -502,6 +511,8 @@ class Store:
             status=row["status"], character=row["character"], char_class=row["class"],
             level=row["level"], deaths=row["deaths"], act=row["act"], load_ms=row["load_ms"],
             notes=row["notes"], splits=[Split.from_json(s) for s in json.loads(row["splits"])],
+            paused_at=datetime.fromisoformat(row["paused_at"]) if row["paused_at"] else None,
+            paused_ms=row["paused_ms"],
         )  # fmt: skip
 
     def list_campaign_runs(self, limit: int = 200) -> list[CampaignRun]:
