@@ -145,7 +145,6 @@
         <input type="text" id="cp-character" placeholder="Character (optional)" title="Leave empty to use the first character that levels up" aria-label="Character name" maxlength="64">
         <button type="button" class="btn primary" id="cp-start">Start new run</button>
         <button type="button" class="btn" id="cp-pause" hidden>Pause</button>
-        <button type="button" class="btn" id="cp-finish" hidden>Finish</button>
         <button type="button" class="btn" id="cp-stop" hidden>Stop</button>
       </div>
       <div class="hint" id="cp-hint">Start a run, then play: splits come from your Client.txt. Entering the epilogue after act 10 finishes the run.</div>
@@ -399,6 +398,19 @@
   <div class="resize-handle e" data-edge="e" hidden></div>
   <div class="resize-handle s" data-edge="s" hidden></div>
   <div class="resize-handle se" data-edge="se" hidden></div>
+
+  <!-- in-app dialog (instead of the browser's confirm/alert/prompt boxes) -->
+  <dialog class="modal" id="modal" aria-labelledby="modal-title" aria-describedby="modal-body">
+    <form method="dialog" class="modal-box">
+      <h2 class="modal-title" id="modal-title"></h2>
+      <div class="modal-body" id="modal-body"></div>
+      <input type="text" class="modal-input" id="modal-input" hidden autocomplete="off" spellcheck="false">
+      <div class="modal-actions">
+        <button type="button" class="btn" id="modal-cancel" value="cancel">Cancel</button>
+        <button type="submit" class="btn primary" id="modal-ok" value="ok">OK</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="/static/app.js"></script>
 </body>

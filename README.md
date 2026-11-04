@@ -180,8 +180,8 @@ The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit 
   (Windows `RegisterHotKey`, like LiveSplit); it never sends input to the game. While paused, the
   timer and load time stand still.
 - **Start new run** starts the timer (optionally for a named character; otherwise the first
-  character that levels up). Starting again stops the run in progress. **Finish** / **Stop** end
-  it by hand; entering the epilogue after act 10 finishes it automatically.
+  character that levels up). Starting again stops the run in progress. Entering the epilogue
+  after act 10 finishes a run; **Stop** ends it early (it stays in the list, marked as stopped).
 - **Splits:** every completed act (the first time you enter an area of a later act) and the first
   visit to each zone. Acts are read from the area id (`1_1_1`, `2_6_town`...), so hideouts, the
   labyrinth and maps never count as a new act.

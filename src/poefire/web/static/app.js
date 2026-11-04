@@ -55,6 +55,42 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
+// --- in-app dialogs (instead of the browser's confirm/alert/prompt boxes) ---
+
+/** Shows the dialog; resolves to {ok, value}. `body` is HTML (escape user data with esc()). */
+function modal({ title, body = "", ok = "OK", cancel = "Cancel", danger = false, input = null }) {
+  const dlg = $("modal");
+  $("modal-title").textContent = title;
+  $("modal-body").innerHTML = body;
+  const okBtn = $("modal-ok"), cancelBtn = $("modal-cancel"), field = $("modal-input");
+  okBtn.textContent = ok;
+  okBtn.className = `btn ${danger ? "danger-fill" : "primary"}`;
+  cancelBtn.hidden = cancel == null;
+  cancelBtn.textContent = cancel ?? "";
+  field.hidden = !input;
+  field.value = input?.value ?? "";
+  field.placeholder = input?.placeholder ?? "";
+  return new Promise((resolve) => {
+    const done = (result) => {
+      dlg.removeEventListener("close", onClose);
+      cancelBtn.onclick = null;
+      resolve(result);
+    };
+    const onClose = () => done({ ok: dlg.returnValue === "ok", value: field.value.trim() });
+    dlg.addEventListener("close", onClose);
+    cancelBtn.onclick = () => dlg.close("cancel");
+    dlg.returnValue = "cancel"; // Esc / closing counts as cancel
+    dlg.showModal();
+    (input ? field : danger ? cancelBtn : okBtn).focus();
+  });
+}
+const confirmModal = async (opts) => (await modal(opts)).ok;
+const alertModal = (title, body = "") => modal({ title, body: esc(body), cancel: null });
+async function promptModal(opts) {
+  const r = await modal({ ...opts, input: opts.input ?? {} });
+  return r.ok ? r.value : null;
+}
+
 // --- rendering ---
 
 function renderStatus() {
@@ -179,7 +215,7 @@ $("update-banner").addEventListener("click", async (e) => {
     return;
   }
   btn.disabled = true;
-  await api("/api/update/install", { method: "POST" }).catch((err) => alert(err.message));
+  await api("/api/update/install", { method: "POST" }).catch((err) => alertModal("The update couldn't be installed", err.message));
   pollStatus();
 });
 $("update-row").addEventListener("click", () => {
@@ -461,12 +497,16 @@ $("sessions-body").addEventListener("click", async (e) => {
   if (del) {
     e.stopPropagation();
     const s = sessionsData.sessions.find((x) => String(x.id) === del.dataset.del);
-    if (!confirm(`Delete the session from ${dateTimeOf(s?.started_at)} and its ${s?.maps ?? 0} maps? This can't be undone.`)) return;
+    if (!await confirmModal({
+      title: "Delete this session?",
+      body: `The session from <b>${esc(dateTimeOf(s?.started_at))}</b> and its ${s?.maps ?? 0} maps are deleted. This can't be undone.`,
+      ok: "Delete session", danger: true,
+    })) return;
     try {
       await api(`/api/sessions/${del.dataset.del}/delete`, { method: "POST" });
       if (String(viewSession) === del.dataset.del) viewSession = null;
       await pollRuns();
-    } catch (err) { alert(err.message); }
+    } catch (err) { alertModal("The session couldn't be deleted", err.message); }
     return;
   }
   const tr = e.target.closest("tr[data-session]");
@@ -476,7 +516,11 @@ $("sessions-body").addEventListener("click", async (e) => {
 });
 $("session-back").addEventListener("click", () => showSession(null));
 $("session-new").addEventListener("click", async () => {
-  if (!confirm("Start a new session? Stats start again from zero; this session moves to the Sessions history.")) return;
+  if (!await confirmModal({
+    title: "Start a new session?",
+    body: "Stats start again from zero. This session moves to the <b>Sessions</b> history below.",
+    ok: "Start new session",
+  })) return;
   await api("/api/sessions/new", { method: "POST" });
   viewSession = null;
   selectedRun = null;
@@ -492,7 +536,11 @@ async function loadLeagues() {
 $("league").addEventListener("change", async (e) => {
   let league = e.target.value;
   if (league === "__other__") {
-    league = (prompt("League name (private leagues look like \"My League (PL12345)\"):") || "").trim();
+    league = (await promptModal({
+      title: "Other league",
+      body: "Type the league's name exactly. Private leagues look like <b>My League (PL12345)</b>.",
+      ok: "Use league", input: { placeholder: "League name" },
+    })) || "";
     if (!league) { await loadLeagues(); return; }
   }
   await api("/api/league", { method: "POST", body: JSON.stringify({ league }) });
@@ -686,7 +734,11 @@ $("set-session-save").addEventListener("click", async () => {
 });
 
 $("set-session-clear").addEventListener("click", async () => {
-  if (!confirm("Remove the saved POESESSID from this PC?")) return;
+  if (!await confirmModal({
+    title: "Remove the saved POESESSID?",
+    body: "The cookie is deleted from this PC, and loot tracking stops until you add one again.",
+    ok: "Remove", danger: true,
+  })) return;
   await api("/api/settings/session/clear", { method: "POST" });
   account = null;
   await loadSettings();
@@ -1075,7 +1127,7 @@ function renderCampaign() {
   $("cp-run-title").textContent = cpSelected != null
     ? `Run · ${dateTimeOf(r?.started_at)}${r?.status === "abandoned" ? " · stopped" : r?.status === "finished" ? " · finished" : ""}`
     : active ? "Current run" : "Campaign run";
-  $("cp-finish").hidden = $("cp-stop").hidden = !active || cpSelected != null;
+  $("cp-stop").hidden = !active || cpSelected != null;
   $("cp-start").textContent = active ? "Restart" : "Start new run";
   $("cp-character").hidden = cpSelected != null || !!active;
   $("cp-start").hidden = cpSelected != null;
@@ -1190,23 +1242,35 @@ async function cpAction(path, body) {
     cpSelected = null; cpDetail = null;
     renderCampaign();
   } catch (e) {
-    alert(e.message);
+    alertModal("That didn't work", e.message);
   }
 }
 
-$("cp-start").addEventListener("click", () => {
-  if (cpData?.active && !confirm("Stop the current run and start a new one?")) return;
+$("cp-start").addEventListener("click", async () => {
+  if (cpData?.active && !await confirmModal({
+    title: "Start a new run?",
+    body: "The current run is stopped and kept in the list.",
+    ok: "Start new run",
+  })) return;
   cpAction("/api/campaign/start", { character: $("cp-character").value.trim() || null });
 });
-$("cp-finish").addEventListener("click", () => cpAction("/api/campaign/finish"));
 $("cp-pause").addEventListener("click", () => cpAction(cpData?.active?.paused ? "/api/campaign/resume" : "/api/campaign/pause"));
-$("cp-stop").addEventListener("click", () => {
-  if (confirm("Stop this run? It stays in the list, marked as stopped.")) cpAction("/api/campaign/stop");
+$("cp-stop").addEventListener("click", async () => {
+  if (await confirmModal({
+    title: "Stop this run?",
+    body: "The timer ends here. The run stays in the list, marked as stopped, and can't be resumed. To take a break, use <b>Pause</b> instead.",
+    ok: "Stop run", danger: true,
+  })) cpAction("/api/campaign/stop");
 });
 $("cp-follow").addEventListener("click", () => selectCampaignRun(null));
 $("cp-delete").addEventListener("click", async () => {
-  if (cpSelected == null || !confirm("Delete this run and its notes? This can't be undone.")) return;
-  await api(`/api/campaign/runs/${cpSelected}/delete`, { method: "POST" }).catch((e) => alert(e.message));
+  if (cpSelected == null || !await confirmModal({
+    title: "Delete this run?",
+    body: "Its splits and notes are deleted. This can't be undone.",
+    ok: "Delete run", danger: true,
+  })) return;
+  await api(`/api/campaign/runs/${cpSelected}/delete`, { method: "POST" })
+    .catch((e) => alertModal("The run couldn't be deleted", e.message));
   cpSelected = null; cpDetail = null;
   await loadCampaign();
 });
