@@ -1421,6 +1421,7 @@ async function renderBuild() {
   if (bdLevels[bdIndex]?.id !== snap.id) return; // moved on meanwhile
   $("bd-title").textContent = `${d.character} · level ${d.level}${d.class ? ` · ${d.class}` : ""}`;
   $("bd-meta").textContent = `${dateTimeOf(d.taken_at)}${d.league ? ` · ${d.league}` : ""}`;
+  $("bd-pob").hidden = !d.ok;
   $("bd-missed").hidden = d.ok;
   $("bd-missed").textContent = d.ok ? "" : `This level was missed: ${d.error || "the build couldn't be fetched"}.`;
   if (!d.ok) { $("bd-stats").innerHTML = ""; $("bd-gear").innerHTML = ""; return; }
@@ -1456,6 +1457,44 @@ $("bd-now").addEventListener("click", async () => {
     setTimeout(() => loadBuilds().catch(() => {}), 5000);
   } catch (e) { alertModal("Couldn't take a snapshot", e.message); }
 });
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const t = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(t);
+    t.select();
+    const ok = document.execCommand("copy");
+    t.remove();
+    return ok;
+  }
+}
+
+$("bd-pob").addEventListener("click", async () => {
+  const snap = bdLevels[bdIndex];
+  if (!snap) return;
+  const btn = $("bd-pob");
+  btn.disabled = true;
+  try {
+    const { code } = await api(`/api/builds/snapshot/${snap.id}/pob`);
+    if (await copyText(code)) {
+      btn.textContent = "Copied ✓";
+      setTimeout(() => { btn.textContent = "Copy PoB code"; }, 2000);
+    } else {
+      await modal({
+        title: "Path of Building code",
+        body: `Copy this code, then in Path of Building: <b>Import/Export Build</b> → paste it under "Import from code".<textarea class="modal-code" readonly onclick="this.select()">${esc(code)}</textarea>`,
+        cancel: null,
+      });
+    }
+  } catch (e) {
+    alertModal("Couldn't make the code", e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 $("bd-delete").addEventListener("click", async () => {
   const snap = bdLevels[bdIndex];
   if (!snap || !await confirmModal({

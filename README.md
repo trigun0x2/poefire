@@ -214,6 +214,14 @@ one zone make one snapshot, labelled with the higher one).
 - Each snapshot stores the website's item and passive-tree data, compressed. The tab shows a
   level slider with the gear, gem links and passive counts at each level; **Snapshot now**
   captures the current build on demand.
+- **Copy PoB code** copies the level's build as a Path of Building code: in PoB, open
+  *Import/Export Build* and paste it under *Import from code*. The code holds the gear (with
+  sockets, links, influences and crafted/fractured/enchant mods), the gem links per item, the
+  passive tree with masteries and tree jewels, and the bandit and pantheon choices. It's made
+  the way PoB's own "Import from website" reads the same data (PoB recalculates everything on
+  import). The passive tree data PoB needs (class ids, jewel sockets) is in
+  `src/poefire/pob_tree.py`; run `uv run python scripts/update_pob_tree.py <version>` when a
+  new league adds a tree version.
 - A failed fetch is retried once after 3 minutes; then the level is marked as missed, with the
   reason. Uses the account connection set up for loot (same rate limits). Turn it off under
   Settings → Campaign.

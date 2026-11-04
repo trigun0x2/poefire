@@ -217,6 +217,8 @@ def test_builds_api(client: tuple[TestClient, AppRuntime], monkeypatch: pytest.M
     assert [lv["level"] for lv in levels] == [42]
     detail = c.get(f"/api/builds/snapshot/{levels[0]['id']}").json()
     assert detail["gear"][1]["links"] == "B-B R"
+    code = c.get(f"/api/builds/snapshot/{levels[0]['id']}/pob").json()
+    assert code["tree_version"] == "3_29" and code["code"].startswith("eN")
     assert c.post(f"/api/builds/snapshot/{levels[0]['id']}/delete", headers=H).json() == {
         "ok": True
     }

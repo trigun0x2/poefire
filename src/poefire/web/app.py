@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from poefire import __version__, builds
+from poefire import __version__, builds, pob, pob_tree
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import overview, sessions, settings, views
@@ -265,6 +265,17 @@ def create_app(rt: AppRuntime) -> FastAPI:
         if snap is None:
             raise HTTPException(404, "no such build snapshot")
         return builds.summarize(snap)
+
+    @app.get("/api/builds/snapshot/{snapshot_id}/pob")
+    def build_pob(snapshot_id: int) -> dict[str, Any]:
+        """The snapshot as a Path of Building code (paste into PoB: Import/Export Build)."""
+        with store() as s:
+            snap = s.get_build_snapshot(snapshot_id)
+        if snap is None:
+            raise HTTPException(404, "no such build snapshot")
+        if snap.data is None:
+            raise HTTPException(409, "this level was missed; there's no build to export")
+        return {"code": pob.pob_code(snap.data, snap.level), "tree_version": pob_tree.TREE_VERSION}
 
     @app.post("/api/builds/character/{character}/snapshot")
     def build_snapshot_now(character: str) -> dict[str, Any]:

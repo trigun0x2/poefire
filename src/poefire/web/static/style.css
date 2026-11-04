@@ -432,3 +432,5 @@ textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--acce
 .bd-missed { margin-bottom: 10px; }
 .cp-builds { font-size: 12px; font-weight: 500; margin-left: 4px; }
 .chip.mule { background: rgba(230, 180, 80, 0.15); color: var(--warn); text-transform: none; letter-spacing: 0; }
+.bd-actions { display: flex; align-items: center; gap: 14px; }
+.modal-code { width: 100%; height: 110px; font: 12px/1.4 ui-monospace, Consolas, monospace; word-break: break-all; }

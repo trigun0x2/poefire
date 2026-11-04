@@ -1,0 +1,82 @@
+{
+  "source": "website",
+  "items": {
+    "character": {"name": "Speedy", "realm": "pc", "class": "Deadeye", "classId": 2, "ascendancyClass": 2, "league": "Keepers", "level": 74},
+    "items": [
+      {"verified": false, "w": 2, "h": 2, "icon": "https://web.poecdn.com/helm.png", "league": "Keepers", "id": "a1b2c3d4e5f60001",
+       "influences": {"hunter": true},
+       "sockets": [{"group": 0, "attr": "D", "sColour": "G"}, {"group": 0, "attr": "D", "sColour": "G"}, {"group": 0, "attr": "S", "sColour": "R"}, {"group": 1, "attr": "I", "sColour": "B"}],
+       "name": "Doom Visor", "typeLine": "Lion Pelt", "baseType": "Lion Pelt", "identified": true, "ilvl": 84,
+       "properties": [{"name": "Quality", "values": [["+20%", 1]], "displayMode": 0, "type": 6}, {"name": "Evasion Rating", "values": [["642", 1]], "displayMode": 0, "type": 17}],
+       "requirements": [{"name": "Level", "values": [["70", 0]], "displayMode": 0}, {"name": "Dex", "values": [["150", 0]], "displayMode": 1}],
+       "enchantMods": ["Tornado Shot fires an additional secondary Projectile"],
+       "explicitMods": ["+87 to maximum Life", "+42% to Fire Resistance", "+38% to Cold Resistance", "16% increased Evasion Rating"],
+       "craftedMods": ["+15% to Lightning Resistance"],
+       "frameType": 2, "x": 0, "y": 0, "inventoryId": "Helm",
+       "socketedItems": [
+         {"verified": false, "w": 1, "h": 1, "icon": "g.png", "support": false, "id": "gem0001", "name": "", "typeLine": "Tornado Shot", "baseType": "Tornado Shot", "ilvl": 0,
+          "properties": [{"name": "Bow, Projectile", "values": [], "displayMode": 0}, {"name": "Level", "values": [["20", 0]], "displayMode": 0, "type": 5}, {"name": "Quality", "values": [["+20%", 1]], "displayMode": 0, "type": 6}],
+          "frameType": 4, "socket": 0, "colour": "D"},
+         {"verified": false, "w": 1, "h": 1, "icon": "g.png", "support": true, "id": "gem0002", "name": "", "typeLine": "Greater Multiple Projectiles Support", "baseType": "Greater Multiple Projectiles Support", "ilvl": 0,
+          "properties": [{"name": "Support, Projectile", "values": [], "displayMode": 0}, {"name": "Level", "values": [["18", 0]], "displayMode": 0, "type": 5}],
+          "frameType": 4, "socket": 1, "colour": "D"},
+         {"verified": false, "w": 1, "h": 1, "icon": "g.png", "support": true, "id": "gem0003", "name": "", "typeLine": "Mirage Archer Support", "baseType": "Mirage Archer Support", "ilvl": 0,
+          "properties": [{"name": "Support", "values": [], "displayMode": 0}, {"name": "Level", "values": [["20 (Max)", 0]], "displayMode": 0, "type": 5}, {"name": "Quality", "values": [["+5%", 1]], "displayMode": 0, "type": 6}],
+          "frameType": 4, "socket": 2, "colour": "S"},
+         {"verified": false, "w": 1, "h": 1, "icon": "g.png", "support": false, "id": "gem0004", "name": "", "typeLine": "Flame Dash", "baseType": "Flame Dash", "ilvl": 0,
+          "properties": [{"name": "Spell, Movement", "values": [], "displayMode": 0}, {"name": "Level", "values": [["5", 0]], "displayMode": 0, "type": 5}],
+          "frameType": 4, "socket": 3, "colour": "I"}
+       ]},
+      {"verified": false, "w": 2, "h": 3, "icon": "tabula.png", "league": "Keepers", "id": "a1b2c3d4e5f60002",
+       "sockets": [{"group": 0, "attr": "G", "sColour": "W"}, {"group": 0, "attr": "G", "sColour": "W"}, {"group": 0, "attr": "G", "sColour": "W"}, {"group": 0, "attr": "G", "sColour": "W"}, {"group": 0, "attr": "G", "sColour": "W"}, {"group": 0, "attr": "G", "sColour": "W"}],
+       "name": "Tabula Rasa", "typeLine": "Simple Robe", "baseType": "Simple Robe", "identified": true, "ilvl": 70,
+       "properties": [{"name": "Quality", "values": [["+0%", 1]], "displayMode": 0, "type": 6}],
+       "explicitMods": ["Item has no Level requirement and Energy Shield"],
+       "frameType": 3, "x": 0, "y": 0, "inventoryId": "BodyArmour",
+       "socketedItems": [
+         {"support": false, "id": "gem0005", "name": "", "typeLine": "Lightning Arrow", "baseType": "Lightning Arrow", "ilvl": 0,
+          "properties": [{"name": "Level", "values": [["16", 0]]}, {"name": "Quality", "values": [["+10%", 1]]}], "frameType": 4, "socket": 0},
+         {"support": true, "id": "gem0006", "name": "", "typeLine": "Elemental Damage with Attacks Support", "baseType": "Elemental Damage with Attacks Support", "ilvl": 0,
+          "properties": [{"name": "Level", "values": [["15", 0]]}], "frameType": 4, "socket": 1}
+       ]},
+      {"verified": false, "w": 1, "h": 1, "icon": "ring.png", "league": "Keepers", "id": "a1b2c3d4e5f60003",
+       "name": "Rune Coil", "typeLine": "Two-Stone Ring", "baseType": "Two-Stone Ring", "identified": true, "ilvl": 82,
+       "requirements": [{"name": "Level", "values": [["50", 0]], "displayMode": 0}],
+       "implicitMods": ["+16% to Fire and Cold Resistances"],
+       "explicitMods": ["Adds 4 to 9 Physical Damage to Attacks", "+51 to maximum Life", "+30% to Lightning Resistance"],
+       "fracturedMods": ["+41 to Dexterity"], "fractured": true,
+       "frameType": 2, "x": 0, "y": 0, "inventoryId": "Ring"},
+      {"verified": false, "w": 1, "h": 2, "icon": "flask.png", "league": "Keepers", "id": "a1b2c3d4e5f60004",
+       "name": "", "typeLine": "Experimenter's Quicksilver Flask of Adrenaline", "baseType": "Quicksilver Flask", "identified": true, "ilvl": 60,
+       "properties": [{"name": "Quality", "values": [["+20%", 1]]}],
+       "explicitMods": ["20% increased Duration", "25% increased Movement Speed during Effect"],
+       "frameType": 1, "x": 0, "y": 0, "inventoryId": "Flask"},
+      {"verified": false, "w": 1, "h": 2, "icon": "flask2.png", "league": "Keepers", "id": "a1b2c3d4e5f60005",
+       "name": "", "typeLine": "Divine Life Flask", "baseType": "Divine Life Flask", "identified": true, "ilvl": 70,
+       "frameType": 0, "x": 1, "y": 0, "inventoryId": "Flask"},
+      {"verified": false, "w": 2, "h": 4, "icon": "bow.png", "league": "Keepers", "id": "a1b2c3d4e5f60006", "corrupted": true,
+       "sockets": [{"group": 0, "attr": "D", "sColour": "G"}, {"group": 0, "attr": "D", "sColour": "G"}],
+       "name": "Storm Thirst", "typeLine": "Thicket Bow", "baseType": "Thicket Bow", "identified": true, "ilvl": 75,
+       "properties": [{"name": "Bow", "values": []}, {"name": "Quality", "values": [["+12%", 1]]}],
+       "implicitMods": ["Adds 1 to 3 Lightning Damage"],
+       "explicitMods": ["Adds 10 to 150 Lightning Damage", "18% increased Attack Speed"],
+       "frameType": 2, "x": 0, "y": 0, "inventoryId": "Weapon2"},
+      {"verified": false, "w": 2, "h": 4, "icon": "inv.png", "name": "", "typeLine": "Chaos Orb", "frameType": 5, "x": 3, "y": 1, "inventoryId": "MainInventory"}
+    ]
+  },
+  "passives": {
+    "hashes": [39821, 52904, 2094, 45035, 59370, 44298],
+    "hashes_ex": [],
+    "mastery_effects": {"44298": 48385},
+    "items": [
+      {"verified": false, "w": 1, "h": 1, "icon": "jewel.png", "league": "Keepers", "id": "a1b2c3d4e5f60007",
+       "name": "Brood Spark", "typeLine": "Cobalt Jewel", "baseType": "Cobalt Jewel", "identified": true, "ilvl": 80,
+       "explicitMods": ["7% increased maximum Life", "+12% to Lightning Resistance"],
+       "frameType": 2, "x": 3, "y": 0, "inventoryId": "PassiveJewels"}
+    ],
+    "jewel_data": {},
+    "bandit_choice": "Alira",
+    "pantheon_major": "Lunaris",
+    "pantheon_minor": "Gruthkul"
+  }
+}
