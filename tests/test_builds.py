@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -219,6 +220,29 @@ def test_builds_api(client: tuple[TestClient, AppRuntime], monkeypatch: pytest.M
     assert detail["gear"][1]["links"] == "B-B R"
     code = c.get(f"/api/builds/snapshot/{levels[0]['id']}/pob").json()
     assert code["tree_version"] == "3_29" and code["code"].startswith("eN")
+    # Open in PoB: uploaded to pobb.in once, then opened through pob://
+    uploads: list[bytes] = []
+
+    def pobbin(r: httpx.Request) -> httpx.Response:
+        uploads.append(r.content)
+        return httpx.Response(200, text="Xyz789")
+
+    rt.web = httpx.Client(transport=httpx.MockTransport(pobbin))
+    opened: list[str] = []
+
+    def open_ok(uri: str) -> bool:
+        opened.append(uri)
+        return True
+
+    rt.open_uri = open_ok
+    sid = levels[0]["id"]
+    first = c.post(f"/api/builds/snapshot/{sid}/open", headers=H).json()
+    assert first == {"url": "https://pobb.in/Xyz789", "uri": "pob://pobbin/Xyz789", "opened": True}
+    rt.open_uri = lambda uri: False  # PoB not registered for pob:// links
+    again = c.post(f"/api/builds/snapshot/{sid}/open", headers=H).json()
+    assert again["opened"] is False and again["url"] == "https://pobb.in/Xyz789"
+    assert len(uploads) == 1 and uploads[0].startswith(b"eN")  # reused, not uploaded again
+    assert opened == ["pob://pobbin/Xyz789"]
     assert c.post(f"/api/builds/snapshot/{levels[0]['id']}/delete", headers=H).json() == {
         "ok": True
     }

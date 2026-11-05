@@ -214,6 +214,10 @@ one zone make one snapshot, labelled with the higher one).
 - Each snapshot stores the website's item and passive-tree data, compressed. The tab shows a
   level slider with the gear, gem links and passive counts at each level; **Snapshot now**
   captures the current build on demand.
+- **Open in PoB** opens the level's build straight in Path of Building: poefire uploads its code
+  to pobb.in once (an unlisted link, the same upload PoB's own Share uses) and opens
+  `pob://pobbin/<id>`. That needs the installed Path of Building, which registers `pob://`
+  links; otherwise poefire shows the pobb.in link to paste into PoB's Import.
 - **Copy PoB code** copies the level's build as a Path of Building code: in PoB, open
   *Import/Export Build* and paste it under *Import from code*. The code holds the gear (with
   sockets, links, influences and crafted/fractured/enchant mods), the gem links per item, the

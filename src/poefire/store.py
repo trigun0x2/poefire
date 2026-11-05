@@ -20,7 +20,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -182,6 +182,11 @@ _SCHEMA_V9 = """
 ALTER TABLE campaign_runs ADD COLUMN mule TEXT
 """
 
+_SCHEMA_V10 = """
+-- The pobb.in paste of a build snapshot, once uploaded ("Open in PoB").
+ALTER TABLE build_snapshots ADD COLUMN pobbin_id TEXT
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -192,6 +197,7 @@ _MIGRATIONS = (
     _SCHEMA_V7,
     _SCHEMA_V8,
     _SCHEMA_V9,
+    _SCHEMA_V10,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -722,6 +728,17 @@ class Store:
         data = json.loads(zlib.decompress(r["data"])) if r["data"] is not None else None
         return BuildSnapshot(r["character"], r["level"], datetime.fromisoformat(r["taken_at"]),
                              r["league"], r["class"], data, r["error"], r["id"])  # fmt: skip
+
+    def get_pobbin_id(self, snapshot_id: int) -> str | None:
+        row = self.conn.execute(
+            "SELECT pobbin_id FROM build_snapshots WHERE id = ?", (snapshot_id,)
+        ).fetchone()
+        return row["pobbin_id"] if row else None
+
+    def set_pobbin_id(self, snapshot_id: int, paste_id: str) -> None:
+        self.conn.execute(
+            "UPDATE build_snapshots SET pobbin_id = ? WHERE id = ?", (paste_id, snapshot_id)
+        )
 
     def delete_build_snapshot(self, snapshot_id: int) -> bool:
         cur = self.conn.execute("DELETE FROM build_snapshots WHERE id = ?", (snapshot_id,))

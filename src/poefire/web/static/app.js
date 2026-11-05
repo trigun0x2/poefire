@@ -1421,7 +1421,7 @@ async function renderBuild() {
   if (bdLevels[bdIndex]?.id !== snap.id) return; // moved on meanwhile
   $("bd-title").textContent = `${d.character} · level ${d.level}${d.class ? ` · ${d.class}` : ""}`;
   $("bd-meta").textContent = `${dateTimeOf(d.taken_at)}${d.league ? ` · ${d.league}` : ""}`;
-  $("bd-pob").hidden = !d.ok;
+  $("bd-pob").hidden = $("bd-open").hidden = !d.ok;
   $("bd-missed").hidden = d.ok;
   $("bd-missed").textContent = d.ok ? "" : `This level was missed: ${d.error || "the build couldn't be fetched"}.`;
   if (!d.ok) { $("bd-stats").innerHTML = ""; $("bd-gear").innerHTML = ""; return; }
@@ -1470,6 +1470,34 @@ async function copyText(text) {
     return ok;
   }
 }
+
+$("bd-open").addEventListener("click", async () => {
+  const snap = bdLevels[bdIndex];
+  if (!snap) return;
+  const btn = $("bd-open");
+  btn.disabled = true;
+  btn.textContent = "Opening…";
+  try {
+    const r = await api(`/api/builds/snapshot/${snap.id}/open`, { method: "POST" });
+    if (r.opened) {
+      btn.textContent = "Opened in PoB ✓";
+    } else {
+      const go = await confirmModal({
+        title: "Path of Building didn't open",
+        body: `Opening builds directly needs the installed Path of Building (it registers <b>pob://</b> links). You can still import it: in Path of Building, open <b>Import/Export Build</b> and paste this link under "Import from code":<textarea class="modal-code" readonly onclick="this.select()">${esc(r.url)}</textarea>`,
+        ok: "Copy link", cancel: "Close",
+      });
+      if (go) await copyText(r.url);
+      btn.textContent = "Open in PoB";
+    }
+  } catch (e) {
+    alertModal("Couldn't open it in Path of Building", e.message);
+    btn.textContent = "Open in PoB";
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { if (!btn.disabled) btn.textContent = "Open in PoB"; }, 3000);
+  }
+});
 
 $("bd-pob").addEventListener("click", async () => {
   const snap = bdLevels[bdIndex];

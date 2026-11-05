@@ -145,3 +145,27 @@ def test_realistic_snapshot() -> None:
     assert "Implicits: 1\n+16% to Fire and Cold Resistances" in ring
     build = root.find("Build")
     assert build is not None and build.attrib["pantheonMajorGod"] == "Lunaris"
+
+
+def test_upload_to_pobbin() -> None:
+    import httpx
+    import pytest
+
+    seen: list[httpx.Request] = []
+
+    def ok(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        return httpx.Response(200, text="AbC123xyz\n")
+
+    http = httpx.Client(transport=httpx.MockTransport(ok))
+    assert pob.upload_pobbin("eNcode", http, "poefire/test") == "AbC123xyz"
+    assert str(seen[0].url) == "https://pobb.in/pob/" and seen[0].content == b"eNcode"
+    assert seen[0].headers["User-Agent"] == "poefire/test"
+    assert pob.pob_uri("AbC123xyz") == "pob://pobbin/AbC123xyz"
+    assert pob.pobbin_url("AbC123xyz") == "https://pobb.in/AbC123xyz"
+    bad = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    with pytest.raises(pob.PobError, match="500"):
+        pob.upload_pobbin("eNcode", bad, "t")
+    junk = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html>")))
+    with pytest.raises(pob.PobError, match="paste id"):
+        pob.upload_pobbin("eNcode", junk, "t")
