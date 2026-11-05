@@ -54,9 +54,12 @@ def reveal(target: Path) -> bool:
     if sys.platform != "win32" or not target.exists():
         return False
     import subprocess
+    import threading
 
     args = ["explorer", f"/select,{target}"] if target.is_file() else ["explorer", str(target)]
-    subprocess.Popen(args)
+    proc = subprocess.Popen(args)
+    # reap it when Explorer's launcher exits (no "still running" warning, no zombie)
+    threading.Thread(target=proc.wait, name="explorer", daemon=True).start()
     return True
 
 

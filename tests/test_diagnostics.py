@@ -34,8 +34,18 @@ def test_log_file_and_verbose(tmp_path: Path) -> None:
         logs.teardown()
 
 
-def test_debug_report(env: tuple[TestClient, AppRuntime, Path], tmp_path: Path) -> None:  # noqa: F811
+def test_debug_report(
+    env: tuple[TestClient, AppRuntime, Path],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client, rt, path = env
+    revealed: list[Path] = []
+
+    def fake_reveal(target: Path) -> bool:  # not Explorer, in tests
+        revealed.append(target)
+        return True
+
+    monkeypatch.setattr("poefire.web.app.reveal", fake_reveal)
     try:
         logs.setup(rt.cfg.db_path.parent)
         client.post("/api/campaign/start", json={}, headers=H)
@@ -72,7 +82,7 @@ def test_debug_report(env: tuple[TestClient, AppRuntime, Path], tmp_path: Path) 
         bad = client.get("/api/diagnostics/report/..%2Fconfig.toml")
         assert bad.status_code == 404
         reveal = client.post("/api/diagnostics/reveal", json={"what": "logs"}, headers=H).json()
-        assert reveal["path"].endswith("logs")  # opened in Explorer on Windows only
+        assert reveal["opened"] and revealed == [rt.cfg.db_path.parent / "logs"]
     finally:
         logs.teardown()
         rt.stop()
