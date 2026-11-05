@@ -196,15 +196,20 @@ class OverlayApi:
     """Called by the overlay page's Move / Lock button (window.pywebview.api)."""
 
     def __init__(self) -> None:
-        self.controller: OverlayController | None = None
+        # Private on purpose: pywebview exposes every public attribute of a js_api object to
+        # the page, walking into it, and the controller leads to the native .NET window.
+        self._controller: OverlayController | None = None
+
+    def _attach(self, controller: OverlayController) -> None:
+        self._controller = controller
 
     def move(self) -> None:
-        if self.controller is not None:
-            self.controller.set_moving(True)
+        if self._controller is not None:
+            self._controller.set_moving(True)
 
     def lock(self) -> None:
-        if self.controller is not None:
-            self.controller.set_moving(False)
+        if self._controller is not None:
+            self._controller.set_moving(False)
 
 
 def native_handle(window: Any) -> int:
@@ -231,7 +236,7 @@ def create(
         resizable=False, shadow=False, background_color="#000000", js_api=api,
     )  # fmt: skip
     controller = OverlayController(window, Win32(), save_position, enabled)
-    api.controller = controller
+    api._attach(controller)
 
     def shown() -> None:
         try:

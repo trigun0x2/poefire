@@ -173,7 +173,8 @@ def test_move_button_corner_takes_clicks_only_under_the_cursor() -> None:
     ov.update()
     assert not ov.hot and win.click_through[-1] is True
     api = OverlayApi()
-    api.controller = ov
+    api._attach(ov)
+    assert [n for n in vars(api) if not n.startswith("_")] == []  # nothing for pywebview to walk
     api.move()  # the button
     assert ov.moving and win.click_through[-1] is False
     api.move()  # already moving: no change

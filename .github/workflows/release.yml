@@ -114,6 +114,7 @@ jobs:
 
       - name: Smoke test the native window (DLLs marked as downloaded, like an extracted zip)
         shell: pwsh
+        timeout-minutes: 5
         run: |
           Get-ChildItem dist/poefire -Recurse -Filter *.dll | ForEach-Object {
             Set-Content -Path $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
