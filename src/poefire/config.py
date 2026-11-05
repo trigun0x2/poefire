@@ -90,6 +90,10 @@ class Config:
     # --- campaign ---
     campaign_hotkey: str = "Ctrl+Alt+R"  # start / pause / resume the campaign timer; "" = off
     campaign_hotkey_sound: bool = True  # beep when the hotkey is pressed
+    # --- in-game overlay (Windows app; the game must run windowed or windowed fullscreen) ---
+    overlay_enabled: bool = True
+    overlay_toggle_hotkey: str = "Ctrl+Alt+O"  # show / hide the overlay
+    overlay_move_hotkey: str = "Ctrl+Alt+L"  # unlock to drag it, press again to lock
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:

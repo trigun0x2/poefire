@@ -53,6 +53,10 @@ FALLBACK_LEAGUES = ("Standard", "Hardcore")
 
 UPDATE_CHECK_EVERY = 6 * 3600
 EVENT_RETENTION = timedelta(days=90)
+HOTKEY_FIELDS = {"campaign": "campaign_hotkey", "overlay": "overlay_toggle_hotkey",
+                 "overlay_move": "overlay_move_hotkey"}  # fmt: skip
+HOTKEY_LABELS = {"campaign": "the campaign timer", "overlay": "the overlay toggle",
+                 "overlay_move": "moving the overlay"}  # fmt: skip
 EXIT_GRACE = 15  # seconds the app gets to close before an update force-exits it
 
 
@@ -120,9 +124,10 @@ class AppRuntime:
         self.builds.enabled = cfg.build_snapshots
         self.values = BookCache()  # loot values of settled maps, sessions, stash (per prices)
         self._session_health: tuple[Any, dict[str, Any]] | None = None
-        self.hotkey: GlobalHotkey | None = None  # registered by start()
-        self.hotkey_error: str | None = None
+        self.hotkeys: dict[str, GlobalHotkey] = {}  # registered by start()
+        self.hotkey_errors: dict[str, str] = {}
         self.hotkey_last: tuple[str, datetime] | None = None
+        self.overlay: Any = None  # the overlay window's controller, when the native window runs
         self.log_path: Path | None = None
         self.service: TrackerService | None = None
         self._build_service()
@@ -220,8 +225,12 @@ class AppRuntime:
             if previous is not None:
                 previous.stop()
             self._build_recorder()
-        if self._started and cfg.campaign_hotkey != old.campaign_hotkey:
-            self._build_hotkey()
+        if self._started and any(
+            getattr(cfg, f) != getattr(old, f) for f in HOTKEY_FIELDS.values()
+        ):
+            self._build_hotkeys()
+        if self.overlay is not None:
+            self.overlay.set_enabled(cfg.overlay_enabled)
         if cfg.league and cfg.league != self._league:
             self.set_league(cfg.league)
         elif cfg.price_league != old.price_league:
@@ -377,32 +386,62 @@ class AppRuntime:
         with self._lock:
             return self.campaign.pause() if pause else self.campaign.resume()
 
-    def _build_hotkey(self) -> None:
-        if self.hotkey is not None:
-            self.hotkey.stop()
-            self.hotkey = None
-        self.hotkey_error = None
-        spec = self.cfg.campaign_hotkey.strip()
-        if not spec:
-            return
-        try:
-            hk = GlobalHotkey(spec, lambda: self.campaign_toggle(from_hotkey=True))
-        except HotkeyError as e:
-            self.hotkey_error = str(e)
-            return
-        if hk.start():
-            self.hotkey = hk
-        else:
-            self.hotkey_error = hk.error
+    def _hotkey_action(self, name: str) -> Callable[[], object]:
+        if name == "campaign":
+            return lambda: self.campaign_toggle(from_hotkey=True)
+        if name == "overlay":
+            return lambda: self.overlay.toggle() if self.overlay is not None else None
+        return lambda: self.overlay.toggle_move() if self.overlay is not None else None
+
+    def _build_hotkeys(self) -> None:
+        """(Re)register the global hotkeys from the config: campaign timer, overlay on/off,
+        overlay move."""
+        for hk in self.hotkeys.values():
+            hk.stop()
+        self.hotkeys, self.hotkey_errors = {}, {}
+        taken: dict[str, str] = {}
+        for name, field in HOTKEY_FIELDS.items():
+            spec = str(getattr(self.cfg, field)).strip()
+            if not spec:
+                continue
+            try:
+                hk = GlobalHotkey(spec, self._hotkey_action(name))
+            except HotkeyError as e:
+                self.hotkey_errors[name] = str(e)
+                continue
+            if hk.spec in taken:
+                self.hotkey_errors[name] = f"{hk.spec} is already used by {taken[hk.spec]}"
+                continue
+            taken[hk.spec] = HOTKEY_LABELS[name]
+            if hk.start():
+                self.hotkeys[name] = hk
+            else:
+                self.hotkey_errors[name] = hk.error or "couldn't register the hotkey"
+
+    def hotkey_status(self, name: str) -> dict[str, Any]:
+        hk = self.hotkeys.get(name)
+        return {
+            "key": str(getattr(self.cfg, HOTKEY_FIELDS[name])).strip() or None,
+            "active": hk is not None and hk.active,
+            "error": self.hotkey_errors.get(name),
+        }
 
     def hotkey_json(self) -> dict[str, Any]:
+        """The campaign hotkey's status (Campaign tab, Settings)."""
         last = self.hotkey_last
         return {
-            "key": self.cfg.campaign_hotkey.strip() or None,
-            "active": self.hotkey is not None and self.hotkey.active,
-            "error": self.hotkey_error,
+            **self.hotkey_status("campaign"),
             "last_action": last[0] if last else None,
             "last_at": last[1].isoformat() if last else None,
+        }
+
+    def overlay_json(self) -> dict[str, Any]:
+        return {
+            "enabled": self.cfg.overlay_enabled,
+            "available": self.overlay is not None,
+            "shown": bool(self.overlay is not None and self.overlay.enabled),
+            "toggle": self.hotkey_status("overlay"),
+            "move": self.hotkey_status("overlay_move"),
         }
 
     def campaign_end(self, finished: bool) -> bool:
@@ -537,7 +576,7 @@ class AppRuntime:
         )
         self._spawn("updates", self._update_loop)
         self._spawn("maintenance", self._maintenance_loop)
-        self._build_hotkey()
+        self._build_hotkeys()
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)
@@ -559,8 +598,8 @@ class AppRuntime:
     def stop(self) -> None:
         self._stop.set()
         self.builds.stop()
-        if self.hotkey is not None:
-            self.hotkey.stop()
+        for hk in self.hotkeys.values():
+            hk.stop()
         if self.recorder is not None:
             self.recorder.stop()
         for t in self._threads:

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>poefire overlay</title>
+  <link rel="stylesheet" href="/static/overlay.css">
+</head>
+<body class="pywebview-drag-region">
+  <div class="hud pywebview-drag-region" id="hud">
+    <div class="move-hint" id="move-hint" hidden>Drag to move · press the move hotkey again to lock</div>
+
+    <section id="campaign" hidden>
+      <div class="head">
+        <span class="timer" id="c-timer">00:00</span>
+        <span class="meta" id="c-meta"></span>
+      </div>
+      <div class="sub" id="c-pb"></div>
+      <table class="areas">
+        <colgroup><col class="n"><col class="t"><col class="p"><col class="d"></colgroup>
+        <tbody id="c-areas"></tbody>
+      </table>
+    </section>
+
+    <section id="mapping" hidden>
+      <div class="row big"><span class="k">Avg / map</span><span class="v chaos" id="m-avg">—</span></div>
+      <div class="row"><span class="k">Session</span><span class="v" id="m-total">—</span></div>
+      <div class="row"><span class="k" id="m-map-name">No map</span><span class="v" id="m-map-time"></span></div>
+    </section>
+
+    <section id="waiting">
+      <div class="sub">poefire</div>
+    </section>
+  </div>
+  <script src="/static/overlay.js"></script>
+</body>
+</html>

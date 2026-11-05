@@ -198,8 +198,26 @@ The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit 
   "muled". The mule's level-ups, zones and deaths are dropped, so the real character's first
   visits are the splits. If the "mule" keeps levelling, it was the real character after all and
   the tag is removed.
-- Each act split shows the difference to your best finished run (PB). Every run is kept with its
+- Each act and zone split shows the difference to your PB: the best finished run of the same
+  base class (Deadeye and Ranger runs count together). Every run is kept with its
   notes, which you can edit at any time; past runs can be deleted.
+
+## In-game overlay
+
+A small panel over the game (Windows app). It shows while Path of Exile is the active window and
+lets clicks through to the game. Set the game to **Windowed** or **Windowed Fullscreen**: nothing
+can be drawn over exclusive fullscreen.
+
+- **Campaign run:** the timer, act and class, then your last 3 areas with your time, your PB's
+  time there (best finished run of the same base class) and the difference.
+- **Mapping:** the session's average chaos per map (finished maps with loot data, since the
+  session started), the session's total and number of maps, and the timer of the map you're in.
+- **Hotkeys:** `Ctrl+Alt+O` shows / hides it; `Ctrl+Alt+L` unlocks it to drag it somewhere else,
+  press it again to lock it there (the position is remembered). Both, and an on/off switch, are
+  under Settings → In-game overlay.
+
+The overlay only reads which window is in front (by its title) and draws over the game; it
+never sends input to the game.
 
 ## Build snapshots
 

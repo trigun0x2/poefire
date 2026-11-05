@@ -1,0 +1,44 @@
+/* In-game overlay: a compact panel on a transparent window, readable over any game scene. */
+:root {
+  --text: #f1f2f5;
+  --muted: #a3a9b6;
+  --accent: #ff8a3d;
+  --good: #57d394;
+  --bad: #ff6b6b;
+  --chaos: #e2bd77;
+  --divine: #a9cbff;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: transparent; color: var(--text); overflow: hidden; user-select: none; }
+.hud {
+  margin: 4px; padding: 8px 10px 9px; border-radius: 9px;
+  background: rgba(14, 16, 20, 0.78); border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+body.moving .hud { border: 1px dashed var(--accent); cursor: move; }
+.move-hint { font-size: 11px; color: var(--accent); margin-bottom: 6px; }
+.head { display: flex; align-items: baseline; gap: 8px; }
+.timer { font-size: 24px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+.timer.paused { color: var(--muted); }
+.meta { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub { color: var(--muted); font-size: 11px; margin: 1px 0 5px; }
+.areas { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.5px; }
+.areas col.t, .areas col.p { width: 62px; }
+.areas col.d { width: 58px; }
+.areas td { padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.areas td.t, .areas td.p, .areas td.d { text-align: right; padding-left: 6px; }
+.areas td.p { color: var(--muted); }
+.areas tr:first-child td { font-weight: 600; }
+.ahead { color: var(--good); }
+.behind { color: var(--bad); }
+.dim { color: var(--muted); }
+.row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; white-space: nowrap; }
+.row .k { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.row.big .v { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.chaos { color: var(--chaos); }
+.divine { color: var(--divine); font-weight: 400; font-size: 12px; }

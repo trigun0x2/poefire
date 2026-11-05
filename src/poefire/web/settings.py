@@ -38,6 +38,9 @@ class SettingsIn(BaseModel):
     update_channel: Literal["stable", "beta"] | None = None
     campaign_hotkey: str | None = None
     build_snapshots: bool | None = None
+    overlay_enabled: bool | None = None
+    overlay_toggle_hotkey: str | None = None
+    overlay_move_hotkey: str | None = None
     campaign_hotkey_sound: bool | None = None
 
 
@@ -109,6 +112,9 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "update_channel": cfg.update_channel,
         "campaign_hotkey": cfg.campaign_hotkey,
         "build_snapshots": cfg.build_snapshots,
+        "overlay_enabled": cfg.overlay_enabled,
+        "overlay_toggle_hotkey": cfg.overlay_toggle_hotkey,
+        "overlay_move_hotkey": cfg.overlay_move_hotkey,
         "campaign_hotkey_sound": cfg.campaign_hotkey_sound,
         "version": rt.update.current,
     }
@@ -175,14 +181,26 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["check_updates"] = body.check_updates
     if body.update_channel is not None:
         changes["update_channel"] = body.update_channel
-    if body.campaign_hotkey is not None:
-        spec = body.campaign_hotkey.strip()
+    for field, label in (("campaign_hotkey", "campaign hotkey"),
+                         ("overlay_toggle_hotkey", "overlay hotkey"),
+                         ("overlay_move_hotkey", "overlay move hotkey")):  # fmt: skip
+        value = getattr(body, field)
+        if value is None:
+            continue
+        spec = value.strip()
         if spec:
             try:
                 spec = hotkey.normalize(spec)
             except hotkey.HotkeyError as e:
-                raise SettingsError(f"campaign hotkey: {e}") from e
-        changes["campaign_hotkey"] = spec
+                raise SettingsError(f"{label}: {e}") from e
+        changes[field] = spec
+    keys = [changes.get(f, getattr(rt.cfg, f)) for f in
+            ("campaign_hotkey", "overlay_toggle_hotkey", "overlay_move_hotkey")]  # fmt: skip
+    used = [k for k in keys if k]
+    if len(set(used)) != len(used):
+        raise SettingsError("the campaign and overlay hotkeys must all be different")
+    if body.overlay_enabled is not None:
+        changes["overlay_enabled"] = body.overlay_enabled
     if body.build_snapshots is not None:
         changes["build_snapshots"] = body.build_snapshots
     if body.campaign_hotkey_sound is not None:

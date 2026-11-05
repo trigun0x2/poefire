@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from poefire import __version__, builds, pob, pob_tree
 from poefire.store import Store
 from poefire.tracker import RunStatus
-from poefire.web import overview, sessions, settings, views
+from poefire.web import hud, overview, sessions, settings, views
 from poefire.web.runtime import AppRuntime
 
 STATIC = Path(__file__).parent / "static"
@@ -88,6 +88,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "league_is_private": rt.is_private,
             "update": rt.update.to_json(),
             "hotkey": rt.hotkey_json(),
+            "overlay": rt.overlay_json(),
             "value": value,
             "prices": {
                 "league": rt.price_league,
@@ -232,6 +233,12 @@ def create_app(rt: AppRuntime) -> FastAPI:
         if not rt.campaign_delete(run_id):
             raise HTTPException(404, "no such campaign run")
         return {"ok": True}
+
+    @app.get("/api/overlay")
+    def overlay_data() -> dict[str, Any]:
+        """What the in-game overlay shows (campaign run, or the mapping session)."""
+        with store() as s:
+            return hud.overlay_state(rt, s)
 
     # --- build snapshots ---
 

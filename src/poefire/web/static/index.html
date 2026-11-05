@@ -350,6 +350,34 @@
     </section>
 
     <section class="card">
+      <div class="card-title">In-game overlay</div>
+      <label class="check" style="margin-top:0">
+        <input id="set-overlay" type="checkbox">
+        <span>Show the overlay over the game <span class="muted">— campaign: timer and your last 3 areas against your PB; mapping: chaos per map this session</span></span>
+      </label>
+      <div class="grid2">
+        <label class="field">
+          <span>Show / hide hotkey</span>
+          <div class="row" style="margin-top:0">
+            <input id="set-overlay-key" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-overlay-key-status">
+            <button type="button" class="btn" id="set-overlay-key-clear">Turn off</button>
+          </div>
+          <div class="hint" id="set-overlay-key-status"></div>
+        </label>
+        <label class="field">
+          <span>Move hotkey <span class="muted">— unlock to drag it, press again to lock</span></span>
+          <div class="row" style="margin-top:0">
+            <input id="set-overlay-move" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-overlay-move-status">
+            <button type="button" class="btn" id="set-overlay-move-clear">Turn off</button>
+          </div>
+          <div class="hint" id="set-overlay-move-status"></div>
+        </label>
+      </div>
+      <div class="hint">The overlay shows while Path of Exile is the active window, and clicks pass through it. Set the game to <b>Windowed</b> or <b>Windowed Fullscreen</b>: nothing can be drawn over exclusive fullscreen. It only displays information; it never sends input to the game. Windows app only.</div>
+      <div class="hint warn" id="set-overlay-unavailable" hidden>The overlay isn't running: it needs the Windows app's own window (not the browser).</div>
+    </section>
+
+    <section class="card">
       <div class="card-title">Updates</div>
       <div class="row" style="margin-top:0">
         <span>poefire <b id="set-version"></b></span>

@@ -616,6 +616,9 @@ async function loadSettings() {
   $("set-check-updates").checked = s.check_updates;
   $("set-hotkey").value = s.campaign_hotkey || "";
   $("set-hotkey-sound").checked = s.campaign_hotkey_sound;
+  $("set-overlay").checked = s.overlay_enabled;
+  $("set-overlay-key").value = s.overlay_toggle_hotkey || "";
+  $("set-overlay-move").value = s.overlay_move_hotkey || "";
   $("set-build-snapshots").checked = s.build_snapshots;
   renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
@@ -787,6 +790,9 @@ $("settings-view").addEventListener("submit", async (e) => {
     check_updates: $("set-check-updates").checked,
     campaign_hotkey: $("set-hotkey").value,
     campaign_hotkey_sound: $("set-hotkey-sound").checked,
+    overlay_enabled: $("set-overlay").checked,
+    overlay_toggle_hotkey: $("set-overlay-key").value,
+    overlay_move_hotkey: $("set-overlay-move").value,
     build_snapshots: $("set-build-snapshots").checked,
     update_channel: $("set-update-channel").value,
   };
@@ -1318,14 +1324,24 @@ makeSortable("cp-runs-table", "campaign", cpSort, () => { if (cpData) renderCamp
 
 // --- hotkey field: click it, then press the combination ---
 
+// hotkey fields: input id -> its status line and where its live status is in /api/status
+const HOTKEY_FIELDS = {
+  "set-hotkey": { status: "set-hotkey-status", live: () => status?.hotkey },
+  "set-overlay-key": { status: "set-overlay-key-status", live: () => status?.overlay?.toggle },
+  "set-overlay-move": { status: "set-overlay-move-status", live: () => status?.overlay?.move },
+};
+
 function renderHotkeyStatus() {
-  const hk = status?.hotkey;
-  const el = $("set-hotkey-status");
-  const value = $("set-hotkey").value;
-  if (!value) { el.className = "hint"; el.textContent = "Off."; return; }
-  if (!hk || hk.key !== value) { el.className = "hint"; el.textContent = "Save to apply."; return; }
-  el.className = `hint ${hk.error ? "bad" : hk.active ? "ok" : ""}`;
-  el.textContent = hk.error ? `✗ ${hk.error}` : hk.active ? `✓ ${hk.key} is active.` : "Not active (global hotkeys need the Windows app).";
+  for (const [id, f] of Object.entries(HOTKEY_FIELDS)) {
+    const hk = f.live();
+    const el = $(f.status);
+    const value = $(id).value;
+    if (!value) { el.className = "hint"; el.textContent = "Off."; continue; }
+    if (!hk || hk.key !== value) { el.className = "hint"; el.textContent = "Save to apply."; continue; }
+    el.className = `hint ${hk.error ? "bad" : hk.active ? "ok" : ""}`;
+    el.textContent = hk.error ? `✗ ${hk.error}` : hk.active ? `✓ ${hk.key} is active.` : "Not active (global hotkeys need the Windows app).";
+  }
+  $("set-overlay-unavailable").hidden = !status?.overlay || status.overlay.available || !$("set-overlay").checked;
 }
 const KEY_NAMES = { " ": "Space", PageUp: "PgUp", PageDown: "PgDn", Insert: "Insert", Delete: "Delete", Home: "Home", End: "End", Pause: "Pause", ScrollLock: "ScrollLock" };
 function keyName(e) {
@@ -1338,20 +1354,23 @@ function keyName(e) {
   if (/^Digit\d$/.test(e.code)) return e.code.slice(5);
   return KEY_NAMES[e.key] || null;
 }
-$("set-hotkey").addEventListener("focus", (e) => e.target.classList.add("capturing"));
-$("set-hotkey").addEventListener("blur", (e) => e.target.classList.remove("capturing"));
-$("set-hotkey").addEventListener("keydown", (e) => {
-  if (e.key === "Tab") return;
-  e.preventDefault();
-  if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return; // wait for the main key
-  if (e.key === "Escape") { e.target.blur(); return; }
-  const key = keyName(e);
-  if (!key) return;
-  const mods = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Win"].filter(Boolean);
-  e.target.value = [...mods, key].join("+");
-  renderHotkeyStatus();
-});
-$("set-hotkey-clear").addEventListener("click", () => { $("set-hotkey").value = ""; renderHotkeyStatus(); });
+for (const id of Object.keys(HOTKEY_FIELDS)) {
+  const input = $(id);
+  input.addEventListener("focus", () => input.classList.add("capturing"));
+  input.addEventListener("blur", () => input.classList.remove("capturing"));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") return;
+    e.preventDefault();
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return; // wait for the main key
+    if (e.key === "Escape") { input.blur(); return; }
+    const key = keyName(e);
+    if (!key) return;
+    const mods = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Win"].filter(Boolean);
+    input.value = [...mods, key].join("+");
+    renderHotkeyStatus();
+  });
+  $(`${id}-clear`).addEventListener("click", () => { input.value = ""; renderHotkeyStatus(); });
+}
 
 // --- builds ---
 
