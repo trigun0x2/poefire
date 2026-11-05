@@ -20,8 +20,20 @@ html, body { margin: 0; background: transparent; color: var(--text); overflow: h
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
   font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
-body.moving .hud { border: 1px dashed var(--accent); cursor: move; }
-.move-hint { font-size: 11px; color: var(--accent); margin-bottom: 6px; }
+.hud { position: relative; }
+body.moving .hud { border: 1px dashed var(--accent); }
+.move-hint { font-size: 11px; color: var(--accent); margin-bottom: 6px; padding-right: 80px; }
+.drag-cover { position: absolute; inset: 0; z-index: 1; cursor: move; border-radius: 9px; }
+/* top-right corner: the only part that takes clicks while locked (see overlay_window.py) */
+.ov-btn {
+  position: absolute; top: 6px; right: 8px; z-index: 2; height: 22px; padding: 0 8px;
+  font-family: inherit; font-weight: 600; font-size: 11px; line-height: 20px; color: var(--muted);
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px; cursor: pointer; opacity: 0.55; transition: opacity 0.12s;
+}
+.ov-btn:hover, body.moving .ov-btn { opacity: 1; color: var(--text); }
+body.moving .ov-btn { background: var(--accent); border-color: var(--accent); color: #1a1006; }
+.head, #mapping .row.big { padding-right: 70px; }
 .head { display: flex; align-items: baseline; gap: 8px; }
 .timer { font-size: 24px; font-weight: 700; color: var(--accent); line-height: 1.1; }
 .timer.paused { color: var(--muted); }

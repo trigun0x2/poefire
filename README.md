@@ -213,7 +213,9 @@ can be drawn over exclusive fullscreen.
 - **Mapping:** the session's average chaos per map (finished maps with loot data, since the
   session started), the session's total and number of maps, and the timer of the map you're in.
 - **Hotkeys:** `Ctrl+Alt+O` shows / hides it; `Ctrl+Alt+L` unlocks it to drag it somewhere else,
-  press it again to lock it there (the position is remembered). Both, and an on/off switch, are
+  press it again to lock it there (the position is remembered). The **Move / Lock** button in the
+  overlay's top-right corner does the same: while locked, only that corner takes clicks, and
+  only while the cursor is over it; everywhere else, clicks go to the game. Both, and an on/off switch, are
   under Settings → In-game overlay.
 
 The overlay only reads which window is in front (by its title) and draws over the game; it

@@ -25,11 +25,24 @@ const nf1 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const chaos = (v) => (Math.abs(v) >= 100 ? nf0.format(v) : nf1.format(v)) + "c";
 
-// called by the app (move hotkey)
+let moving = false;
+
+// called by the app (move hotkey, or after the button)
 window.setMoving = (on) => {
+  moving = on;
   document.body.classList.toggle("moving", on);
   $("move-hint").hidden = !on;
+  $("drag-cover").hidden = !on;
+  $("ov-btn").innerHTML = on ? "&#128274; Lock" : "&#10021; Move";
+  $("ov-btn").title = on ? "Lock the overlay here (clicks pass through to the game again)"
+    : "Unlock to drag the overlay (the move hotkey does the same)";
 };
+
+$("ov-btn").addEventListener("click", () => {
+  const api = window.pywebview?.api;
+  if (!api) return; // only in the app's overlay window
+  if (moving) api.lock(); else api.move();
+});
 
 function elapsed() {
   return (performance.now() - fetchedAt) / 1000;

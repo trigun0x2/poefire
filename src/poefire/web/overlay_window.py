@@ -26,7 +26,10 @@ WIDTH, HEIGHT = 340, 196
 POSITION_KEY = "overlay_position"
 GAME_TITLES = ("Path of Exile",)
 GAME_CLASSES = ("POEWindowClass",)
-POLL = 0.25  # seconds between foreground checks
+POLL = 0.1  # seconds between foreground / cursor checks
+# The Move/Lock button's corner (logical px from the window's top-left): while locked, only
+# this area takes clicks, and only while the cursor is over it.
+BUTTON_AREA = (WIDTH - 96, 0, WIDTH, 36)
 
 GWL_EXSTYLE = -20
 WS_EX_LAYERED, WS_EX_TRANSPARENT = 0x80000, 0x20
@@ -63,6 +66,26 @@ class Win32:
     def show(self, hwnd: int, visible: bool) -> None:
         self.user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE if visible else SW_HIDE)
 
+    def cursor(self) -> tuple[int, int]:
+        from ctypes import wintypes
+
+        pt = wintypes.POINT()
+        self.user32.GetCursorPos(self.ctypes.byref(pt))
+        return pt.x, pt.y
+
+    def rect(self, hwnd: int) -> tuple[int, int, int, int]:
+        from ctypes import wintypes
+
+        r = wintypes.RECT()
+        self.user32.GetWindowRect(hwnd, self.ctypes.byref(r))
+        return r.left, r.top, r.right, r.bottom
+
+    def scale(self, hwnd: int) -> float:
+        try:
+            return float(self.user32.GetDpiForWindow(hwnd)) / 96 or 1.0
+        except AttributeError:
+            return 1.0
+
 
 class OverlayController:
     def __init__(self, window: Any, win32: Any, save_position: Callable[[int, int], None],
@@ -73,6 +96,7 @@ class OverlayController:
         self.enabled = enabled  # the toggle hotkey / Settings switch
         self.moving = False  # unlocked: draggable, clicks no longer pass through
         self.visible = False
+        self.hot = False  # the cursor is over the button corner (it takes clicks)
         self.hwnd = 0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -99,9 +123,15 @@ class OverlayController:
         self.enabled = enabled
         self.update()
 
+    def set_moving(self, moving: bool) -> None:
+        """The overlay's own Move / Lock button."""
+        if moving != self.moving:
+            self.toggle_move()
+
     def toggle_move(self) -> None:
         """Unlock to drag the overlay; again to lock it where it is (and remember that)."""
         self.moving = not self.moving
+        self.hot = False
         if self.hwnd:
             self.win32.set_click_through(self.hwnd, not self.moving)
         self._js(f"setMoving({'true' if self.moving else 'false'})")
@@ -126,6 +156,13 @@ class OverlayController:
     def wanted(self) -> bool:
         return self.enabled and (self.moving or self.game_in_front())
 
+    def over_button(self) -> bool:
+        left, top, _, _ = self.win32.rect(self.hwnd)
+        x, y = self.win32.cursor()
+        s = self.win32.scale(self.hwnd)
+        x0, y0, x1, y1 = BUTTON_AREA
+        return bool(left + x0 * s <= x < left + x1 * s and top + y0 * s <= y < top + y1 * s)
+
     def update(self) -> None:
         if not self.hwnd:
             return
@@ -133,6 +170,13 @@ class OverlayController:
         if want != self.visible:
             self.win32.show(self.hwnd, want)
             self.visible = want
+        if self.visible and not self.moving:
+            # Locked: everything passes clicks to the game, except the Move button's corner
+            # while the cursor is over it.
+            hot = self.over_button()
+            if hot != self.hot:
+                self.win32.set_click_through(self.hwnd, not hot)
+                self.hot = hot
 
     def _run(self) -> None:
         while not self._stop.wait(POLL):
@@ -146,6 +190,21 @@ class OverlayController:
             self.window.evaluate_js(code)
         except Exception:  # the page may not be loaded yet
             log.debug("overlay js failed: %s", code)
+
+
+class OverlayApi:
+    """Called by the overlay page's Move / Lock button (window.pywebview.api)."""
+
+    def __init__(self) -> None:
+        self.controller: OverlayController | None = None
+
+    def move(self) -> None:
+        if self.controller is not None:
+            self.controller.set_moving(True)
+
+    def lock(self) -> None:
+        if self.controller is not None:
+            self.controller.set_moving(False)
 
 
 def native_handle(window: Any) -> int:
@@ -165,12 +224,14 @@ def create(
     if sys.platform != "win32":
         return None
     pos = position or {}
+    api = OverlayApi()
     window = webview.create_window(
         "poefire overlay", url, width=WIDTH, height=HEIGHT, x=pos.get("x"), y=pos.get("y"),
-        frameless=True, easy_drag=True, on_top=True, transparent=True, focus=False,
-        resizable=False, shadow=False, background_color="#000000",
+        frameless=True, easy_drag=False, on_top=True, transparent=True, focus=False,
+        resizable=False, shadow=False, background_color="#000000", js_api=api,
     )  # fmt: skip
     controller = OverlayController(window, Win32(), save_position, enabled)
+    api.controller = controller
 
     def shown() -> None:
         try:

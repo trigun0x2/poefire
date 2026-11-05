@@ -62,6 +62,7 @@ def test_mapping_overlay(app: TestClient) -> None:  # noqa: F811
 
 class FakeWin32:
     def __init__(self) -> None:
+        self.mouse = (0, 0)
         self.front = 0
         self.titles = {100: ("Path of Exile", "POEWindowClass"), 200: ("Discord", "Chrome")}
         self.shown: list[bool] = []
@@ -78,6 +79,15 @@ class FakeWin32:
 
     def show(self, hwnd: int, visible: bool) -> None:
         self.shown.append(visible)
+
+    def cursor(self) -> tuple[int, int]:
+        return self.mouse
+
+    def rect(self, hwnd: int) -> tuple[int, int, int, int]:
+        return (1000, 500, 1000 + 340 * 2, 500 + 196 * 2)  # at 200% scaling
+
+    def scale(self, hwnd: int) -> float:
+        return 2.0
 
 
 class FakeWindow:
@@ -143,3 +153,30 @@ def test_hotkeys_report_why_they_are_off(tmp_path: Path) -> None:
     assert rt.overlay_json()["toggle"] == {"key": "Ctrl+Alt+O", "active": False,
                                            "error": rt.hotkey_errors["overlay"]}  # fmt: skip
     rt.stop()
+
+
+def test_move_button_corner_takes_clicks_only_under_the_cursor() -> None:
+    from poefire.web.overlay_window import BUTTON_AREA, OverlayApi
+
+    win = FakeWin32()
+    ov = OverlayController(FakeWindow(), win, lambda x, y: None)
+    ov.attach(7)
+    ov.stop()
+    win.front = 100
+    ov.update()
+    assert win.click_through == [True] and not ov.hot
+    x0, y0, _, _ = BUTTON_AREA
+    win.mouse = (1000 + (x0 + 10) * 2, 500 + (y0 + 10) * 2)  # over the button (200% scale)
+    ov.update()
+    assert ov.hot and win.click_through[-1] is False  # the button can be clicked
+    win.mouse = (1000 + 20, 500 + 150)  # over the splits: clicks go to the game again
+    ov.update()
+    assert not ov.hot and win.click_through[-1] is True
+    api = OverlayApi()
+    api.controller = ov
+    api.move()  # the button
+    assert ov.moving and win.click_through[-1] is False
+    api.move()  # already moving: no change
+    assert ov.moving
+    api.lock()
+    assert not ov.moving and win.click_through[-1] is True
