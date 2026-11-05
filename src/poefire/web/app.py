@@ -277,29 +277,6 @@ def create_app(rt: AppRuntime) -> FastAPI:
             raise HTTPException(409, "this level was missed; there's no build to export")
         return {"code": pob.pob_code(snap.data, snap.level), "tree_version": pob_tree.TREE_VERSION}
 
-    @app.post("/api/builds/snapshot/{snapshot_id}/open")
-    def build_open(snapshot_id: int) -> dict[str, Any]:
-        """Open the snapshot in Path of Building: upload it to pobb.in once (like PoB's own
-        Share), then open pob://pobbin/<id>, which PoB imports straight away."""
-        with store() as s:
-            snap = s.get_build_snapshot(snapshot_id)
-            paste_id = s.get_pobbin_id(snapshot_id) if snap is not None else None
-        if snap is None:
-            raise HTTPException(404, "no such build snapshot")
-        if snap.data is None:
-            raise HTTPException(409, "this level was missed; there's no build to open")
-        if paste_id is None:
-            try:
-                paste_id = pob.upload_pobbin(
-                    pob.pob_code(snap.data, snap.level), rt.web, rt.user_agent
-                )
-            except pob.PobError as e:
-                raise HTTPException(502, str(e)) from None
-            with store() as s:
-                s.set_pobbin_id(snapshot_id, paste_id)
-        uri = pob.pob_uri(paste_id)
-        return {"url": pob.pobbin_url(paste_id), "uri": uri, "opened": rt.open_uri(uri)}
-
     @app.post("/api/builds/character/{character}/snapshot")
     def build_snapshot_now(character: str) -> dict[str, Any]:
         if rt._build_api() is None:

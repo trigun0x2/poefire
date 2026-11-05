@@ -16,8 +16,6 @@ import zlib
 from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
-import httpx
-
 from poefire.builds import parts
 from poefire.pob_tree import CLASSES, JEWEL_SLOTS, TREE_VERSION
 
@@ -346,52 +344,3 @@ def decode(code: str) -> str:
 
 def pob_code(data: Json, level: int | None = None) -> str:
     return encode(build_xml(data, level))
-
-
-# --- opening in Path of Building ---
-
-POBBIN_UPLOAD = "https://pobb.in/pob/"  # what PoB's own "Share" posts to (BuildSiteTools.lua)
-_POBBIN_ID = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
-
-
-class PobError(Exception):
-    pass
-
-
-def upload_pobbin(code: str, http: httpx.Client, user_agent: str) -> str:
-    """Upload a code to pobb.in (an unlisted paste) and return its id."""
-    try:
-        r = http.post(POBBIN_UPLOAD, content=code.encode("ascii"),
-                      headers={"User-Agent": user_agent,
-                               "Content-Type": "application/x-www-form-urlencoded"})  # fmt: skip
-    except httpx.HTTPError as e:
-        raise PobError(f"couldn't reach pobb.in: {e}") from e
-    if r.status_code != 200:
-        raise PobError(f"pobb.in answered HTTP {r.status_code}")
-    paste_id = r.text.strip().rsplit("/", 1)[-1]
-    if not _POBBIN_ID.match(paste_id):
-        raise PobError("pobb.in sent back something that isn't a paste id")
-    return paste_id
-
-
-def pobbin_url(paste_id: str) -> str:
-    return f"https://pobb.in/{paste_id}"
-
-
-def pob_uri(paste_id: str) -> str:
-    """Opens Path of Building straight into the build (its pob:// protocol handler)."""
-    return f"pob://pobbin/{paste_id}"
-
-
-def open_uri(uri: str) -> bool:
-    """Hand a pob:// link to Windows. False when nothing is registered for it."""
-    import os
-    import sys
-
-    if sys.platform != "win32":
-        return False
-    try:
-        os.startfile(uri)
-    except OSError:
-        return False
-    return True

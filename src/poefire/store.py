@@ -729,17 +729,6 @@ class Store:
         return BuildSnapshot(r["character"], r["level"], datetime.fromisoformat(r["taken_at"]),
                              r["league"], r["class"], data, r["error"], r["id"])  # fmt: skip
 
-    def get_pobbin_id(self, snapshot_id: int) -> str | None:
-        row = self.conn.execute(
-            "SELECT pobbin_id FROM build_snapshots WHERE id = ?", (snapshot_id,)
-        ).fetchone()
-        return row["pobbin_id"] if row else None
-
-    def set_pobbin_id(self, snapshot_id: int, paste_id: str) -> None:
-        self.conn.execute(
-            "UPDATE build_snapshots SET pobbin_id = ? WHERE id = ?", (paste_id, snapshot_id)
-        )
-
     def delete_build_snapshot(self, snapshot_id: int) -> bool:
         cur = self.conn.execute("DELETE FROM build_snapshots WHERE id = ?", (snapshot_id,))
         return cur.rowcount > 0

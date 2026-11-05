@@ -16,9 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx
-
-from poefire import __version__, campaign, pob, wiring
+from poefire import __version__, campaign, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -121,9 +119,6 @@ class AppRuntime:
         self.builds = BuildWatcher(self._build_api, lambda: Store(cfg.db_path), now)
         self.builds.enabled = cfg.build_snapshots
         self.values = BookCache()  # loot values of settled maps, sessions, stash (per prices)
-        self.user_agent = f"poefire/{__version__} (+{wiring.PROJECT_URL})"
-        self.web = httpx.Client(timeout=30, follow_redirects=True)  # pobb.in uploads
-        self.open_uri: Callable[[str], bool] = pob.open_uri
         self._session_health: tuple[Any, dict[str, Any]] | None = None
         self.hotkey: GlobalHotkey | None = None  # registered by start()
         self.hotkey_error: str | None = None
@@ -560,7 +555,6 @@ class AppRuntime:
     def stop(self) -> None:
         self._stop.set()
         self.builds.stop()
-        self.web.close()
         if self.hotkey is not None:
             self.hotkey.stop()
         if self.recorder is not None:
