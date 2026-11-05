@@ -3,6 +3,8 @@
     uv run python scripts/demo_data.py <data folder>
 
 Then run poefire against it (see scripts/screenshots.js). Nothing here touches your real data.
+Item icons are the game's own, looked up on poe.ninja (needs internet; without it the items
+have no icons). The prices are fixed, so the pictures don't change with the market.
 """
 
 from __future__ import annotations
@@ -25,22 +27,41 @@ from poefire.store import Store
 from poefire.tracker import Run, RunStatus, Segment
 
 LEAGUE = "Keepers"
-ICON = "https://web.poecdn.com/demo/{}.png"  # served by the screenshot script
-PRICES = {  # name -> (chaos, icon colour slug)
-    "Divine Orb": (182.0, "divine"),
-    "Exalted Orb": (16.0, "exalted"),
-    "Chaos Orb": (1.0, "chaos"),
-    "Orb of Annulment": (8.5, "annul"),
-    "Vaal Orb": (1.2, "vaal"),
-    "Orb of Alchemy": (0.35, "alch"),
-    "Orb of Fusing": (0.6, "fusing"),
-    "Gemcutter's Prism": (1.4, "gcp"),
-    "Ambush Scarab of Containment": (6.0, "scarab"),
-    "Breach Scarab of the Dreamer": (11.0, "scarab"),
-    "Deafening Essence of Contempt": (3.5, "essence"),
-    "The Apothecary": (2900.0, "card"),
-    "The Wrath": (24.0, "card"),
-    "Simulacrum Splinter": (2.1, "splinter"),
+ICONS: dict[str, str] = {}  # item name -> its icon on the game's CDN, from poe.ninja
+GEAR_ICONS: dict[str, str] = {}  # unique name or base type -> icon
+
+
+def with_gear_icons(node: object) -> None:
+    """Give the build fixture's items their real icons (it has placeholders)."""
+    if isinstance(node, dict):
+        if "icon" in node and ("baseType" in node or "typeLine" in node):
+            icon = GEAR_ICONS.get(str(node.get("name") or "")) or GEAR_ICONS.get(
+                str(node.get("baseType") or node.get("typeLine") or "")
+            )
+            if icon:
+                node["icon"] = icon
+        for v in node.values():
+            with_gear_icons(v)
+    elif isinstance(node, list):
+        for v in node:
+            with_gear_icons(v)
+
+
+PRICES = {  # name -> chaos (fixed, so the pictures don't change with the market)
+    "Divine Orb": 182.0,
+    "Exalted Orb": 16.0,
+    "Chaos Orb": 1.0,
+    "Orb of Annulment": 8.5,
+    "Vaal Orb": 1.2,
+    "Orb of Alchemy": 0.35,
+    "Orb of Fusing": 0.6,
+    "Gemcutter's Prism": 1.4,
+    "Ambush Scarab of Containment": 6.0,
+    "Breach Scarab of the Dreamer": 11.0,
+    "Deafening Essence of Contempt": 3.5,
+    "The Apothecary": 2900.0,
+    "The Wrath": 24.0,
+    "Simulacrum Splinter": 2.1,
 }
 MAPS = [
     ("MapWorldsStrand", "Strand"), ("MapWorldsCrimsonTemple", "Crimson Temple"),
@@ -56,11 +77,54 @@ ZONES = [
 ]  # fmt: skip
 
 
+def load_icons() -> None:
+    """The real icons of the demo items, from poe.ninja's current league."""
+    from poefire.pricing.ninja import NinjaClient, NinjaError
+
+    ninja = NinjaClient("poefire-readme-screenshots (+https://github.com/trigun0x2/poefire)")
+    leagues = ninja.leagues()
+    if not leagues:
+        print("poe.ninja unreachable: the demo items get no icons")
+        return
+    plain = [
+        n for n in leagues if not any(w in n for w in ("Hardcore", "Standard", "Ruthless", "HC"))
+    ]
+    league = (plain or leagues)[0]
+    for source, type_ in [("exchange", "Currency"), ("currency", "Currency"),
+                          ("currency", "Fragment"), ("item", "DivinationCard"),
+                          ("item", "Scarab"), ("item", "Essence")]:  # fmt: skip
+        try:
+            lines = ninja.fetch(source, league, type_)
+        except NinjaError as e:
+            print(f"no icons from {source}/{type_}: {e}")
+            continue
+        for line in lines:
+            if line.icon and line.name in PRICES:
+                ICONS.setdefault(line.name, line.icon)
+    # gear in the build snapshots: uniques by name, the rest by base type
+    for type_ in ("UniqueArmour", "UniqueWeapon", "UniqueAccessory", "UniqueFlask",
+                  "UniqueJewel", "BaseType"):  # fmt: skip
+        try:
+            lines = ninja.fetch("item", league, type_)
+        except NinjaError as e:
+            print(f"no icons from {type_}: {e}")
+            continue
+        for line in lines:
+            if line.icon:
+                GEAR_ICONS.setdefault(line.name, line.icon)
+                if line.base_type:
+                    GEAR_ICONS.setdefault(line.base_type, line.icon)
+    missing = sorted(set(PRICES) - set(ICONS))
+    print(f"icons from poe.ninja ({league}): {len(ICONS)}; missing: {missing or 'none'}")
+
+
 def raw(name: str, qty: int) -> dict[str, object]:
-    icon = PRICES[name][1]
     frame = 6 if name.startswith("The ") else 5
-    return {"typeLine": name, "baseType": name, "frameType": frame, "stackSize": qty,
-            "icon": ICON.format(icon)}  # fmt: skip
+    out: dict[str, object] = {"typeLine": name, "baseType": name, "frameType": frame,
+                              "stackSize": qty}  # fmt: skip
+    if name in ICONS:
+        out["icon"] = ICONS[name]
+    return out
 
 
 def delta(name: str, qty: int) -> ItemDelta:
@@ -76,12 +140,12 @@ def seed(folder: Path) -> None:
 
     with s.transaction():
         for source, type_ in PRICE_SOURCES:  # all fresh, so nothing is fetched
-            lines = [PriceLine(n, c) for n, (c, _) in PRICES.items()] if type_ == "Currency" \
-                else [PriceLine(n, c) for n, (c, _) in PRICES.items() if n.startswith("The ")] \
+            lines = [PriceLine(n, c) for n, c in PRICES.items()] if type_ == "Currency" \
+                else [PriceLine(n, c) for n, c in PRICES.items() if n.startswith("The ")] \
                 if type_ == "DivinationCard" \
-                else [PriceLine(n, c) for n, (c, _) in PRICES.items() if "Scarab" in n] \
+                else [PriceLine(n, c) for n, c in PRICES.items() if "Scarab" in n] \
                 if type_ == "Scarab" \
-                else [PriceLine(n, c) for n, (c, _) in PRICES.items() if "Essence" in n] \
+                else [PriceLine(n, c) for n, c in PRICES.items() if "Essence" in n] \
                 if type_ == "Essence" else []  # fmt: skip
             s.save_prices(LEAGUE, source, type_, time.time(), lines)
 
@@ -139,7 +203,7 @@ def seed(folder: Path) -> None:
                 ("Deafening Essence of Contempt", 26, "t-dump"),
                 ("The Apothecary", 1, "t-dump"), ("The Wrath", 4, "t-dump")]  # fmt: skip
         items = [ItemEntry(None, f"5||{n}", n, 5, q, True, src, raw(n, q)) for n, q, src in held]
-        cpd = PRICES["Divine Orb"][0]
+        cpd = PRICES["Divine Orb"]
         for k in range(0, 240, 3):  # every 3 hours
             at = now - timedelta(hours=240 - k)
             value = (52 + k * 0.105 + rnd.uniform(-1.6, 1.6) + (14 if k > 226 else 0)) * cpd
@@ -147,7 +211,7 @@ def seed(folder: Path) -> None:
             s.add_snapshot_value(sid, at, LEAGUE, value, cpd, 0)
         sid = s.add_snapshot(Snapshot(now - timedelta(minutes=4), items=items), "manual", None)
         s.add_snapshot_value(sid, now - timedelta(minutes=4), LEAGUE,
-                             sum(PRICES[e.name][0] * e.quantity for e in items),
+                             sum(PRICES[e.name] * e.quantity for e in items),
                              cpd, 0)  # fmt: skip
 
         # campaign runs: a few Deadeye/Witch runs, one in progress
@@ -183,6 +247,7 @@ def seed(folder: Path) -> None:
         fixture = json.loads(
             (Path(__file__).parent.parent / "tests" / "data" / "build_website.json").read_text()
         )
+        with_gear_icons(fixture)
         for i, level in enumerate([5, 10, 15, 22, 38, 61, 74, 88]):
             s.add_build_snapshot(BuildSnapshot("QuickShot", level, now - timedelta(days=9 - i),
                                                LEAGUE, "Deadeye", fixture))  # fmt: skip
@@ -195,4 +260,5 @@ def seed(folder: Path) -> None:
 
 
 if __name__ == "__main__":
+    load_icons()
     seed(Path(sys.argv[1]))
