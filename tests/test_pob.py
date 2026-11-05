@@ -99,6 +99,8 @@ def test_build_xml_from_website_data() -> None:
         ("Helmet", [("Flame Dash", "5", "20")]),
     ]  # fmt: skip
     assert build.attrib["mainSocketGroup"] == "1"  # the biggest link group
+    # pobb.in rejects a <Build> without children (PoB always saves some); PoB ignores this one
+    assert [c.tag for c in build] == ["TimelessData"]
     inputs = {i.attrib["name"]: i.attrib["string"] for i in root.findall("Config/ConfigSet/Input")}
     assert inputs == {"bandit": "Alira", "pantheonMajorGod": "None", "pantheonMinorGod": "None"}
 

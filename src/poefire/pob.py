@@ -293,7 +293,7 @@ def build_xml(data: Json, level: int | None = None) -> str:
         return f"<{elem}{attrs}{'/' if close else ''}>"
 
     build = tag(
-        "Build", True, level=level, targetVersion="3_0", className=CLASSES[class_id][0],
+        "Build", False, level=level, targetVersion="3_0", className=CLASSES[class_id][0],
         ascendClassName=char_class if ascend_id else "None", mainSocketGroup=main_group,
         viewMode="TREE", bandit=bandit, pantheonMajorGod=major, pantheonMinorGod=minor,
     )  # fmt: skip
@@ -303,7 +303,10 @@ def build_xml(data: Json, level: int | None = None) -> str:
         secondaryAscendClassId=secondary, nodes=",".join(map(str, nodes)),
         masteryEffects=masteries,
     )  # fmt: skip
-    x = ['<?xml version="1.0" encoding="UTF-8"?>', "<PathOfBuilding>", build]
+    # <Build> always has children in PoB's own saves (stats, TimelessData). pobb.in's parser
+    # requires at least one, so write what a fresh PoB build saves; PoB recomputes stats.
+    timeless = tag("TimelessData", True, searchList="", searchListFallback="")
+    x = ['<?xml version="1.0" encoding="UTF-8"?>', "<PathOfBuilding>", build, timeless, "</Build>"]
     x += [tag("Tree", activeSpec=1), spec, "<Sockets>"]
     x += [tag("Socket", True, nodeId=n, itemId=i) for n, i in sockets]
     x += ["</Sockets>", "</Spec>", "</Tree>", tag("Items", activeItemSet=1)]
