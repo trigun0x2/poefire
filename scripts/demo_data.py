@@ -15,6 +15,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from poefire.builds import BuildSnapshot
 from poefire.campaign import CampaignRun, Split, SplitKind
@@ -78,44 +79,67 @@ ZONES = [
 
 
 def load_icons() -> None:
-    """The real icons of the demo items, from poe.ninja's current league."""
-    from poefire.pricing.ninja import NinjaClient, NinjaError
+    """The game's own icons for the demo items and the build's gear, from poe.ninja."""
+    import httpx
 
-    ninja = NinjaClient("poefire-readme-screenshots (+https://github.com/trigun0x2/poefire)")
-    leagues = ninja.leagues()
-    if not leagues:
+    base = "https://poe.ninja/poe1/api/economy"
+    cdn = "https://web.poecdn.com"
+    agent = "poefire-readme-screenshots (+https://github.com/trigun0x2/poefire)"
+    http = httpx.Client(timeout=30, headers={"User-Agent": agent})
+
+    def get(path: str, **params: str) -> dict[str, Any]:
+        try:
+            r = http.get(base + path, params=params)
+            data = r.json() if r.status_code == 200 else {}
+        except (httpx.HTTPError, ValueError) as e:
+            print(f"{path} {params}: {e}")
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def absolute(icon: object) -> str | None:
+        if not isinstance(icon, str) or not icon:
+            return None
+        return icon if icon.startswith("http") else cdn + icon
+
+    leagues_data = get("/leagues")
+    names = [x if isinstance(x, str) else (x.get("name") or "") for x in
+             (leagues_data.get("leagues") or leagues_data.get("economyLeagues") or [])]  # fmt: skip
+    plain = [n for n in names if n and not any(w in n for w in ("Hardcore", "Standard", "HC"))]
+    if not plain:
         print("poe.ninja unreachable: the demo items get no icons")
         return
-    plain = [
-        n for n in leagues if not any(w in n for w in ("Hardcore", "Standard", "Ruthless", "HC"))
-    ]
-    league = (plain or leagues)[0]
-    for source, type_ in [("exchange", "Currency"), ("currency", "Currency"),
-                          ("currency", "Fragment"), ("item", "DivinationCard"),
-                          ("item", "Scarab"), ("item", "Essence")]:  # fmt: skip
-        try:
-            lines = ninja.fetch(source, league, type_)
-        except NinjaError as e:
-            print(f"no icons from {source}/{type_}: {e}")
-            continue
-        for line in lines:
-            if line.icon and line.name in PRICES:
-                ICONS.setdefault(line.name, line.icon)
-    # gear in the build snapshots: uniques by name, the rest by base type
-    for type_ in ("UniqueArmour", "UniqueWeapon", "UniqueAccessory", "UniqueFlask",
-                  "UniqueJewel", "BaseType"):  # fmt: skip
-        try:
-            lines = ninja.fetch("item", league, type_)
-        except NinjaError as e:
-            print(f"no icons from {type_}: {e}")
-            continue
-        for line in lines:
-            if line.icon:
-                GEAR_ICONS.setdefault(line.name, line.icon)
-                if line.base_type:
-                    GEAR_ICONS.setdefault(line.base_type, line.icon)
-    missing = sorted(set(PRICES) - set(ICONS))
-    print(f"icons from poe.ninja ({league}): {len(ICONS)}; missing: {missing or 'none'}")
+    league = plain[0]
+    found: dict[str, int] = {}
+    for type_ in ("Currency", "Fragment"):
+        data = get("/stash/current/currency/overview", league=league, type=type_)
+        for d in data.get("currencyDetails") or []:
+            icon = absolute(d.get("icon"))
+            if icon and d.get("name"):
+                ICONS.setdefault(d["name"], icon)
+        found[type_] = len(data.get("currencyDetails") or [])
+    data = get("/exchange/current/overview", league=league, type="Currency")
+    for d in data.get("items") or []:
+        icon = absolute(d.get("image") or d.get("icon"))
+        if icon and d.get("name"):
+            ICONS.setdefault(d["name"], icon)
+    found["exchange"] = len(data.get("items") or [])
+    for type_ in ("DivinationCard", "Scarab", "Essence", "UniqueArmour", "UniqueWeapon",
+                  "UniqueAccessory", "UniqueFlask", "UniqueJewel", "BaseType"):  # fmt: skip
+        data = get("/stash/current/item/overview", league=league, type=type_)
+        lines = data.get("lines") or []
+        found[type_] = len(lines)
+        for d in lines:
+            icon = absolute(d.get("icon"))
+            if not icon:
+                continue
+            if d.get("name"):
+                ICONS.setdefault(d["name"], icon)
+                GEAR_ICONS.setdefault(d["name"], icon)
+            if d.get("baseType"):
+                GEAR_ICONS.setdefault(d["baseType"], icon)
+    missing = sorted(n for n in PRICES if n not in ICONS)
+    print(f"poe.ninja ({league}) entries per type: {found}")
+    print(f"demo item icons: {len(PRICES) - len(missing)}/{len(PRICES)}; missing: {missing}")
 
 
 def raw(name: str, qty: int) -> dict[str, object]:
