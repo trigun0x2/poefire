@@ -214,3 +214,20 @@ def test_refresh_stops_early_when_ninja_is_down(tmp_path: Path) -> None:
     svc = PriceService(client(ninja), lambda: Store(tmp_path / "db"), sources=sources)
     st = svc.refresh("Keepers")
     assert len(ninja.requests) == 3 and len(st.failed_types) == 3
+
+
+def test_refresh_loop_survives_an_error(tmp_path: Path) -> None:
+    import threading
+
+    svc = PriceService(client(Ninja()), lambda: Store(tmp_path / "db"))
+    calls: list[str] = []
+    stop = threading.Event()
+
+    def broken(league: str, force: bool = False) -> None:
+        calls.append(league)
+        stop.set()
+        raise RuntimeError("database went away")
+
+    svc.refresh = broken  # type: ignore[method-assign,assignment]
+    svc.run_forever(lambda: "Keepers", stop)  # returns once stopped, didn't raise
+    assert calls == ["Keepers"]

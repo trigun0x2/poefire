@@ -135,6 +135,9 @@ class PriceService:
     def run_forever(self, league_getter: Callable[[], str], stop: threading.Event) -> None:
         while not stop.is_set():
             league = league_getter()
-            if self.is_stale(league):
-                self.refresh(league)
+            try:
+                if self.is_stale(league):
+                    self.refresh(league)
+            except Exception:  # never let one bad refresh end the refresh loop
+                log.exception("price refresh for %s failed", league)
             stop.wait(60)

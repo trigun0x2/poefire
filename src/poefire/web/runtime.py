@@ -558,9 +558,15 @@ class AppRuntime:
                 return
 
     def refresh_prices(self, force: bool = False) -> None:
-        threading.Thread(
-            target=self.prices.refresh, args=(self.price_league, force), daemon=True
-        ).start()
+        league = self.price_league
+
+        def run() -> None:
+            try:
+                self.prices.refresh(league, force)
+            except Exception:  # logged; the next refresh tries again
+                log.exception("price refresh for %s failed", league)
+
+        threading.Thread(target=run, name="price-refresh", daemon=True).start()
 
     # --- lifecycle ---
 

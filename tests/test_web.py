@@ -48,6 +48,8 @@ def app(tmp_path: Path) -> TestClient:
     cfg = Config(db_path=db, league="Keepers", characters=["xyz_bow"])
     rt = AppRuntime(cfg, PriceService(OfflineNinja(), lambda: Store(db)), recorder=None,
                     log_path=log, now=lambda: NOW)  # fmt: skip
+    # no background price refreshes outliving the test (switching leagues starts one)
+    rt.refresh_prices = lambda force=False: None  # type: ignore[method-assign]
     assert rt.service is not None
     rt.service.start(from_beginning=True)
     rt.service.poll()
