@@ -30,6 +30,9 @@ from poefire.tracker import Run, RunStatus, Segment
 LEAGUE = "Keepers"
 ICONS: dict[str, str] = {}  # item name -> its icon on the game's CDN, from poe.ninja
 GEAR_ICONS: dict[str, str] = {}  # unique name or base type -> icon
+# Divination cards all use the card's inventory icon (scripts/assets/divination-card.png),
+# served at this address by scripts/screenshots.js.
+CARD_ICON = "https://web.poecdn.com/poefire-demo/divination-card.png"
 
 
 def with_gear_icons(node: object) -> None:
@@ -142,7 +145,7 @@ def load_icons() -> None:
                 GEAR_ICONS.setdefault(d["name"], icon)
             if d.get("baseType"):
                 GEAR_ICONS.setdefault(d["baseType"], icon)
-    missing = sorted(n for n in PRICES if n not in ICONS)
+    missing = sorted(n for n in PRICES if n not in ICONS and not n.startswith("The "))
     print(f"poe.ninja ({league}) entries per type: {found}")
     print(f"demo item icons: {len(PRICES) - len(missing)}/{len(PRICES)}; missing: {missing}")
 
@@ -151,7 +154,9 @@ def raw(name: str, qty: int) -> dict[str, object]:
     frame = 6 if name.startswith("The ") else 5
     out: dict[str, object] = {"typeLine": name, "baseType": name, "frameType": frame,
                               "stackSize": qty}  # fmt: skip
-    if name in ICONS:
+    if frame == 6:
+        out["icon"] = CARD_ICON
+    elif name in ICONS:
         out["icon"] = ICONS[name]
     return out
 

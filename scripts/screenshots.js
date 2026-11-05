@@ -20,6 +20,9 @@ async function fixWindowsOnly(route) {
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2 });
+  // every divination card shows the card's inventory icon
+  await page.route("https://web.poecdn.com/poefire-demo/divination-card.png", (route) =>
+    route.fulfill({ path: path.join(__dirname, "assets", "divination-card.png"), contentType: "image/png" }));
   await page.route("**/api/status", fixWindowsOnly);
   await page.route("**/api/campaign", fixWindowsOnly);
   const errors = [];

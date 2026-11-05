@@ -10,6 +10,7 @@ on:
       - scripts/demo_data.py
       - scripts/screenshots.js
       - scripts/overlay_preview.py
+      - scripts/assets/**
       - .github/workflows/screenshots.yml
   workflow_dispatch:
 
