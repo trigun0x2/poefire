@@ -7,6 +7,7 @@ tracker was closed).
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -24,6 +25,8 @@ from poefire.tracker import (
     state_to_dict,
 )
 from poefire.zones import ZoneRules
+
+log = logging.getLogger(__name__)
 
 CURSOR_KEY = "log_cursor"
 STATE_KEY = "tracker_state"
@@ -49,6 +52,9 @@ class TrackerService:
         self.tailer: LogTailer | None = None
         self.handlers: list[NoticeHandler] = []
         self.line_observers: list[LineObserver] = []
+        self.observer_errors = 0  # lines an observer failed on (each is logged, then skipped)
+        self.lines_seen = 0
+        self.events_seen = 0
 
     def start(self, from_beginning: bool = False) -> None:
         """Pick the start offset: saved cursor if it still matches this file, else the last
@@ -62,6 +68,12 @@ class TrackerService:
                 self._discard_stale_state()
                 offset = find_last_line_offset(self.log_path, b"] Generating level ")
         self.tailer = LogTailer(self.log_path, start_offset=offset)
+        try:
+            st = self.log_path.stat()
+            log.info("reading %s (%d bytes) from offset %s", self.log_path, st.st_size,
+                     self.tailer.offset)  # fmt: skip
+        except OSError as e:
+            log.warning("Client.txt not readable at %s: %s (waiting for it)", self.log_path, e)
 
     def _resume_offset(self) -> int | None:
         cursor: dict[str, Any] | None = self.store.get_json(CURSOR_KEY)
@@ -116,10 +128,19 @@ class TrackerService:
         with self.store.transaction():
             for line in lines:
                 event = parse_line(line.text)
+                self.lines_seen += 1
                 for observe in self.line_observers:
-                    observe(event, line.text)
+                    try:
+                        observe(event, line.text)
+                    except Exception:  # one bad line mustn't stall the whole tail
+                        self.observer_errors += 1
+                        if self.observer_errors <= 20 or self.observer_errors % 1000 == 0:
+                            log.exception("%s failed on line: %s",
+                                          getattr(observe, "__qualname__", observe),
+                                          line.text[:300])  # fmt: skip
                 if event is None:
                     continue
+                self.events_seen += 1
                 emitted = self.tracker.handle(event)
                 self._apply_notices(emitted)
                 notices.extend(emitted)

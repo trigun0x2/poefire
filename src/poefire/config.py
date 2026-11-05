@@ -95,6 +95,8 @@ class Config:
     overlay_toggle_hotkey: str = "Ctrl+Alt+O"  # show / hide the overlay
     overlay_move_hotkey: str = "Ctrl+Alt+L"  # unlock to drag it, press again to lock
     overlay_opacity: int = 90  # percent, 20-100
+    # --- troubleshooting ---
+    debug_logging: bool = False  # verbose log file (Settings > Diagnostics)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:

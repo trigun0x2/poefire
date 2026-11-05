@@ -1,6 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from poefire.cli import main
 from poefire.service import TrackerService
 from poefire.store import Store
@@ -96,8 +98,15 @@ def test_replaced_log_finishes_stale_run(tmp_path: Path) -> None:
     assert svc.tracker.run is None
 
 
-def test_cli_replay(capsys: object, tmp_path: Path) -> None:
-    assert main(["replay", str(SAMPLE)]) == 0
+def test_cli_replay(capsys: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from poefire import logs
+
+    monkeypatch.setattr("poefire.cli.default_data_dir", lambda: tmp_path)
+    try:
+        assert main(["replay", str(SAMPLE)]) == 0
+    finally:
+        logs.teardown()
+    assert "command: replay" in (tmp_path / "logs" / "poefire.log").read_text()
     out = capsys.readouterr().out  # type: ignore[attr-defined]
     assert "Strand" in out and "Cemetery" in out and "2 runs" in out
 

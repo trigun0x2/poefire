@@ -19,6 +19,7 @@ not change the act.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ from datetime import datetime
 from typing import Any
 
 from poefire.events import AreaGenerated, LevelUp, LogEvent, PlayerSlain, ZoneEntered
+
+log = logging.getLogger(__name__)
 
 FINAL_ACT = 10
 MAX_LOAD_MS = 5 * 60 * 1000  # longer "loads" are a sleeping PC or a reboot, not a load
@@ -172,6 +175,7 @@ class CampaignTracker:
         self._load_start: int | None = None
         self._next_act: int | None = None
         self._last_zone: tuple[str, int, datetime] | None = None  # campaign zone you're in
+        self._early_lines = 0  # lines from before the run's start (logged once)
 
     # --- manual controls ---
 
@@ -187,6 +191,9 @@ class CampaignTracker:
         run.id = self.store.save_campaign_run(run)
         self.active = run
         self._load_start = self._next_act = self._last_zone = None
+        self._early_lines = 0
+        log.info("campaign run %s started (character %s, patch %s)", run.id,
+                 run.character or "from the first level-up", run.patch or "unknown")  # fmt: skip
         return run
 
     def finish(self) -> CampaignRun | None:
@@ -198,6 +205,7 @@ class CampaignTracker:
             return False
         run.paused_at = self.now()
         self.store.save_campaign_run(run)
+        log.info("campaign run %s paused at %.0fs", run.id, run.rta(run.paused_at))
         return True
 
     def resume(self) -> bool:
@@ -206,6 +214,7 @@ class CampaignTracker:
             return False
         self._unpause(run, self.now())
         self.store.save_campaign_run(run)
+        log.info("campaign run %s resumed", run.id)
         return True
 
     def toggle(self) -> str:
@@ -238,6 +247,8 @@ class CampaignTracker:
         run.status, run.ended_at = status, at
         self.store.save_campaign_run(run)
         self.active = None
+        log.info("campaign run %s %s: %.0fs, act %s, %s level %s, %d splits", run.id, status,
+                 run.rta(at), run.act, run.character, run.level, len(run.splits))  # fmt: skip
         return run
 
     # --- log lines ---
@@ -251,11 +262,16 @@ class CampaignTracker:
                 self._load_start = log_tick(line)
             return
         if event.ts < run.started_at:
+            self._early_lines += 1
+            if self._early_lines == 1:
+                log.debug("ignoring lines from before run %s started (%s < %s)", run.id,
+                          event.ts, run.started_at)  # fmt: skip
             return  # catching up on lines from before the start
         if isinstance(event, AreaGenerated):
             if self._load_start is None:
                 self._load_start = log_tick(line)
             self._next_act = act_of(event.area_id)
+            log.debug("area %s generated (act %s)", event.area_id, self._next_act)
         elif isinstance(event, ZoneEntered):
             self._entered(run, event, log_tick(line))
         elif isinstance(event, LevelUp):
@@ -264,6 +280,7 @@ class CampaignTracker:
             if run.character and event.character.casefold() == run.character.casefold():
                 run.deaths += 1
                 self.store.save_campaign_run(run)
+                log.info("campaign run %s: %s died (%d)", run.id, run.character, run.deaths)
 
     def _split(self, run: CampaignRun, kind: str, name: str, at: datetime,
                level: int | None = None) -> None:  # fmt: skip
@@ -279,6 +296,8 @@ class CampaignTracker:
         if act is not None and (run.act is None or act > run.act):
             if run.act is not None:
                 self._split(run, SplitKind.ACT, f"Act {run.act}", event.ts)
+                log.info("campaign run %s: act %s done at %.0fs", run.id, run.act,
+                         run.splits[-1].rta)  # fmt: skip
             run.act = act
             if act > FINAL_ACT:
                 self.store.save_campaign_run(run)
@@ -295,12 +314,17 @@ class CampaignTracker:
             )
         ):
             self._split(run, SplitKind.ZONE, event.zone, event.ts)
+            log.info("campaign run %s: %s (act %s) at %.0fs", run.id, event.zone, act,
+                     run.splits[-1].rta)  # fmt: skip
+        elif act is None:
+            log.debug("entered %s: not a campaign area (no act from the last area id)", event.zone)
         self.store.save_campaign_run(run)
 
     def _drop_mule(self, run: CampaignRun, mule: str) -> None:
         """The timer keeps running; the mule's level-ups, zones and deaths don't count, so the
         real character's first visits are its splits. The real character is already in its
         first zone (it levels there), so that visit is kept."""
+        log.info("campaign run %s: %s was a Ranger mule; its splits are dropped", run.id, mule)
         run.mule = mule
         run.splits = [s for s in run.splits if s.kind == SplitKind.ACT]
         run.deaths = 0
@@ -335,12 +359,16 @@ class CampaignTracker:
                 # The "mule" kept levelling: it was the real character after all.
                 run.character, run.mule = event.character, None
             else:
+                log.debug("level-up of %s ignored: run %s is %s's", event.character, run.id,
+                          run.character)  # fmt: skip
                 return  # another character
         run.character = event.character
         run.char_class = event.character_class
         run.level = event.level
         self._split(run, SplitKind.LEVEL, f"Level {event.level}", event.ts, event.level)
         self.store.save_campaign_run(run)
+        log.info("campaign run %s: %s (%s) level %s", run.id, run.character, run.char_class,
+                 run.level)  # fmt: skip
 
 
 # --- views ---

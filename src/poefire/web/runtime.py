@@ -8,6 +8,8 @@ import contextlib
 import copy
 import logging
 import os
+import platform
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -16,7 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import __version__, campaign, patches, wiring
+from poefire import __version__, campaign, logs, patches, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -174,6 +176,12 @@ class AppRuntime:
     def _build_service(self) -> None:
         self.log_path = self._log_override or self.cfg.resolve_log_path()
         self.service = None
+        if self.log_path is None:
+            log.warning("no Client.txt: none configured and none at the usual install "
+                        "locations; run and campaign tracking are off until it's set")  # fmt: skip
+        else:
+            log.info("Client.txt: %s (%s)", self.log_path,
+                     "found" if self.log_path.exists() else "doesn't exist yet")  # fmt: skip
         if self.log_path is not None:
             self.service = TrackerService(
                 self._store, self.log_path, self.cfg.zone_rules(), self.cfg.characters
@@ -219,6 +227,9 @@ class AppRuntime:
         old = self.cfg
         self.cfg = cfg
         self.builds.enabled = cfg.build_snapshots
+        if cfg.debug_logging != old.debug_logging:
+            logs.set_verbose(cfg.debug_logging)
+            log.info("verbose logging %s", "on" if cfg.debug_logging else "off")
         log_changed = (
             old.resolve_log_path() != cfg.resolve_log_path()
             or old.characters != cfg.characters
@@ -469,6 +480,11 @@ class AppRuntime:
                 self.hotkeys[name] = hk
             else:
                 self.hotkey_errors[name] = hk.error or "couldn't register the hotkey"
+        for name, err in self.hotkey_errors.items():
+            log.warning("hotkey for %s is off: %s", HOTKEY_LABELS[name], err)
+        if self.hotkeys:
+            log.info("hotkeys: %s", ", ".join(f"{hk.spec} ({HOTKEY_LABELS[n]})"
+                                             for n, hk in self.hotkeys.items()))  # fmt: skip
 
     def hotkey_status(self, name: str) -> dict[str, Any]:
         hk = self.hotkeys.get(name)
@@ -643,6 +659,12 @@ class AppRuntime:
 
     def start(self) -> None:
         self._started = True
+        log.info("poefire %s starting (%s, Python %s, %s); data in %s", __version__,
+                 "app" if getattr(sys, "frozen", False) else "source", sys.version.split()[0],
+                 platform.platform(), self.cfg.db_path.parent)  # fmt: skip
+        log.info("league %s, prices from %s, loot tracking %s, campaign run %s", self.league,
+                 self.price_league, "on" if self.loot.enabled else f"off ({self.loot.reason})",
+                 self.campaign.active.id if self.campaign.active else "none")  # fmt: skip
         if self.service is not None:
             self.service.start()
         self._spawn("log-tail", self._tail_loop)

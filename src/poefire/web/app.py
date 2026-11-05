@@ -8,6 +8,8 @@ Two guards because any website you visit can send requests to localhost:
 
 from __future__ import annotations
 
+import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from poefire import __version__, builds, patches, pob, pob_tree
+from poefire import __version__, builds, diagnostics, logs, patches, pob, pob_tree
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import hud, overview, sessions, settings, views
@@ -41,6 +43,21 @@ class NotesIn(BaseModel):
 
 class PatchIn(BaseModel):
     patch: str = Field(max_length=20)
+
+
+class RevealIn(BaseModel):
+    what: str = Field(max_length=100)  # "logs" or a report's file name
+
+
+def reveal(target: Path) -> bool:
+    """Show a file (selected) or folder in Explorer. False where that isn't possible."""
+    if sys.platform != "win32" or not target.exists():
+        return False
+    import subprocess
+
+    args = ["explorer", f"/select,{target}"] if target.is_file() else ["explorer", str(target)]
+    subprocess.Popen(args)
+    return True
 
 
 class OpacityIn(BaseModel):
@@ -380,6 +397,36 @@ def create_app(rt: AppRuntime) -> FastAPI:
             raise HTTPException(409, rt.update.cannot_install_reason or "can't self-update")
         rt.install_update()
         return rt.update.to_json()
+
+    # --- diagnostics ---
+
+    @app.post("/api/diagnostics/report")
+    def diagnostics_report() -> dict[str, Any]:
+        """Save a debug report .zip into the data folder; returns where it is."""
+        path = diagnostics.save(rt)
+        return {"path": str(path), "name": path.name, "folder": str(path.parent)}
+
+    @app.get("/api/diagnostics/report/{name}")
+    def diagnostics_download(name: str) -> Response:
+        folder = rt.cfg.db_path.parent / diagnostics.REPORTS_DIR
+        path = folder / name
+        if not re.fullmatch(r"poefire-report-[\d-]+\.zip", name) or not path.is_file():
+            raise HTTPException(404, "no such report")
+        disposition = f'attachment; filename="{name}"'
+        return Response(path.read_bytes(), media_type="application/zip",
+                        headers={"Content-Disposition": disposition})  # fmt: skip
+
+    @app.post("/api/diagnostics/reveal")
+    def diagnostics_reveal(body: RevealIn) -> dict[str, Any]:
+        """Open the report (selected) or the log folder in Explorer (Windows app)."""
+        data = rt.cfg.db_path.parent
+        if body.what == "logs":
+            target = logs.log_dir(data)
+        else:
+            target = data / diagnostics.REPORTS_DIR / body.what
+            if not re.fullmatch(r"poefire-report-[\d-]+\.zip", body.what) or not target.is_file():
+                raise HTTPException(404, "no such report")
+        return {"opened": reveal(target), "path": str(target)}
 
     # --- settings ---
 

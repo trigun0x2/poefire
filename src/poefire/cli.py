@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import getpass
+import logging
 import re
 import signal
 import sys
@@ -17,11 +18,11 @@ from typing import Any
 
 import httpx
 
-from poefire import wiring
+from poefire import logs, wiring
 from poefire.api.client import ApiError
 from poefire.api.oauth import NotLoggedInError, OAuthError, TokenStore, login
 from poefire.api.session import SessionError, SessionStore
-from poefire.config import Config, default_config_path
+from poefire.config import Config, default_config_path, default_data_dir
 from poefire.loot.diff import ItemDelta
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.service import TrackerService
@@ -303,6 +304,21 @@ def cmd_apply_update(args: argparse.Namespace) -> int:
     return apply_update(args.source, args.target, args.pid, args.log)
 
 
+def cmd_debug_report(args: argparse.Namespace) -> int:
+    """Save a debug report (as Settings > Diagnostics does) without opening the app."""
+    from poefire import diagnostics
+    from poefire.web.runtime import AppRuntime
+
+    cfg = _config(args)
+    rt = AppRuntime(cfg, recorder=None, config_path=args.config or default_config_path())
+    try:
+        path = diagnostics.save(rt)
+    finally:
+        rt.stop()
+    print(f"debug report saved: {path}")
+    return 0
+
+
 def cmd_paths(args: argparse.Namespace) -> int:
     cfg = _config(args)
     print(f"log: {cfg.resolve_log_path() or '(not found)'}")
@@ -404,6 +420,8 @@ def build_parser() -> argparse.ArgumentParser:
     lp.set_defaults(fn=cmd_runs)
 
     sub.add_parser("paths", help="show resolved paths").set_defaults(fn=cmd_paths)
+    sub.add_parser("debug-report", help="save a debug report .zip to send when something "
+                   "doesn't work").set_defaults(fn=cmd_debug_report)  # fmt: skip
 
     sub.add_parser("set-session", help="save your POESESSID cookie (session auth)").set_defaults(
         fn=cmd_set_session
@@ -439,6 +457,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not argv:
         argv = ["ui", "--window"]  # double-clicked: open the app
     args = build_parser().parse_args(argv)
+    if args.fn is not cmd_apply_update:  # that one writes its own log
+        try:
+            verbose = Config.load(args.config).debug_logging
+        except Exception:  # a broken config is reported by the command itself
+            verbose = False
+        logs.setup(default_data_dir(), verbose)
+        logging.getLogger("poefire").info("command: %s", " ".join(argv) or "(none)")
     code: int = args.fn(args)
     return code
 

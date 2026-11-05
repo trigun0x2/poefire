@@ -415,6 +415,21 @@
         installed when poefire restarts. Your settings and history live in %APPDATA%\poefire and are kept.</div>
     </section>
 
+    <section class="card" id="diagnostics">
+      <div class="card-title">Diagnostics</div>
+      <p class="hint" style="margin-top:0">Something not working (the campaign tracker, run tracking, the overlay…)? Save a debug report and send the .zip to the developer.</p>
+      <div class="row" style="margin-top:0">
+        <button type="button" class="btn primary" id="diag-report">Save debug report</button>
+        <button type="button" class="btn" id="diag-logs">Open log folder</button>
+      </div>
+      <div class="hint" id="diag-result" aria-live="polite"></div>
+      <label class="check">
+        <input id="set-debug-logging" type="checkbox">
+        <span>Verbose logging <span class="muted">— log more detail, e.g. why a Client.txt line was ignored. Turn it on, reproduce the problem, then save a report.</span></span>
+      </label>
+      <div class="hint">The report has poefire's log, your settings (never your POESESSID), your campaign runs, and the game's system lines from the end of Client.txt (area changes, zone entries, level-ups, deaths). No chat or whispers.</div>
+    </section>
+
     <div class="save-bar">
       <button type="submit" class="btn primary" id="set-save">Save settings</button>
       <span id="set-save-status" class="hint"></span>

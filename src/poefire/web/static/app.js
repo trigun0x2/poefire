@@ -619,6 +619,7 @@ async function loadSettings() {
   $("set-overlay").checked = s.overlay_enabled;
   $("set-overlay-key").value = s.overlay_toggle_hotkey || "";
   $("set-overlay-move").value = s.overlay_move_hotkey || "";
+  $("set-debug-logging").checked = !!s.debug_logging;
   $("set-overlay-opacity").value = s.overlay_opacity ?? 90;
   $("set-overlay-opacity-value").textContent = `${$("set-overlay-opacity").value}%`;
   $("set-build-snapshots").checked = s.build_snapshots;
@@ -796,6 +797,7 @@ $("settings-view").addEventListener("submit", async (e) => {
     overlay_toggle_hotkey: $("set-overlay-key").value,
     overlay_move_hotkey: $("set-overlay-move").value,
     overlay_opacity: Number($("set-overlay-opacity").value),
+    debug_logging: $("set-debug-logging").checked,
     build_snapshots: $("set-build-snapshots").checked,
     update_channel: $("set-update-channel").value,
   };
@@ -831,6 +833,44 @@ $("set-overlay-opacity").addEventListener("input", () => {
 $("set-overlay-opacity").addEventListener("change", () => {
   clearTimeout(opacityTimer);
   sendOpacity(true);
+});
+
+// --- diagnostics ---
+
+$("set-debug-logging").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  try {
+    await api("/api/settings", { method: "POST", body: JSON.stringify({ debug_logging: on }) });
+    if (settings) settings.debug_logging = on;
+    $("diag-result").textContent = on ? "Verbose logging is on." : "Verbose logging is off.";
+  } catch (err) {
+    e.target.checked = !on;
+    $("diag-result").textContent = `✗ ${err.message}`;
+  }
+});
+$("diag-report").addEventListener("click", async () => {
+  const btn = $("diag-report");
+  btn.disabled = true;
+  $("diag-result").textContent = "Saving…";
+  try {
+    const r = await api("/api/diagnostics/report", { method: "POST" });
+    const shown = await api("/api/diagnostics/reveal", { method: "POST", body: JSON.stringify({ what: r.name }) })
+      .catch(() => ({ opened: false }));
+    $("diag-result").innerHTML = `Saved <b>${esc(r.name)}</b> in <code>${esc(r.folder)}</code>${
+      shown.opened ? " (opened in Explorer)" : ""}. <a href="/api/diagnostics/report/${encodeURIComponent(r.name)}" download>Download</a>`;
+  } catch (err) {
+    $("diag-result").textContent = `✗ The report couldn't be saved: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+$("diag-logs").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/diagnostics/reveal", { method: "POST", body: JSON.stringify({ what: "logs" }) });
+    if (!r.opened) $("diag-result").innerHTML = `The logs are in <code>${esc(r.path)}</code>.`;
+  } catch (err) {
+    $("diag-result").textContent = `✗ ${err.message}`;
+  }
 });
 
 // --- routing: #settings shows the settings page, anything else the dashboard ---

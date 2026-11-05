@@ -10,9 +10,12 @@ arrives, so the stored offset can be persisted and resumed exactly.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,9 +62,11 @@ class LogTailer:
         if self._identity is not None and identity != self._identity:
             self._offset = 0  # file replaced
             self.resets += 1
+            log.info("%s was replaced; reading it from the start", self.path)
         elif st.st_size < self._offset:
             self._offset = 0  # truncated
             self.resets += 1
+            log.info("%s got shorter (cleared?); reading it from the start", self.path)
         self._identity = identity
         if st.st_size == self._offset:
             return []

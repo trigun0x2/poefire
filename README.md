@@ -20,7 +20,7 @@ Download `poefire-<version>-windows-x64.zip` from the latest
 own, for example `%LOCALAPPDATA%\Programs\poefire`. Avoid `Program Files`: the updater needs
 to write there.
 
-- `poefire.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\poefire.log`.
+- `poefire.exe` opens the tracker in its own window. It logs to `%APPDATA%\poefire\logs\poefire.log`.
 - `poefire-cli.exe` is the command line, for example `poefire-cli.exe set-session` or
   `poefire-cli.exe runs`.
 - Updating from v0.11.0 or earlier (where the app was `poefire-ui.exe`): install by hand once,
@@ -416,6 +416,20 @@ Windows, a held handle would block the user from deleting or renaming `Client.tx
 is one `stat()` call. Offsets always land on line boundaries, and a partial last line waits for
 its newline. A smaller file or a new file identity means the log was truncated or replaced, and
 reading restarts from byte 0.
+
+## Troubleshooting
+
+Settings > **Diagnostics** > **Save debug report** writes a `.zip` to
+`%APPDATA%\poefire\reports` (and opens it in Explorer). Send that file: it has poefire's log,
+the settings (never the POESESSID), the campaign runs with their splits, and the game's system
+lines from the end of Client.txt (area changes, zone entries, level-ups, deaths; no chat or
+whispers). Its `report.txt` starts with a summary: which Client.txt is read and whether lines
+are coming in, what the log's last lines contain (with hints, e.g. a game not set to English),
+and the campaign tracker's state. Turn on **Verbose logging** first to log why lines were
+ignored. Without the app window: `poefire-cli.exe debug-report`.
+
+Logs: `%APPDATA%\poefire\logs\poefire.log` (rotated, 5 x 2 MB); the windowed app's own output
+and crash tracebacks are in `console.log` next to it.
 
 ## Releases
 
