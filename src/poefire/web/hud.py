@@ -42,7 +42,7 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
             "character": detail["character"],
             "class": detail["class"],
             "base_class": detail["base_class"],
-            "pb_class": detail["pb_class"] if detail["pb_id"] else None,
+            "pb_class": detail["pb_class"],  # set when there are PB times to compare with
             "areas": [  # newest first
                 {k: a[k] for k in ("name", "act", "rta", "pb_rta", "delta")}
                 for a in reversed(areas)

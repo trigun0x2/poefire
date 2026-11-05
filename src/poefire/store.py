@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import zlib
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -201,7 +201,7 @@ _MIGRATIONS = (
 )  # index i upgrades schema version i -> i + 1
 
 
-def _chunks(items: list[str], size: int = 500) -> Iterator[list[str]]:
+def _chunks[T](items: list[T], size: int = 500) -> Iterator[list[T]]:
     """Slices for `IN (...)` lists, below SQLite's variable limit."""
     for i in range(0, len(items), size):
         yield items[i : i + size]
@@ -625,6 +625,15 @@ class Store:
     def get_campaign_run(self, run_id: int) -> CampaignRun | None:
         row = self.conn.execute("SELECT * FROM campaign_runs WHERE id = ?", (run_id,)).fetchone()
         return self._campaign_run(row) if row else None
+
+    def get_campaign_runs(self, ids: Iterable[int]) -> list[CampaignRun]:
+        """These runs, with their splits."""
+        out: list[CampaignRun] = []
+        for chunk in _chunks(list(ids)):
+            marks = ",".join("?" * len(chunk))
+            rows = self.conn.execute(f"SELECT * FROM campaign_runs WHERE id IN ({marks})", chunk)
+            out += [self._campaign_run(r) for r in rows]
+        return out
 
     def active_campaign_run(self) -> CampaignRun | None:
         row = self.conn.execute(

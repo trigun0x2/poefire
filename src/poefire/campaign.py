@@ -20,7 +20,7 @@ not change the act.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -346,6 +346,51 @@ def personal_best(runs: list[CampaignRun], base: str | None = None) -> CampaignR
     return min(done, key=lambda r: r.rta(r.started_at), default=None)  # ended: rta is fixed
 
 
+# Runs that got past Act 1 count for the best split times, finished or not.
+BESTS_MIN_ACT = 2
+
+
+def counts_for_bests(run: CampaignRun) -> bool:
+    return run.status != "running" and (run.act or 0) >= BESTS_MIN_ACT
+
+
+@dataclass(frozen=True)
+class Bests:
+    """Your fastest time at each split, over runs of one base class that got past Act 1."""
+
+    base: str
+    runs: int  # how many runs these come from
+    acts: dict[str, Split]  # "Act N" -> fastest time to finish that act
+    act_segments: dict[str, float]  # "Act N" -> fastest time spent in that act
+    zones: dict[tuple[int | None, str], Split]  # (act, zone) -> fastest time to first get there
+
+
+def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
+    """`runs` need their splits; those of another base class, or that didn't get past Act 1,
+    are skipped."""
+    acts: dict[str, Split] = {}
+    segments: dict[str, float] = {}
+    zones: dict[tuple[int | None, str], Split] = {}
+    count = 0
+    for run in runs:
+        if base_class(run.char_class) != base or not counts_for_bests(run):
+            continue
+        count += 1
+        prev = 0.0
+        for s in run.act_splits():
+            if s.name not in acts or s.rta < acts[s.name].rta:
+                acts[s.name] = s
+            segment = s.rta - prev
+            prev = s.rta
+            if s.name not in segments or segment < segments[s.name]:
+                segments[s.name] = segment
+        for s in run.splits:
+            key = (s.act, s.name)
+            if s.kind == SplitKind.ZONE and (key not in zones or s.rta < zones[key].rta):
+                zones[key] = s
+    return Bests(base, count, acts, segments, zones)
+
+
 def best_per_class(runs: list[CampaignRun]) -> dict[str, int]:
     """Base class -> id of its fastest finished run."""
     out: dict[str, int] = {}
@@ -377,13 +422,12 @@ def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
     }
 
 
-def run_detail(run: CampaignRun, now: datetime, pb: CampaignRun | None) -> dict[str, Any]:
-    """The summary plus splits; act and zone splits carry the difference to `pb` (the best
-    finished run of the same base class)."""
-    other = pb is not None and pb.id != run.id
-    pb_acts = {s.name: s for s in pb.act_splits()} if pb is not None and other else {}
-    pb_zones = {(s.act, s.name): s for s in pb.splits if s.kind == SplitKind.ZONE} \
-        if pb is not None and other else {}  # fmt: skip
+def run_detail(run: CampaignRun, now: datetime, bests: Bests | None) -> dict[str, Any]:
+    """The summary plus splits; act and zone splits carry the difference to `bests` (the
+    fastest times there over the other runs of the same base class that got past Act 1)."""
+    pb_acts = bests.acts if bests is not None else {}
+    pb_zones = bests.zones if bests is not None else {}
+    counted = bests.runs if bests is not None else 0
 
     def compared(s: Split, best: Split | None) -> dict[str, Any]:
         return {**s.to_json(), "pb_rta": best.rta if best else None,
@@ -391,8 +435,8 @@ def run_detail(run: CampaignRun, now: datetime, pb: CampaignRun | None) -> dict[
 
     return {
         **run_summary(run, now),
-        "pb_id": pb.id if pb is not None and other else None,
-        "pb_class": base_class(pb.char_class) if pb is not None else None,
+        "pb_runs": counted,  # how many runs the PB times come from
+        "pb_class": bests.base if bests is not None and counted else None,
         "acts": [compared(s, pb_acts.get(s.name)) for s in run.act_splits()],
         "zones": [
             compared(s, pb_zones.get((s.act, s.name)))
@@ -400,5 +444,13 @@ def run_detail(run: CampaignRun, now: datetime, pb: CampaignRun | None) -> dict[
             if s.kind == SplitKind.ZONE
         ],
         "levels": [s.to_json() for s in run.splits if s.kind == SplitKind.LEVEL],
-        "pb_acts": [{"name": s.name, "rta": s.rta, "igt": s.igt} for s in pb_acts.values()],
+        "pb_acts": [
+            {
+                "name": name,
+                "rta": s.rta,
+                "igt": s.igt,
+                "segment": round(bests.act_segments[name], 3) if bests is not None else None,
+            }
+            for name, s in sorted(pb_acts.items(), key=lambda kv: kv[1].act or 0)
+        ],
     }

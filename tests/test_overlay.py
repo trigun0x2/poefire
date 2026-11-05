@@ -22,7 +22,8 @@ def test_campaign_overlay_shows_last_three_areas_against_the_class_pb(
     assert client.get("/api/overlay").json()["mode"] == "mapping"  # no campaign run
     log = Log()
     zones = [("1_1_1", "The Twilight Strand"), ("1_1_town", "Lioneye's Watch"),
-             ("1_1_2", "The Coast"), ("1_1_3", "The Mud Flats")]  # fmt: skip
+             ("1_1_2", "The Coast"), ("1_1_3", "The Mud Flats"),
+             ("1_2_1", "The Southern Forest")]  # fmt: skip
 
     def play(pace: int) -> None:
         log.wait(1)
@@ -32,11 +33,11 @@ def test_campaign_overlay_shows_last_three_areas_against_the_class_pb(
             log.wait(pace)
             log.enter(*area)
 
-    client.post("/api/campaign/start", json={}, headers=H)  # the PB run
+    client.post("/api/campaign/start", json={}, headers=H)  # a slower run, past Act 1
     play(60)
     path.write_text("\n".join(log.lines) + "\n")
     rt.service.poll()  # type: ignore[union-attr]
-    client.post("/api/campaign/finish", headers=H)
+    client.post("/api/campaign/stop", headers=H)  # not finished: still counts
 
     client.post("/api/campaign/start", json={}, headers=H)  # a faster run
     log.lines.clear()
@@ -47,8 +48,8 @@ def test_campaign_overlay_shows_last_three_areas_against_the_class_pb(
     rt.service.poll()  # type: ignore[union-attr]
     d = client.get("/api/overlay").json()
     assert d["mode"] == "campaign" and d["class"] == "Ranger" and d["pb_class"] == "Ranger"
-    assert [a["name"] for a in d["areas"]] == ["The Mud Flats", "The Coast", "Lioneye's Watch"]
-    mud = d["areas"][0]
+    assert [a["name"] for a in d["areas"]] == ["The Southern Forest", "The Mud Flats", "The Coast"]
+    mud = d["areas"][1]
     assert mud["pb_rta"] is not None and mud["delta"] == mud["rta"] - mud["pb_rta"] < 0
     rt.stop()
 
@@ -220,7 +221,7 @@ def test_overlay_text() -> None:
                                  "base_class": "Ranger", "pb_class": None, "areas": [area]},
                                 0.5)  # fmt: skip
     assert (camp.timer, camp.meta, camp.pb) == ("1:01:40", "Epilogue · Deadeye",
-                                                "no finished Ranger run yet")  # fmt: skip
+                                                "no Ranger run past Act 1 yet")  # fmt: skip
     assert camp.areas[0] == overlay_render.Area(
         "Karui Shores", "1:00:00", "1:00:50", overlay_render.MINUS + "00:50", "good"
     )

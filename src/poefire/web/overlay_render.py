@@ -111,9 +111,9 @@ def frame(data: Json | None, elapsed: float, moving: bool = False, hot: bool = F
         act = data.get("act")
         meta = [("Epilogue" if act > 10 else f"Act {act}") if act else None, data.get("class")]
         if data.get("pb_class"):
-            pb = f"vs your best {data['pb_class']} run"
+            pb = f"vs your best {data['pb_class']} times"
         elif data.get("base_class"):
-            pb = f"no finished {data['base_class']} run yet"
+            pb = f"no {data['base_class']} run past Act 1 yet"
         else:
             pb = "PB once your class is known"
         areas = []

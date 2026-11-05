@@ -127,6 +127,7 @@ class AppRuntime:
         self.hotkeys: dict[str, GlobalHotkey] = {}  # registered by start()
         self.hotkey_errors: dict[str, str] = {}
         self.hotkey_last: tuple[str, datetime] | None = None
+        self._bests_cache: dict[tuple[str, tuple[int, ...]], campaign.Bests] = {}
         self.overlay: Any = None  # the overlay window's controller, when the native window runs
         self.log_path: Path | None = None
         self.service: TrackerService | None = None
@@ -343,12 +344,26 @@ class AppRuntime:
 
     def _personal_best(
         self, runs: list[campaign.CampaignRun], run: campaign.CampaignRun | None
-    ) -> campaign.CampaignRun | None:
-        """The best finished run of `run`'s base class, with its splits (the list is read
-        without them). None until the run's class is known."""
+    ) -> campaign.Bests | None:
+        """The fastest times at each split over the other runs of `run`'s base class that got
+        past Act 1 (`runs` is read without splits). None until the run's class is known.
+        Ended runs don't change, so this is cached by which runs count."""
         base = campaign.base_class(run.char_class) if run is not None else None
-        pb = campaign.personal_best(runs, base) if base else None
-        return self._store.get_campaign_run(pb.id) if pb is not None and pb.id else pb
+        if run is None or not base:
+            return None
+        ids = tuple(sorted(
+            r.id for r in runs
+            if r.id is not None and r.id != run.id and campaign.base_class(r.char_class) == base
+            and campaign.counts_for_bests(r)
+        ))  # fmt: skip
+        key = (base, ids)
+        bests = self._bests_cache.get(key)
+        if bests is None:
+            bests = campaign.best_splits(self._store.get_campaign_runs(ids), base)
+            if len(self._bests_cache) >= 16:
+                self._bests_cache.clear()
+            self._bests_cache[key] = bests
+        return bests
 
     def campaign_overview(self, limit: int = 200) -> dict[str, Any]:
         now = self.now()

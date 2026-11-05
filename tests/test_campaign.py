@@ -206,7 +206,7 @@ def test_campaign_api_flow(env: tuple[TestClient, AppRuntime, Path]) -> None:
         f.write("\n".join(log.lines) + "\n")
     rt.service.poll()
     active = client.get("/api/campaign").json()["active"]
-    assert active["pb_class"] == "Witch" and active["pb_id"] == run_id
+    assert active["pb_class"] == "Witch" and active["pb_runs"] == 1
     act1 = active["acts"][0]
     assert act1["delta"] == (1 + 2 + 500 + 2) - (2 + 2 + 600 + 2)
     strand = active["zones"][0]
@@ -351,3 +351,39 @@ def test_pb_is_per_base_class(tmp_path: Path) -> None:
     assert personal_best(runs, "Templar") is None
     assert personal_best(runs) is runs[2]
     assert best_per_class(runs) == {"Ranger": 2, "Witch": 3}
+
+
+def test_best_times_count_every_run_past_act_1(tmp_path: Path) -> None:
+    from poefire.campaign import CampaignRun, Split, SplitKind, best_splits, run_detail
+
+    def run(rid: int, cls: str, status: str, act: int, times: dict[str, float]) -> CampaignRun:
+        r = CampaignRun(started_at=T0, id=rid, status=status, char_class=cls, act=act,
+                        ended_at=T0 + timedelta(hours=5))  # fmt: skip
+        for name, rta in times.items():
+            kind = SplitKind.ACT if name.startswith("Act ") else SplitKind.ZONE
+            n = int(name.split()[1]) if kind == SplitKind.ACT else 1 if rta < 600 else 2
+            r.splits.append(Split(kind, name, n, T0 + timedelta(seconds=rta), rta, rta))
+        return r
+
+    runs = [
+        # finished, but slow in Act 2
+        run(1, "Deadeye", "finished", 11, {"The Coast": 100, "Act 1": 500, "Act 2": 1500}),
+        # abandoned in Act 3: still counts, it got past Act 1 (and had the fastest Act 2)
+        run(2, "Ranger", "abandoned", 3, {"The Coast": 120, "Act 1": 550, "Act 2": 1300}),
+        # never left Act 1: doesn't count, however fast
+        run(3, "Ranger", "abandoned", 1, {"The Coast": 50}),
+        run(4, "Witch", "abandoned", 2, {"The Coast": 10, "Act 1": 100}),  # another class
+    ]
+    bests = best_splits(runs, "Ranger")
+    assert bests.runs == 2
+    assert bests.zones[(1, "The Coast")].rta == 100
+    assert {n: s.rta for n, s in bests.acts.items()} == {"Act 1": 500, "Act 2": 1300}
+    assert bests.act_segments == {"Act 1": 500, "Act 2": 750}  # run 2's Act 2 took 750
+
+    now_run = run(5, "Ranger", "running", 2, {"The Coast": 90, "Act 1": 520})
+    d = run_detail(now_run, T0, bests)
+    assert d["pb_runs"] == 2 and d["pb_class"] == "Ranger"
+    assert d["zones"][0]["pb_rta"] == 100 and d["zones"][0]["delta"] == -10
+    assert d["acts"][0]["pb_rta"] == 500 and d["acts"][0]["delta"] == 20
+    assert [(a["name"], a["segment"]) for a in d["pb_acts"]] == [("Act 1", 500), ("Act 2", 750)]
+    assert run_detail(now_run, T0, best_splits(runs, "Templar"))["pb_class"] is None

@@ -1216,15 +1216,15 @@ function renderCampaignSplits(r) {
   const cls = r?.base_class;
   const isPb = r && cls && cpData.pb_ids?.[cls] === r.id;
   $("cp-pb-label").textContent = !r ? "" : !cls ? "· PB comparison starts once your class is known"
-    : r.pb_id ? `· compared with your best ${cls} run` : isPb ? `· this is your best ${cls} run`
-    : `· no finished ${cls} run to compare with yet`;
+    : r.pb_runs ? `· compared with your best ${cls} times (${r.pb_runs} run${r.pb_runs === 1 ? "" : "s"} past Act 1)`
+    : isPb ? `· this is your best ${cls} run` : `· no other ${cls} run past Act 1 to compare with yet`;
   let prev = 0, prevPb = 0;
   const rows = [];
   for (let n = 1; n <= 10; n++) {
     const name = `Act ${n}`, s = acts.get(name), pb = pbActs.get(name);
     const isNow = r && r.status === "running" && !s && (r.act ?? 1) === n;
     const seg = s ? s.rta - prev : null;
-    const pbSeg = pb ? pb.rta - prevPb : null;
+    const pbSeg = pb ? (pb.segment ?? pb.rta - prevPb) : null; // fastest time in this act
     const segCls = seg != null && pbSeg != null && seg < pbSeg ? "ahead" : "";
     rows.push(`<tr class="${isNow ? "now" : s ? "" : "todo"}" data-pb="${pb ? pb.rta : ""}">
       <td>${name}</td>
@@ -1251,7 +1251,7 @@ function renderCampaignZones(r) {
   // zone and act splits also show the PB's time there and the difference
   $("cp-zones").innerHTML = entries.map((z) => `<li class="${z.cls}">
     <span class="t">${duration(z.rta)}</span><span class="act">${z.act ? `A${z.act}` : ""}</span><span class="zn">${esc(z.name)}</span>${
-      z.pb_rta != null ? `<span class="zpb" title="Your PB's time here">${duration(z.pb_rta)}</span><span class="zd">${signed(z.delta)}</span>` : ""}</li>`).join("");
+      z.pb_rta != null ? `<span class="zpb" title="Your best time here">${duration(z.pb_rta)}</span><span class="zd">${signed(z.delta)}</span>` : ""}</li>`).join("");
 }
 
 function renderCampaignRuns() {
