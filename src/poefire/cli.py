@@ -261,32 +261,38 @@ def cmd_runs(args: argparse.Namespace) -> int:
     return 0
 
 
-def _add_overlay(webview: Any, rt: Any, url: str, main_window: Any) -> None:
-    """The in-game overlay window (Windows); closes with the main window."""
-    from poefire.web import overlay_window
+def _add_overlay(rt: Any, main_window: Any) -> None:
+    """The in-game overlay window (Windows): started once the main window is up (after
+    pywebview has set the process's DPI mode), closed with it."""
+    from poefire.web import hud, overlay_window
+
+    def state() -> dict[str, Any]:
+        with Store(rt.cfg.db_path) as store:
+            return hud.overlay_state(rt, store)
 
     def save_position(x: int, y: int) -> None:
         with Store(rt.cfg.db_path) as store:
             store.set_json(overlay_window.POSITION_KEY, {"x": x, "y": y})
 
-    try:
-        with Store(rt.cfg.db_path) as store:
-            position = store.get_json(overlay_window.POSITION_KEY)
-        overlay = overlay_window.create(webview, url + "static/overlay.html", position,
-                                        save_position, rt.cfg.overlay_enabled,
-                                        rt.cfg.overlay_opacity)  # fmt: skip
-    except Exception as e:  # the overlay is optional; the app works without it
-        print(f"overlay unavailable: {e!r}")
-        return
-    if overlay is None:
-        return
-    rt.overlay = overlay
+    def shown() -> None:
+        if rt.overlay is not None:
+            return
+        try:
+            with Store(rt.cfg.db_path) as store:
+                position = store.get_json(overlay_window.POSITION_KEY)
+            cfg = rt.cfg
+            rt.overlay = overlay_window.start(
+                state, position, save_position, cfg.overlay_enabled, cfg.overlay_opacity
+            )
+        except Exception as e:  # the overlay is optional; the app works without it
+            print(f"overlay unavailable: {e!r}")
 
     def closed() -> None:
-        overlay.stop()
-        with contextlib.suppress(Exception):
-            overlay.window.destroy()
+        if rt.overlay is not None:
+            with contextlib.suppress(Exception):
+                rt.overlay.stop()
 
+    main_window.events.shown += shown
     main_window.events.closed += closed
 
 
@@ -345,7 +351,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
                     )  # fmt: skip
                     controls._attach(window)
                     rt.request_exit = controls.close  # updater: close the window to install
-                    _add_overlay(webview, rt, url, window)
+                    _add_overlay(rt, window)
                     # the packaged exe carries the icon itself; this covers running from source
                     icon = Path(__file__).parent / "web" / "static" / "favicon.ico"
                     webview.start(icon=str(icon))
