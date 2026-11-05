@@ -58,3 +58,9 @@ def test_config_from_toml(tmp_path: Path) -> None:
     assert cfg.characters == ["Me"]
     assert cfg.zone_rules().classify("HeistDungeon") == "map"
     assert Config.load(tmp_path / "missing.toml") == Config()
+
+
+def test_config_int_field_round_trips(tmp_path: Path) -> None:
+    path = Config(overlay_opacity=65).save(tmp_path / "config.toml")
+    cfg = Config.load(path)
+    assert cfg.overlay_opacity == 65 and type(cfg.overlay_opacity) is int

@@ -619,6 +619,8 @@ async function loadSettings() {
   $("set-overlay").checked = s.overlay_enabled;
   $("set-overlay-key").value = s.overlay_toggle_hotkey || "";
   $("set-overlay-move").value = s.overlay_move_hotkey || "";
+  $("set-overlay-opacity").value = s.overlay_opacity ?? 90;
+  $("set-overlay-opacity-value").textContent = `${$("set-overlay-opacity").value}%`;
   $("set-build-snapshots").checked = s.build_snapshots;
   renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
@@ -793,6 +795,7 @@ $("settings-view").addEventListener("submit", async (e) => {
     overlay_enabled: $("set-overlay").checked,
     overlay_toggle_hotkey: $("set-overlay-key").value,
     overlay_move_hotkey: $("set-overlay-move").value,
+    overlay_opacity: Number($("set-overlay-opacity").value),
     build_snapshots: $("set-build-snapshots").checked,
     update_channel: $("set-update-channel").value,
   };
@@ -809,6 +812,25 @@ $("settings-view").addEventListener("submit", async (e) => {
   } finally {
     $("set-save").disabled = false;
   }
+});
+
+// Overlay opacity: previewed live while dragging (the overlay shows for a moment), saved on release.
+let opacityTimer = null;
+function sendOpacity(save) {
+  const percent = Number($("set-overlay-opacity").value);
+  $("set-overlay-opacity-value").textContent = `${percent}%`;
+  return api("/api/overlay/opacity", { method: "POST", body: JSON.stringify({ percent, save }) })
+    .then(() => { if (save && settings) settings.overlay_opacity = percent; })
+    .catch((err) => setStatus("set-save-status", `✗ ${err.message}`, "bad"));
+}
+$("set-overlay-opacity").addEventListener("input", () => {
+  $("set-overlay-opacity-value").textContent = `${$("set-overlay-opacity").value}%`;
+  clearTimeout(opacityTimer);
+  opacityTimer = setTimeout(() => sendOpacity(false), 60);
+});
+$("set-overlay-opacity").addEventListener("change", () => {
+  clearTimeout(opacityTimer);
+  sendOpacity(true);
 });
 
 // --- routing: #settings shows the settings page, anything else the dashboard ---

@@ -437,3 +437,6 @@ textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--acce
 .cp-zone-list .zn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-zone-list .zpb { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; }
 .cp-zone-list .zd { font-variant-numeric: tabular-nums; min-width: 62px; text-align: right; }
+
+.opacity-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.opacity-value { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }

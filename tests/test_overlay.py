@@ -67,6 +67,7 @@ class FakeWin32:
         self.titles = {100: ("Path of Exile", "POEWindowClass"), 200: ("Discord", "Chrome")}
         self.shown: list[bool] = []
         self.click_through: list[bool] = []
+        self.layered: list[tuple[tuple[int, int, int], int]] = []
 
     def foreground(self) -> int:
         return self.front
@@ -76,6 +77,9 @@ class FakeWin32:
 
     def set_click_through(self, hwnd: int, on: bool) -> None:
         self.click_through.append(on)
+
+    def set_layered(self, hwnd: int, key: tuple[int, int, int], alpha: int) -> None:
+        self.layered.append((key, alpha))
 
     def show(self, hwnd: int, visible: bool) -> None:
         self.shown.append(visible)
@@ -139,6 +143,36 @@ def test_overlay_settings_and_hotkeys(app: TestClient) -> None:  # noqa: F811
     assert r.json()["overlay_toggle_hotkey"] == "Shift+F10" and r.json()["overlay_enabled"] is False
     st = app.get("/api/status").json()["overlay"]
     assert st["available"] is False and st["toggle"]["key"] == "Shift+F10"
+    assert s["overlay_opacity"] == 90
+    r = app.post("/api/settings", headers=HEADERS, json={"overlay_opacity": 5})
+    assert r.status_code == 422  # 20-100
+    r = app.post("/api/overlay/opacity", headers=HEADERS, json={"percent": 60, "save": False})
+    assert r.json() == {"ok": True}
+    assert app.get("/api/settings").json()["overlay_opacity"] == 90  # only previewed
+    app.post("/api/overlay/opacity", headers=HEADERS, json={"percent": 60})
+    assert app.get("/api/settings").json()["overlay_opacity"] == 60
+
+
+def test_overlay_is_keyed_transparent_with_adjustable_opacity() -> None:
+    from poefire.web.overlay_window import KEY_COLOR, PREVIEW
+
+    win = FakeWin32()
+    ov = OverlayController(FakeWindow(), win, lambda x, y: None, opacity=80)
+    now = [1000.0]
+    ov.clock = lambda: now[0]
+    ov.attach(7)
+    ov.stop()
+    assert win.layered == [(KEY_COLOR, 204)]  # the background keyed out, the rest at 80%
+    win.front = 200  # not the game: hidden...
+    ov.set_opacity(40, preview=True)  # ...but shown for a moment to see the change
+    assert win.layered[-1] == (KEY_COLOR, 102) and ov.visible
+    now[0] += PREVIEW + 0.1
+    ov.update()
+    assert not ov.visible
+    ov.set_opacity(500)
+    assert ov.opacity == 100 and win.layered[-1] == (KEY_COLOR, 255)
+    ov.set_opacity(0)
+    assert ov.opacity == 20
 
 
 @pytest.mark.skipif(__import__("sys").platform == "win32", reason="registers real hotkeys")

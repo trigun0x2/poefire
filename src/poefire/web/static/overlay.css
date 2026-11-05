@@ -16,8 +16,8 @@
 html, body { margin: 0; background: transparent; color: var(--text); overflow: hidden; user-select: none; }
 .hud {
   margin: 4px; padding: 8px 10px 9px; border-radius: 9px;
-  background: rgba(14, 16, 20, 0.78); border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  /* solid: the window around it is keyed out, and its opacity is the Settings slider */
+  background: #0e1014; border: 1px solid #23262c;
   font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
 .hud { position: relative; }

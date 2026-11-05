@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from poefire import __version__, builds, pob, pob_tree
@@ -37,6 +37,11 @@ class CampaignStartIn(BaseModel):
 
 class NotesIn(BaseModel):
     notes: str
+
+
+class OpacityIn(BaseModel):
+    percent: int = Field(ge=20, le=100)
+    save: bool = True
 
 
 class LocalOnly(BaseHTTPMiddleware):
@@ -239,6 +244,11 @@ def create_app(rt: AppRuntime) -> FastAPI:
         """What the in-game overlay shows (campaign run, or the mapping session)."""
         with store() as s:
             return hud.overlay_state(rt, s)
+
+    @app.post("/api/overlay/opacity")
+    def overlay_opacity(body: OpacityIn) -> dict[str, Any]:
+        rt.set_overlay_opacity(body.percent, body.save)
+        return {"ok": True}
 
     # --- build snapshots ---
 

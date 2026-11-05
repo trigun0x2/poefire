@@ -94,6 +94,7 @@ class Config:
     overlay_enabled: bool = True
     overlay_toggle_hotkey: str = "Ctrl+Alt+O"  # show / hide the overlay
     overlay_move_hotkey: str = "Ctrl+Alt+L"  # unlock to drag it, press again to lock
+    overlay_opacity: int = 90  # percent, 20-100
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
@@ -117,6 +118,8 @@ class Config:
                 value = [str(x) for x in value]
             elif isinstance(current, bool):
                 value = bool(value)
+            elif isinstance(current, int):
+                value = int(value)
             elif isinstance(current, float):
                 value = float(value)
             else:

@@ -273,7 +273,8 @@ def _add_overlay(webview: Any, rt: Any, url: str, main_window: Any) -> None:
         with Store(rt.cfg.db_path) as store:
             position = store.get_json(overlay_window.POSITION_KEY)
         overlay = overlay_window.create(webview, url + "static/overlay.html", position,
-                                        save_position, rt.cfg.overlay_enabled)  # fmt: skip
+                                        save_position, rt.cfg.overlay_enabled,
+                                        rt.cfg.overlay_opacity)  # fmt: skip
     except Exception as e:  # the overlay is optional; the app works without it
         print(f"overlay unavailable: {e!r}")
         return

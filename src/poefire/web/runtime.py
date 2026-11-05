@@ -11,7 +11,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -231,6 +231,7 @@ class AppRuntime:
             self._build_hotkeys()
         if self.overlay is not None:
             self.overlay.set_enabled(cfg.overlay_enabled)
+            self.overlay.set_opacity(cfg.overlay_opacity)
         if cfg.league and cfg.league != self._league:
             self.set_league(cfg.league)
         elif cfg.price_league != old.price_league:
@@ -434,6 +435,16 @@ class AppRuntime:
             "last_action": last[0] if last else None,
             "last_at": last[1].isoformat() if last else None,
         }
+
+    def set_overlay_opacity(self, percent: int, save: bool) -> None:
+        """Live from the Settings slider: previews while dragging, saves on release."""
+        if self.overlay is not None:
+            self.overlay.set_opacity(percent, preview=True)
+        if save:
+            with self._lock:
+                self.cfg = replace(self.cfg, overlay_opacity=percent)
+                if self.config_path is not None:
+                    self.cfg.save(self.config_path)
 
     def overlay_json(self) -> dict[str, Any]:
         return {

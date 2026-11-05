@@ -373,6 +373,13 @@
           <div class="hint" id="set-overlay-move-status"></div>
         </label>
       </div>
+      <label class="field">
+        <span>Opacity <span class="muted">— drag to preview it; saved when you let go</span></span>
+        <div class="row opacity-row" style="margin-top:0">
+          <input id="set-overlay-opacity" type="range" min="20" max="100" step="5" value="90">
+          <span id="set-overlay-opacity-value" class="opacity-value">90%</span>
+        </div>
+      </label>
       <div class="hint">The overlay shows while Path of Exile is the active window, and clicks pass through it. Set the game to <b>Windowed</b> or <b>Windowed Fullscreen</b>: nothing can be drawn over exclusive fullscreen. It only displays information; it never sends input to the game. Windows app only.</div>
       <div class="hint warn" id="set-overlay-unavailable" hidden>The overlay isn't running: it needs the Windows app's own window (not the browser).</div>
     </section>

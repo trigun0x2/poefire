@@ -41,6 +41,7 @@ class SettingsIn(BaseModel):
     overlay_enabled: bool | None = None
     overlay_toggle_hotkey: str | None = None
     overlay_move_hotkey: str | None = None
+    overlay_opacity: int | None = Field(default=None, ge=20, le=100)
     campaign_hotkey_sound: bool | None = None
 
 
@@ -115,6 +116,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "overlay_enabled": cfg.overlay_enabled,
         "overlay_toggle_hotkey": cfg.overlay_toggle_hotkey,
         "overlay_move_hotkey": cfg.overlay_move_hotkey,
+        "overlay_opacity": cfg.overlay_opacity,
         "campaign_hotkey_sound": cfg.campaign_hotkey_sound,
         "version": rt.update.current,
     }
@@ -201,6 +203,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         raise SettingsError("the campaign and overlay hotkeys must all be different")
     if body.overlay_enabled is not None:
         changes["overlay_enabled"] = body.overlay_enabled
+    if body.overlay_opacity is not None:
+        changes["overlay_opacity"] = body.overlay_opacity
     if body.build_snapshots is not None:
         changes["build_snapshots"] = body.build_snapshots
     if body.campaign_hotkey_sound is not None:
