@@ -24,6 +24,11 @@ RESPONSES: dict[tuple[str, str], Json] = {
                   {"id": "exalted", "primaryValue": 11.0},
                   {"id": "unknown", "primaryValue": 5}],
     },
+    ("/exchange/current/overview", "DivinationCard"): {  # moved off the stash overview
+        "core": {"primary": "chaos", "secondary": "divine"},
+        "items": [{"id": "the-apothecary", "name": "The Apothecary"}],
+        "lines": [{"id": "the-apothecary", "primaryValue": 2900.0}],
+    },
     ("/stash/current/currency/overview", "Currency"): {
         "lines": [{"currencyTypeName": "Divine Orb", "chaosEquivalent": 170.0},
                   {"currencyTypeName": "Orb of Alchemy", "chaosEquivalent": 0.3},
@@ -81,7 +86,9 @@ def test_fetch_parses_each_source() -> None:
         PriceLine("Divine Orb", 170.0), PriceLine("Orb of Alchemy", 0.3)]  # fmt: skip
     maps = c.fetch("item", "Keepers", "Map")
     assert maps[0] == PriceLine("Strand Map", 4.0, base_type="Strand Map", map_tier=16)
-    assert c.fetch("item", "Keepers", "Tattoo") == []  # 404: retired type
+    assert c.fetch("item", "Keepers", "Tattoo") == []  # 404 on both: retired type
+    # 404 on the stash overview, but on the currency exchange: priced from there
+    assert c.fetch("item", "Keepers", "DivinationCard") == [PriceLine("The Apothecary", 2900.0)]
     r = ninja.requests[0]
     assert str(r.url).startswith(NINJA_BASE) and r.url.params["league"] == "Keepers"
     assert r.headers["User-Agent"] == "poefire/test"

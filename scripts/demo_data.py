@@ -121,12 +121,13 @@ def load_icons() -> None:
             if icon and d.get("name"):
                 ICONS.setdefault(d["name"], icon)
         found[type_] = len(data.get("currencyDetails") or [])
-    data = get("/exchange/current/overview", league=league, type="Currency")
-    for d in data.get("items") or []:
-        icon = absolute(d.get("image") or d.get("icon"))
-        if icon and d.get("name"):
-            ICONS.setdefault(d["name"], icon)
-    found["exchange"] = len(data.get("items") or [])
+    for type_ in ("Currency", "DivinationCard", "Scarab", "Essence", "Fragment"):
+        data = get("/exchange/current/overview", league=league, type=type_)
+        for d in data.get("items") or []:
+            icon = absolute(d.get("image") or d.get("icon"))
+            if icon and d.get("name"):
+                ICONS.setdefault(d["name"], icon)
+        found[f"exchange {type_}"] = len(data.get("items") or [])
     for type_ in ("DivinationCard", "Scarab", "Essence", "UniqueArmour", "UniqueWeapon",
                   "UniqueAccessory", "UniqueFlask", "UniqueJewel", "BaseType"):  # fmt: skip
         data = get("/stash/current/item/overview", league=league, type=type_)

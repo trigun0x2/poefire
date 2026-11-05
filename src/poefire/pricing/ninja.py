@@ -139,6 +139,8 @@ class NinjaClient:
             ]
         if source == "item":
             data = self._get("/stash/current/item/overview", params)
+            if data is None:  # poe.ninja moved this type to its currency exchange
+                return self.fetch("exchange", league, type_)
             out = []
             for line in (data or {}).get("lines") or ():
                 if not line.get("name") or not isinstance(line.get("chaosValue"), int | float):
