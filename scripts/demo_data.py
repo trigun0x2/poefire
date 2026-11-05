@@ -87,14 +87,16 @@ def load_icons() -> None:
     agent = "poefire-readme-screenshots (+https://github.com/trigun0x2/poefire)"
     http = httpx.Client(timeout=30, headers={"User-Agent": agent})
 
-    def get(path: str, **params: str) -> dict[str, Any]:
+    def get(path: str, **params: str) -> Any:
         try:
             r = http.get(base + path, params=params)
-            data = r.json() if r.status_code == 200 else {}
+            if r.status_code != 200:
+                print(f"{path} {params}: HTTP {r.status_code}")
+                return {}
+            return r.json()
         except (httpx.HTTPError, ValueError) as e:
             print(f"{path} {params}: {e}")
             return {}
-        return data if isinstance(data, dict) else {}
 
     def absolute(icon: object) -> str | None:
         if not isinstance(icon, str) or not icon:
@@ -102,8 +104,10 @@ def load_icons() -> None:
         return icon if icon.startswith("http") else cdn + icon
 
     leagues_data = get("/leagues")
-    names = [x if isinstance(x, str) else (x.get("name") or "") for x in
-             (leagues_data.get("leagues") or leagues_data.get("economyLeagues") or [])]  # fmt: skip
+    listed = leagues_data if isinstance(leagues_data, list) else (
+        leagues_data.get("leagues") or leagues_data.get("economyLeagues") or []
+    )  # fmt: skip
+    names = [x if isinstance(x, str) else (x.get("name") or "") for x in listed]
     plain = [n for n in names if n and not any(w in n for w in ("Hardcore", "Standard", "HC"))]
     if not plain:
         print("poe.ninja unreachable: the demo items get no icons")
