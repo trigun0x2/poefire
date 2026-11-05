@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import __version__, campaign, wiring
+from poefire import __version__, campaign, patches, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -119,7 +119,14 @@ class AppRuntime:
         self._log_override = log_path
         self._auto_recorder = recorder is True
 
-        self.campaign = CampaignTracker(self._store, now)  # under _lock, like the tail
+        self.patches = patches.PatchBook(
+            lambda: self._store.get_json(patches.CACHE_KEY),
+            lambda v: self._store.set_json(patches.CACHE_KEY, v),
+            lambda: patches.fetch(f"poefire/{__version__} (+{wiring.PROJECT_URL})"),
+            now,
+        )  # fmt: skip
+        # under _lock, like the tail
+        self.campaign = CampaignTracker(self._store, now, self._patch_for_new_run)
         self.builds = BuildWatcher(self._build_api, lambda: Store(cfg.db_path), now)
         self.builds.enabled = cfg.build_snapshots
         self.values = BookCache()  # loot values of settled maps, sessions, stash (per prices)
@@ -342,7 +349,25 @@ class AppRuntime:
 
     # --- campaign runs (shares the tail thread's connection and lock) ---
 
+    def _patch_for_new_run(self, when: datetime) -> str | None:
+        """The patch out at `when`; without a patch list, the latest run's (called under
+        _lock, by the campaign tracker)."""
+        found = self.patches.at(when)
+        if found:
+            return found
+        latest = self._store.list_campaign_runs(1, splits=False)
+        return latest[0].patch if latest else None
+
     def _personal_best(
+        self, runs: list[campaign.CampaignRun], run: campaign.CampaignRun | None
+    ) -> campaign.CampaignRun | None:
+        """The fastest finished run of `run`'s base class, with its splits (the list is read
+        without them). None until the run's class is known."""
+        base = campaign.base_class(run.char_class) if run is not None else None
+        pb = campaign.personal_best(runs, base) if base else None
+        return self._store.get_campaign_run(pb.id) if pb is not None and pb.id else pb
+
+    def _bests(
         self, runs: list[campaign.CampaignRun], run: campaign.CampaignRun | None
     ) -> campaign.Bests | None:
         """The fastest times at each split over the other runs of `run`'s base class that got
@@ -371,19 +396,30 @@ class AppRuntime:
             runs = self._store.list_campaign_runs(limit, splits=False)
             active = self.campaign.active
             pb = self._personal_best(runs, active) if active else None
+            bests = self._bests(runs, active) if active else None
         return {
-            "active": campaign.run_detail(active, now, pb) if active else None,
+            "active": campaign.run_detail(active, now, pb, bests) if active else None,
             "pb_ids": campaign.best_per_class(runs),  # base class -> its best run
+            "top_ids": campaign.top_runs(runs),  # the fastest finished runs, fastest first
             "runs": [campaign.run_summary(r, now) for r in runs],
         }
 
     def campaign_run(self, run_id: int) -> dict[str, Any] | None:
         with self._lock:
             run = self._store.get_campaign_run(run_id)
-            pb = self._personal_best(self._store.list_campaign_runs(1000, splits=False), run)
+            runs = self._store.list_campaign_runs(1000, splits=False)
+            pb = self._personal_best(runs, run)
+            bests = self._bests(runs, run)
         if run is None:
             return None
-        return campaign.run_detail(run, self.now(), pb)
+        return campaign.run_detail(run, self.now(), pb, bests)
+
+    def campaign_set_patch(self, run_id: int, patch: str | None) -> bool:
+        with self._lock:
+            ok = self._store.set_campaign_patch(run_id, patch)
+            if ok and self.campaign.active is not None and self.campaign.active.id == run_id:
+                self.campaign.active.patch = patch
+            return ok
 
     def campaign_start(self, character: str | None = None) -> None:
         with self._lock:
@@ -557,10 +593,19 @@ class AppRuntime:
         return cached[1]
 
     def _maintenance_loop(self) -> None:
-        """Once a day: drop log events older than EVENT_RETENTION (nothing reads them)."""
+        """Once a day: drop log events older than EVENT_RETENTION (nothing reads them), and
+        refresh the game's patch list (noting the patch on runs that have none)."""
         if self._stop.wait(30):
             return
         while True:
+            try:
+                if self.patches.stale():
+                    self.patches.refresh()
+                if self.patches.patches:
+                    with Store(self.cfg.db_path) as store:
+                        store.fill_campaign_patches(self.patches.at)
+            except Exception:
+                log.exception("patch list refresh failed")
             try:
                 with Store(self.cfg.db_path) as store:
                     removed = store.prune_events(self.now() - EVENT_RETENTION)

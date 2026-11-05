@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import zlib
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +20,7 @@ from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -187,6 +187,11 @@ _SCHEMA_V10 = """
 ALTER TABLE build_snapshots ADD COLUMN pobbin_id TEXT
 """
 
+_SCHEMA_V11 = """
+-- The game patch (e.g. 3.27) a campaign run was played on.
+ALTER TABLE campaign_runs ADD COLUMN patch TEXT
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -198,6 +203,7 @@ _MIGRATIONS = (
     _SCHEMA_V8,
     _SCHEMA_V9,
     _SCHEMA_V10,
+    _SCHEMA_V11,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -573,13 +579,13 @@ class Store:
             _dt(run.started_at), _dt(run.ended_at), run.status, run.character, run.char_class,
             run.level, run.deaths, run.act, run.load_ms, run.notes,
             json.dumps([s.to_json() for s in run.splits]), _dt(run.paused_at), run.paused_ms,
-            run.mule,
+            run.mule, run.patch,
         )  # fmt: skip
         if run.id is None:
             cur = self.conn.execute(
                 "INSERT INTO campaign_runs (started_at, ended_at, status, character, class, "
-                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms, mule) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms, mule, patch) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
             run.id = int(cur.lastrowid or 0)
@@ -587,7 +593,7 @@ class Store:
             self.conn.execute(
                 "UPDATE campaign_runs SET started_at=?, ended_at=?, status=?, character=?, "
                 "class=?, level=?, deaths=?, act=?, load_ms=?, notes=?, splits=?, paused_at=?, "
-                "paused_ms=?, mule=? WHERE id=?",
+                "paused_ms=?, mule=?, patch=? WHERE id=?",
                 (*values, run.id),
             )
         return run.id
@@ -603,7 +609,7 @@ class Store:
             notes=row["notes"], splits=[Split.from_json(s) for s in json.loads(row["splits"])],
             paused_at=datetime.fromisoformat(row["paused_at"]) if row["paused_at"] else None,
             paused_ms=row["paused_ms"],
-            mule=row["mule"],
+            mule=row["mule"], patch=row["patch"],
         )  # fmt: skip
 
     def list_campaign_runs(self, limit: int = 200, splits: bool = True) -> list[CampaignRun]:
@@ -613,7 +619,7 @@ class Store:
             if splits
             else (
                 "id, started_at, ended_at, status, character, class, level, deaths, act, load_ms, "
-                "notes, paused_at, paused_ms, mule, '[]' AS splits"
+                "notes, paused_at, paused_ms, mule, patch, '[]' AS splits"
             )
         )
         rows = self.conn.execute(
@@ -640,6 +646,27 @@ class Store:
             "SELECT * FROM campaign_runs WHERE status = 'running' ORDER BY id DESC LIMIT 1"
         ).fetchone()
         return self._campaign_run(row) if row else None
+
+    def set_campaign_patch(self, run_id: int, patch: str | None) -> bool:
+        cur = self.conn.execute("UPDATE campaign_runs SET patch = ? WHERE id = ?", (patch, run_id))
+        return cur.rowcount > 0
+
+    def fill_campaign_patches(self, patch_at: Callable[[datetime], str | None]) -> int:
+        """Note the patch on runs that have none (recorded before patches were); returns how
+        many got one."""
+        rows = self.conn.execute(
+            "SELECT id, started_at FROM campaign_runs WHERE patch IS NULL"
+        ).fetchall()
+        n = 0
+        for row in rows:
+            patch = patch_at(datetime.fromisoformat(row["started_at"]))
+            if patch:
+                self.conn.execute(
+                    "UPDATE campaign_runs SET patch = ? WHERE id = ? AND patch IS NULL",
+                    (patch, row["id"]),
+                )
+                n += 1
+        return n
 
     def set_campaign_notes(self, run_id: int, notes: str) -> bool:
         cur = self.conn.execute("UPDATE campaign_runs SET notes = ? WHERE id = ?", (notes, run_id))

@@ -29,8 +29,8 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
         active = rt.campaign.active
         if active is not None:
             runs = rt._store.list_campaign_runs(1000, splits=False)
-            pb = rt._personal_best(runs, active)
-            detail = campaign.run_detail(active, now, pb)
+            bests = rt._bests(runs, active)
+            detail = campaign.run_detail(active, now, None, bests)
     if active is not None:
         areas = detail["zones"][-LAST_AREAS:]
         return {
@@ -42,9 +42,16 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
             "character": detail["character"],
             "class": detail["class"],
             "base_class": detail["base_class"],
-            "pb_class": detail["pb_class"],  # set when there are PB times to compare with
+            # compared with your fastest time at each split (any run past Act 1)
+            "pb_class": detail["best_class"],
             "areas": [  # newest first
-                {k: a[k] for k in ("name", "act", "rta", "pb_rta", "delta")}
+                {
+                    "name": a["name"],
+                    "act": a["act"],
+                    "rta": a["rta"],
+                    "pb_rta": a["best_rta"],
+                    "delta": a["best_delta"],
+                }
                 for a in reversed(areas)
             ],
         }

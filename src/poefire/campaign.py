@@ -103,6 +103,7 @@ class CampaignRun:
     paused_at: datetime | None = None  # set while the timer is paused
     paused_ms: int = 0  # earlier pauses, in total
     mule: str | None = None  # the Ranger mule this run started with (its name)
+    patch: str | None = None  # the game's patch when the run started, e.g. "3.27"
 
     @property
     def running(self) -> bool:
@@ -162,7 +163,9 @@ class CampaignTracker:
     """Feeds log lines into the active campaign run and saves it after every change.
     Not thread-safe: the runtime calls it under its lock."""
 
-    def __init__(self, store: Any, now: Callable[[], datetime] = datetime.now) -> None:
+    def __init__(self, store: Any, now: Callable[[], datetime] = datetime.now,
+                 patch: Callable[[datetime], str | None] = lambda when: None) -> None:  # fmt: skip
+        self.patch = patch  # the patch to note on a new run
         self.store = store
         self.now = now
         self.active: CampaignRun | None = store.active_campaign_run()
@@ -177,6 +180,10 @@ class CampaignTracker:
         if self.active is not None:
             self._end("abandoned", now)
         run = CampaignRun(started_at=now, character=(character or "").strip() or None)
+        try:
+            run.patch = self.patch(now)
+        except Exception:  # the patch is a nicety; never stop a run from starting
+            run.patch = None
         run.id = self.store.save_campaign_run(run)
         self.active = run
         self._load_start = self._next_act = self._last_zone = None
@@ -391,6 +398,16 @@ def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
     return Bests(base, count, acts, segments, zones)
 
 
+TOP_RUNS = 3
+
+
+def top_runs(runs: list[CampaignRun], n: int = TOP_RUNS) -> list[int]:
+    """Ids of the `n` fastest finished runs (any class), fastest first."""
+    done = [r for r in runs if r.status == "finished" and r.ended_at is not None and r.id]
+    done.sort(key=lambda r: (r.rta(r.started_at), r.id or 0))
+    return [r.id for r in done[:n] if r.id is not None]
+
+
 def best_per_class(runs: list[CampaignRun]) -> dict[str, int]:
     """Base class -> id of its fastest finished run."""
     out: dict[str, int] = {}
@@ -418,39 +435,56 @@ def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
         "load_seconds": round(run.load_ms / 1000, 1),
         "paused": run.paused,
         "mule": run.mule,
+        "patch": run.patch,
         "notes": run.notes,
     }
 
 
-def run_detail(run: CampaignRun, now: datetime, bests: Bests | None) -> dict[str, Any]:
-    """The summary plus splits; act and zone splits carry the difference to `bests` (the
-    fastest times there over the other runs of the same base class that got past Act 1)."""
-    pb_acts = bests.acts if bests is not None else {}
-    pb_zones = bests.zones if bests is not None else {}
+def run_detail(
+    run: CampaignRun, now: datetime, pb: CampaignRun | None, bests: Bests | None = None
+) -> dict[str, Any]:
+    """The summary plus splits. Act and zone splits carry the difference to `pb` (the
+    fastest finished run of the same base class: `pb_rta`, `delta`) and to `bests` (the
+    fastest times there over the runs of that class that got past Act 1: `best_rta`,
+    `best_delta`)."""
+    other = pb is not None and pb.id != run.id
+    pb_acts = {s.name: s for s in pb.act_splits()} if pb is not None and other else {}
+    pb_zones = {(s.act, s.name): s for s in pb.splits if s.kind == SplitKind.ZONE} \
+        if pb is not None and other else {}  # fmt: skip
+    best_acts = bests.acts if bests is not None else {}
+    best_zones = bests.zones if bests is not None else {}
     counted = bests.runs if bests is not None else 0
 
-    def compared(s: Split, best: Split | None) -> dict[str, Any]:
-        return {**s.to_json(), "pb_rta": best.rta if best else None,
-                "delta": round(s.rta - best.rta, 1) if best else None}  # fmt: skip
+    def compared(s: Split, mine: Split | None, best: Split | None) -> dict[str, Any]:
+        return {
+            **s.to_json(),
+            "pb_rta": mine.rta if mine else None,
+            "delta": round(s.rta - mine.rta, 1) if mine else None,
+            "best_rta": best.rta if best else None,
+            "best_delta": round(s.rta - best.rta, 1) if best else None,
+        }
 
     return {
         **run_summary(run, now),
-        "pb_runs": counted,  # how many runs the PB times come from
-        "pb_class": bests.base if bests is not None and counted else None,
-        "acts": [compared(s, pb_acts.get(s.name)) for s in run.act_splits()],
+        "pb_id": pb.id if pb is not None and other else None,
+        "pb_class": base_class(pb.char_class) if pb is not None else None,
+        "best_runs": counted,  # how many runs the best times come from
+        "best_class": bests.base if bests is not None and counted else None,
+        "acts": [compared(s, pb_acts.get(s.name), best_acts.get(s.name)) for s in run.act_splits()],
         "zones": [
-            compared(s, pb_zones.get((s.act, s.name)))
+            compared(s, pb_zones.get((s.act, s.name)), best_zones.get((s.act, s.name)))
             for s in run.splits
             if s.kind == SplitKind.ZONE
         ],
         "levels": [s.to_json() for s in run.splits if s.kind == SplitKind.LEVEL],
-        "pb_acts": [
+        "pb_acts": [{"name": s.name, "rta": s.rta, "igt": s.igt} for s in pb_acts.values()],
+        "best_acts": [
             {
                 "name": name,
                 "rta": s.rta,
                 "igt": s.igt,
                 "segment": round(bests.act_segments[name], 3) if bests is not None else None,
             }
-            for name, s in sorted(pb_acts.items(), key=lambda kv: kv[1].act or 0)
+            for name, s in sorted(best_acts.items(), key=lambda kv: kv[1].act or 0)
         ],
     }

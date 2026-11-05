@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from poefire import __version__, builds, pob, pob_tree
+from poefire import __version__, builds, patches, pob, pob_tree
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import hud, overview, sessions, settings, views
@@ -37,6 +37,10 @@ class CampaignStartIn(BaseModel):
 
 class NotesIn(BaseModel):
     notes: str
+
+
+class PatchIn(BaseModel):
+    patch: str = Field(max_length=20)
 
 
 class OpacityIn(BaseModel):
@@ -232,6 +236,16 @@ def create_app(rt: AppRuntime) -> FastAPI:
         if not rt.campaign_notes(run_id, body.notes):
             raise HTTPException(404, "no such campaign run")
         return {"ok": True}
+
+    @app.post("/api/campaign/runs/{run_id}/patch")
+    def campaign_patch(run_id: int, body: PatchIn) -> dict[str, Any]:
+        """The game patch the run was played on ("" clears it)."""
+        value = body.patch.strip()
+        if value and not patches.PATCH.match(value):
+            raise HTTPException(400, "a patch looks like 3.27")
+        if not rt.campaign_set_patch(run_id, value or None):
+            raise HTTPException(404, "no such campaign run")
+        return {"ok": True, "patch": value or None}
 
     @app.post("/api/campaign/runs/{run_id}/delete")
     def campaign_delete(run_id: int) -> dict[str, Any]:

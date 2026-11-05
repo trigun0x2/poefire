@@ -1185,6 +1185,7 @@ function renderCampaign() {
   $("cp-act").textContent = r?.act ? (r.act > 10 ? "Epilogue" : r.act) : "—";
   $("cp-deaths").textContent = r ? r.deaths : "—";
   $("cp-loads").textContent = r ? `· ${duration(r.load_seconds)} loading` : "";
+  if (r && document.activeElement !== $("cp-patch")) $("cp-patch").value = r.patch || "";
   if (r && cpNotesFor !== r.id && document.activeElement !== $("cp-notes")) {
     $("cp-notes").value = r.notes || "";
     cpNotesFor = r.id;
@@ -1212,20 +1213,24 @@ function tickCampaign() {
 
 function renderCampaignSplits(r) {
   const pbActs = new Map((r?.pb_acts || []).map((a) => [a.name, a]));
+  const bestActs = new Map((r?.best_acts || []).map((a) => [a.name, a]));
   const acts = new Map((r?.acts || []).map((a) => [a.name, a]));
   const cls = r?.base_class;
   const isPb = r && cls && cpData.pb_ids?.[cls] === r.id;
+  const best = r?.best_runs ? ` · best times from ${r.best_runs} run${r.best_runs === 1 ? "" : "s"} past Act 1` : "";
   $("cp-pb-label").textContent = !r ? "" : !cls ? "· PB comparison starts once your class is known"
-    : r.pb_runs ? `· compared with your best ${cls} times (${r.pb_runs} run${r.pb_runs === 1 ? "" : "s"} past Act 1)`
-    : isPb ? `· this is your best ${cls} run` : `· no other ${cls} run past Act 1 to compare with yet`;
+    : (r.pb_id ? `· compared with your ${cls} PB` : isPb ? `· this is your ${cls} PB`
+      : `· no finished ${cls} run to compare with yet`) + best;
   let prev = 0, prevPb = 0;
   const rows = [];
   for (let n = 1; n <= 10; n++) {
-    const name = `Act ${n}`, s = acts.get(name), pb = pbActs.get(name);
+    const name = `Act ${n}`, s = acts.get(name), pb = pbActs.get(name), b = bestActs.get(name);
     const isNow = r && r.status === "running" && !s && (r.act ?? 1) === n;
     const seg = s ? s.rta - prev : null;
-    const pbSeg = pb ? (pb.segment ?? pb.rta - prevPb) : null; // fastest time in this act
-    const segCls = seg != null && pbSeg != null && seg < pbSeg ? "ahead" : "";
+    const pbSeg = pb ? pb.rta - prevPb : null;
+    // gold: faster than you've ever done this act; green: faster than in your PB
+    const segCls = seg != null && b?.segment != null && seg < b.segment ? "gold"
+      : seg != null && pbSeg != null && seg < pbSeg ? "ahead" : "";
     rows.push(`<tr class="${isNow ? "now" : s ? "" : "todo"}" data-pb="${pb ? pb.rta : ""}">
       <td>${name}</td>
       <td class="num t">${s ? duration(s.rta) : isNow ? "" : "—"}</td>
@@ -1233,6 +1238,7 @@ function renderCampaignSplits(r) {
       <td class="num d">${s ? signed(s.delta) : isNow ? "" : '<span class="dim">—</span>'}</td>
       <td class="num"><span class="${segCls}">${seg != null ? duration(seg) : "—"}</span></td>
       <td class="num">${pb ? duration(pb.rta) : '<span class="dim">—</span>'}</td>
+      <td class="num">${b ? `<span title="${s && s.best_delta != null ? `${s.best_delta < 0 ? "−" : "+"}${duration(Math.abs(s.best_delta))} vs your best` : ""}">${duration(b.rta)}</span>` : '<span class="dim">—</span>'}</td>
     </tr>`);
     if (s) prev = s.rta;
     if (pb) prevPb = pb.rta;
@@ -1251,10 +1257,34 @@ function renderCampaignZones(r) {
   // zone and act splits also show the PB's time there and the difference
   $("cp-zones").innerHTML = entries.map((z) => `<li class="${z.cls}">
     <span class="t">${duration(z.rta)}</span><span class="act">${z.act ? `A${z.act}` : ""}</span><span class="zn">${esc(z.name)}</span>${
-      z.pb_rta != null ? `<span class="zpb" title="Your best time here">${duration(z.pb_rta)}</span><span class="zd">${signed(z.delta)}</span>` : ""}</li>`).join("");
+      z.pb_rta != null ? `<span class="zpb" title="Your PB's time here">${duration(z.pb_rta)}</span><span class="zd">${signed(z.delta)}</span>` : ""}${
+      z.best_delta != null && z.best_delta < 0 ? '<span class="zgold" title="Your fastest time here yet">best</span>' : ""}</li>`).join("");
 }
 
+const RANKS = ["1st", "2nd", "3rd"];
+
+function renderCampaignTop() {
+  const top = (cpData.top_ids || []).map((id) => cpData.runs.find((r) => r.id === id)).filter(Boolean);
+  $("cp-top-card").hidden = top.length === 0;
+  $("cp-top").innerHTML = top.map((r, i) => `<li class="rank${i + 1}" data-id="${r.id}" tabindex="0" role="button">
+      <span class="medal">${RANKS[i]}</span>
+      <span class="t">${duration(r.rta)}</span>
+      <span class="who">${esc(r.character || "—")} <span class="muted">${classLabel(r)}</span></span>
+      <span class="when muted">${dateTimeOf(r.started_at)}${r.patch ? ` · ${esc(r.patch)}` : ""}</span>
+    </li>`).join("");
+}
+$("cp-top").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-id]");
+  if (li) selectCampaignRun(Number(li.dataset.id)).catch(() => {});
+});
+$("cp-top").addEventListener("keydown", (e) => {
+  const li = e.target.closest("li[data-id]");
+  if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); li.click(); }
+});
+
 function renderCampaignRuns() {
+  renderCampaignTop();
+  const rank = new Map((cpData.top_ids || []).map((id, i) => [id, i + 1]));
   const rows = sortRows(cpData.runs, cpSort.key, cpSort.dir);
   const shownId = cpShown()?.id;
   $("cp-runs-empty").hidden = rows.length > 0;
@@ -1264,16 +1294,18 @@ function renderCampaignRuns() {
     const best = r.base_class && cpData.pb_ids?.[r.base_class] === r.id
       ? ` <span class="chip ok" title="Best ${esc(r.base_class)} run">PB</span>` : "";
     const t = r.status === "running" ? cpLive(r) : r;
-    return `<tr data-id="${r.id}" class="${r.id === shownId ? "selected" : ""}">
+    const n = rank.get(r.id);
+    const medal = n ? ` <span class="medal rank${n}" title="Your ${RANKS[n - 1]} fastest run">${RANKS[n - 1]}</span>` : "";
+    return `<tr data-id="${r.id}" class="${r.id === shownId ? "selected" : ""}${n ? ` top rank${n}` : ""}">
       <td>${mark}${dateTimeOf(r.started_at)}</td>
       <td>${esc(r.character || "—")}${r.mule ? ` <span class="chip mule" title="Started with a Ranger mule (${esc(r.mule)})">muled</span>` : ""}</td>
       <td>${classLabel(r)}</td>
       <td class="num">${r.level ?? "—"}</td>
       <td class="num">${r.act ? (r.act > 10 ? "E" : r.act) : "—"}</td>
-      <td class="num">${duration(t.rta)}${best}</td>
+      <td class="num">${duration(t.rta)}${best}${medal}</td>
       <td class="num">${duration(t.igt)}</td>
       <td class="num">${r.deaths || '<span class="dim">0</span>'}</td>
-      <td class="notes" title="${esc(r.notes)}">${esc(r.notes)}</td>
+      <td class="notes" title="${esc(r.notes)}">${r.patch ? `<span class="chip patch">${esc(r.patch)}</span> ` : ""}${esc(r.notes)}</td>
     </tr>`;
   }).join("");
 }
@@ -1325,6 +1357,20 @@ $("cp-runs-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]");
   if (tr) selectCampaignRun(Number(tr.dataset.id)).catch(() => {});
 });
+$("cp-patch").addEventListener("change", async () => {
+  const r = cpShown();
+  if (!r) return;
+  const patch = $("cp-patch").value.trim();
+  try {
+    await api(`/api/campaign/runs/${r.id}/patch`, { method: "POST", body: JSON.stringify({ patch }) });
+    for (const x of [cpDetail, cpData?.active, ...(cpData?.runs || [])]) if (x && x.id === r.id) x.patch = patch || null;
+    $("cp-notes-status").textContent = "· patch saved";
+    renderCampaignRuns();
+  } catch (e) {
+    $("cp-notes-status").textContent = `· patch not saved: ${e.message}`;
+  }
+});
+$("cp-patch").addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); });
 $("cp-notes").addEventListener("input", () => {
   const id = cpNotesFor;
   if (id == null) return;

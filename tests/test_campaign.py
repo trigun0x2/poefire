@@ -206,12 +206,26 @@ def test_campaign_api_flow(env: tuple[TestClient, AppRuntime, Path]) -> None:
         f.write("\n".join(log.lines) + "\n")
     rt.service.poll()
     active = client.get("/api/campaign").json()["active"]
-    assert active["pb_class"] == "Witch" and active["pb_runs"] == 1
+    assert active["pb_class"] == "Witch" and active["pb_id"] == run_id
+    assert active["best_class"] == "Witch" and active["best_runs"] == 1
     act1 = active["acts"][0]
     assert act1["delta"] == (1 + 2 + 500 + 2) - (2 + 2 + 600 + 2)
     strand = active["zones"][0]
     assert strand["name"] == "The Twilight Strand" and strand["pb_rta"] == 2 + 2
     assert strand["delta"] == (1 + 2) - (2 + 2)
+    assert strand["best_rta"] == 2 + 2 and strand["best_delta"] == strand["delta"]
+    assert client.get("/api/campaign").json()["top_ids"] == [run_id]
+
+    # the patch, noted in the run's notes section; editable
+    r = client.post(f"/api/campaign/runs/{run_id}/patch", json={"patch": "3.27"}, headers=H)
+    assert r.json() == {"ok": True, "patch": "3.27"}
+    assert client.get(f"/api/campaign/runs/{run_id}").json()["patch"] == "3.27"
+    r = client.post(f"/api/campaign/runs/{run_id}/patch", json={"patch": "soon"}, headers=H)
+    assert r.status_code == 400
+    assert (
+        client.post("/api/campaign/runs/999/patch", json={"patch": ""}, headers=H).status_code
+        == 404
+    )
 
     assert client.post(f"/api/campaign/runs/{run_id}/delete", headers=H).json() == {"ok": True}
     assert client.get(f"/api/campaign/runs/{run_id}").status_code == 404
@@ -381,9 +395,40 @@ def test_best_times_count_every_run_past_act_1(tmp_path: Path) -> None:
     assert bests.act_segments == {"Act 1": 500, "Act 2": 750}  # run 2's Act 2 took 750
 
     now_run = run(5, "Ranger", "running", 2, {"The Coast": 90, "Act 1": 520})
-    d = run_detail(now_run, T0, bests)
-    assert d["pb_runs"] == 2 and d["pb_class"] == "Ranger"
-    assert d["zones"][0]["pb_rta"] == 100 and d["zones"][0]["delta"] == -10
-    assert d["acts"][0]["pb_rta"] == 500 and d["acts"][0]["delta"] == 20
-    assert [(a["name"], a["segment"]) for a in d["pb_acts"]] == [("Act 1", 500), ("Act 2", 750)]
-    assert run_detail(now_run, T0, best_splits(runs, "Templar"))["pb_class"] is None
+    d = run_detail(now_run, T0, runs[0], bests)  # vs the PB (run 1) and the best times
+    assert d["best_runs"] == 2 and d["best_class"] == "Ranger"
+    assert d["pb_id"] == 1 and d["pb_class"] == "Ranger"
+    coast = d["zones"][0]
+    assert (coast["pb_rta"], coast["delta"], coast["best_rta"], coast["best_delta"]) == (
+        100, -10, 100, -10)  # fmt: skip
+    act1 = d["acts"][0]
+    assert (act1["pb_rta"], act1["delta"], act1["best_rta"], act1["best_delta"]) == (
+        500, 20, 500, 20)  # fmt: skip
+    assert [(a["name"], a["segment"]) for a in d["best_acts"]] == [("Act 1", 500), ("Act 2", 750)]
+    assert [a["name"] for a in d["pb_acts"]] == ["Act 1", "Act 2"]
+    assert run_detail(now_run, T0, None, best_splits(runs, "Templar"))["best_class"] is None
+
+
+def test_top_runs() -> None:
+    from poefire.campaign import CampaignRun, top_runs
+
+    def done(rid: int, minutes: int, status: str = "finished") -> CampaignRun:
+        return CampaignRun(started_at=T0, id=rid, status=status, char_class="Witch",
+                           ended_at=T0 + timedelta(minutes=minutes))  # fmt: skip
+
+    runs = [done(1, 300), done(2, 200), done(3, 100, "abandoned"), done(4, 250), done(5, 400)]
+    assert top_runs(runs) == [2, 4, 1]  # finished only, fastest first
+    assert top_runs(runs[:1]) == [1]
+
+
+def test_patch_is_noted_on_new_runs(tmp_path: Path) -> None:
+    store = Store(tmp_path / "db.sqlite3")
+    tracker = CampaignTracker(store, lambda: T0, lambda when: "3.27")
+    run = tracker.start()
+    assert run.patch == "3.27" and store.get_campaign_run(run.id or 0).patch == "3.27"  # type: ignore[union-attr]
+    old = CampaignTracker(store, lambda: T0)  # e.g. no patch list
+    old.start()
+    with store.transaction():
+        store.conn.execute("UPDATE campaign_runs SET patch = NULL")
+    assert store.fill_campaign_patches(lambda when: "3.26") == 2
+    assert {r.patch for r in store.list_campaign_runs(splits=False)} == {"3.26"}

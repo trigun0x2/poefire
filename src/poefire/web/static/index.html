@@ -153,10 +153,14 @@
       </div>
       <div class="hint" id="cp-hint">Start a run, then play: splits come from your Client.txt. Entering the epilogue after act 10 finishes the run.</div>
       <div class="hint" id="cp-hotkey-hint"></div>
-      <label class="field cp-notes-field" id="cp-notes-field" hidden>
-        <span>Notes <span class="muted" id="cp-notes-status"></span></span>
+      <div class="field cp-notes-field" id="cp-notes-field" hidden>
+        <div class="cp-notes-head">
+          <label for="cp-notes">Notes <span class="muted" id="cp-notes-status"></span></label>
+          <label class="cp-patch" title="The game patch this run was played on (filled in automatically when the run starts)">Patch
+            <input type="text" id="cp-patch" maxlength="20" placeholder="3.27" spellcheck="false"></label>
+        </div>
         <textarea id="cp-notes" rows="4" maxlength="20000" placeholder="Route, mistakes, RNG, gem setup…"></textarea>
-      </label>
+      </div>
       <div class="row" id="cp-past-actions" hidden>
         <button type="button" class="btn danger" id="cp-delete">Delete run</button>
       </div>
@@ -166,10 +170,15 @@
       <div class="card-title">Splits <span class="muted" id="cp-pb-label"></span></div>
       <div class="table-wrap">
         <table id="cp-acts-table">
-          <thead><tr><th>Act</th><th class="num">Time</th><th class="num">No loads</th><th class="num">vs PB</th><th class="num">Segment</th><th class="num">PB</th></tr></thead>
+          <thead><tr><th>Act</th><th class="num">Time</th><th class="num">No loads</th><th class="num">vs PB</th><th class="num">Segment</th><th class="num">PB</th><th class="num" title="Your fastest time to finish this act, over every run past Act 1">Best</th></tr></thead>
           <tbody id="cp-acts-body"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card cp-top" id="cp-top-card" hidden>
+      <div class="card-title">Top runs <span class="muted">· your fastest finished runs</span></div>
+      <ol class="cp-top-list" id="cp-top"></ol>
     </section>
 
     <section class="card cp-history">

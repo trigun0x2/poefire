@@ -324,15 +324,16 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
 .campaign {
   display: grid; gap: 14px; padding: 14px 18px 18px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-areas: "run run splits splits splits" "history history history history history" "zones zones zones zones zones";
+  grid-template-areas: "run run splits splits splits" "top top top top top" "history history history history history" "zones zones zones zones zones";
   align-items: start;
 }
 @media (max-width: 1250px) {
-  .campaign { grid-template-columns: 1fr; grid-template-areas: "run" "splits" "history" "zones"; }
+  .campaign { grid-template-columns: 1fr; grid-template-areas: "run" "splits" "top" "history" "zones"; }
 }
 .cp-run { grid-area: run; }
 .cp-splits { grid-area: splits; }
 .cp-history { grid-area: history; }
+.cp-top { grid-area: top; }
 .cp-zones { grid-area: zones; }
 .cp-run-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .btn.link { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 600; }
@@ -440,3 +441,28 @@ textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--acce
 
 .opacity-row input[type="range"] { flex: 1; accent-color: var(--accent); }
 .opacity-value { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* campaign: top runs, medals, patch, gold splits */
+:root { --gold: #f2c14e; --silver: #c3cad6; --bronze: #d08b5b; }
+.gold { color: var(--gold); font-weight: 600; }
+.cp-notes-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.cp-notes-head > label:first-child { color: var(--muted); font-size: 12px; }
+.cp-patch { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.cp-patch input { width: 72px; padding: 3px 7px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.chip.patch { background: var(--panel-2); color: var(--muted); text-transform: none; letter-spacing: 0; }
+.cp-zone-list .zgold { color: var(--gold); font-size: 11px; font-weight: 600; align-self: center; }
+.medal { display: inline-block; min-width: 2.4em; padding: 0 5px; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center; color: #1a1408; }
+.medal.rank1, .rank1 > .medal { background: var(--gold); }
+.medal.rank2, .rank2 > .medal { background: var(--silver); }
+.medal.rank3, .rank3 > .medal { background: var(--bronze); }
+tbody tr.top td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+tbody tr.top.rank2 td:first-child { box-shadow: inset 3px 0 0 var(--silver); }
+tbody tr.top.rank3 td:first-child { box-shadow: inset 3px 0 0 var(--bronze); }
+.cp-top-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.cp-top-list li { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "medal t" "who who" "when when"; align-items: center; gap: 4px 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); cursor: pointer; }
+.cp-top-list li:hover, .cp-top-list li:focus-visible { border-color: var(--accent); outline: none; }
+.cp-top-list li.rank1 { border-color: rgba(242, 193, 78, 0.55); }
+.cp-top-list .medal { grid-area: medal; }
+.cp-top-list .t { grid-area: t; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cp-top-list .who { grid-area: who; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-top-list .when { grid-area: when; font-size: 12px; }
