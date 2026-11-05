@@ -163,7 +163,7 @@ def env(tmp_path: Path) -> tuple[TestClient, AppRuntime, Path]:
 def test_campaign_api_flow(env: tuple[TestClient, AppRuntime, Path]) -> None:
     client, rt, path = env
     first = client.get("/api/campaign").json()
-    assert (first["active"], first["pb"], first["runs"]) == (None, None, [])
+    assert (first["active"], first["pb_ids"], first["runs"]) == (None, {}, [])
     assert first["hotkey"]["key"] == "Ctrl+Alt+R" and first["hotkey"]["active"] is False
     assert client.post("/api/campaign/finish", headers=H).status_code == 409
     d = client.post("/api/campaign/start", json={}, headers=H).json()
@@ -188,24 +188,30 @@ def test_campaign_api_flow(env: tuple[TestClient, AppRuntime, Path]) -> None:
     assert r.json() == {"ok": True}
     client.post("/api/campaign/finish", headers=H)
     d = client.get("/api/campaign").json()
-    assert d["active"] is None and d["pb"]["id"] == run_id
+    assert d["active"] is None and d["pb_ids"] == {"Witch": run_id}
     assert d["runs"][0]["notes"] == "good RNG" and d["runs"][0]["status"] == "finished"
     detail = client.get(f"/api/campaign/runs/{run_id}").json()
     assert detail["acts"][0]["rta"] == 2 + 2 + 600 + 2
 
-    # a second run is compared with the PB
+    # a second run of the same base class is compared with that class's PB, act and zones
     client.post("/api/campaign/start", json={"character": "Hexy"}, headers=H)
     log.lines.clear()
     log.t = T0
     log.wait(1)
     log.enter("1_1_1", "The Twilight Strand")
+    log.level(2, "Witch", "Hexy")
     log.wait(500)
     log.enter("1_2_1", "The Southern Forest")
     with path.open("a") as f:
         f.write("\n".join(log.lines) + "\n")
     rt.service.poll()
-    act1 = client.get("/api/campaign").json()["active"]["acts"][0]
+    active = client.get("/api/campaign").json()["active"]
+    assert active["pb_class"] == "Witch" and active["pb_id"] == run_id
+    act1 = active["acts"][0]
     assert act1["delta"] == (1 + 2 + 500 + 2) - (2 + 2 + 600 + 2)
+    strand = active["zones"][0]
+    assert strand["name"] == "The Twilight Strand" and strand["pb_rta"] == 2 + 2
+    assert strand["delta"] == (1 + 2) - (2 + 2)
 
     assert client.post(f"/api/campaign/runs/{run_id}/delete", headers=H).json() == {"ok": True}
     assert client.get(f"/api/campaign/runs/{run_id}").status_code == 404
@@ -329,3 +335,19 @@ def test_not_a_mule(tmp_path: Path) -> None:
     feed(tracker, log)
     assert (run2.character, run2.mule) == ("Speedy", None)
     store.close()
+
+
+def test_pb_is_per_base_class(tmp_path: Path) -> None:
+    from poefire.campaign import CampaignRun, best_per_class, personal_best
+
+    def done(rid: int, cls: str, minutes: int) -> CampaignRun:
+        return CampaignRun(started_at=T0, id=rid, status="finished", char_class=cls,
+                           ended_at=T0 + timedelta(minutes=minutes))  # fmt: skip
+
+    runs = [done(1, "Deadeye", 200), done(2, "Ranger", 150), done(3, "Necromancer", 120)]
+    runs.append(CampaignRun(started_at=T0, id=4, status="abandoned", char_class="Warden"))
+    assert personal_best(runs, "Ranger") is runs[1]  # Deadeye and Ranger runs count together
+    assert personal_best(runs, "Witch") is runs[2]
+    assert personal_best(runs, "Templar") is None
+    assert personal_best(runs) is runs[2]
+    assert best_per_class(runs) == {"Ranger": 2, "Witch": 3}

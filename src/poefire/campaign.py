@@ -339,9 +339,21 @@ class CampaignTracker:
 # --- views ---
 
 
-def personal_best(runs: list[CampaignRun]) -> CampaignRun | None:
-    done = [r for r in runs if r.status == "finished" and r.ended_at is not None]
+def personal_best(runs: list[CampaignRun], base: str | None = None) -> CampaignRun | None:
+    """The fastest finished run; of base class `base` when given."""
+    done = [r for r in runs if r.status == "finished" and r.ended_at is not None
+            and (base is None or base_class(r.char_class) == base)]  # fmt: skip
     return min(done, key=lambda r: r.rta(r.started_at), default=None)  # ended: rta is fixed
+
+
+def best_per_class(runs: list[CampaignRun]) -> dict[str, int]:
+    """Base class -> id of its fastest finished run."""
+    out: dict[str, int] = {}
+    for base in {base_class(r.char_class) for r in runs} - {None}:
+        pb = personal_best(runs, base)
+        if pb is not None and pb.id is not None and base is not None:
+            out[base] = pb.id
+    return out
 
 
 def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
@@ -366,18 +378,27 @@ def run_summary(run: CampaignRun, now: datetime) -> dict[str, Any]:
 
 
 def run_detail(run: CampaignRun, now: datetime, pb: CampaignRun | None) -> dict[str, Any]:
-    """The summary plus splits; act splits carry the difference to the personal best."""
-    pb_acts = {s.name: s for s in pb.act_splits()} if pb is not None and pb.id != run.id else {}
-    acts = []
-    for s in run.act_splits():
-        best = pb_acts.get(s.name)
-        acts.append({**s.to_json(), "pb_rta": best.rta if best else None,
-                     "delta": round(s.rta - best.rta, 1) if best else None})  # fmt: skip
+    """The summary plus splits; act and zone splits carry the difference to `pb` (the best
+    finished run of the same base class)."""
+    other = pb is not None and pb.id != run.id
+    pb_acts = {s.name: s for s in pb.act_splits()} if pb is not None and other else {}
+    pb_zones = {(s.act, s.name): s for s in pb.splits if s.kind == SplitKind.ZONE} \
+        if pb is not None and other else {}  # fmt: skip
+
+    def compared(s: Split, best: Split | None) -> dict[str, Any]:
+        return {**s.to_json(), "pb_rta": best.rta if best else None,
+                "delta": round(s.rta - best.rta, 1) if best else None}  # fmt: skip
+
     return {
         **run_summary(run, now),
-        "pb_id": pb.id if pb is not None and pb.id != run.id else None,
-        "acts": acts,
-        "zones": [s.to_json() for s in run.splits if s.kind == SplitKind.ZONE],
+        "pb_id": pb.id if pb is not None and other else None,
+        "pb_class": base_class(pb.char_class) if pb is not None else None,
+        "acts": [compared(s, pb_acts.get(s.name)) for s in run.act_splits()],
+        "zones": [
+            compared(s, pb_zones.get((s.act, s.name)))
+            for s in run.splits
+            if s.kind == SplitKind.ZONE
+        ],
         "levels": [s.to_json() for s in run.splits if s.kind == SplitKind.LEVEL],
         "pb_acts": [{"name": s.name, "rta": s.rta, "igt": s.igt} for s in pb_acts.values()],
     }

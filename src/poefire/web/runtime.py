@@ -331,9 +331,13 @@ class AppRuntime:
 
     # --- campaign runs (shares the tail thread's connection and lock) ---
 
-    def _personal_best(self, runs: list[campaign.CampaignRun]) -> campaign.CampaignRun | None:
-        """The best finished run, with its splits (the list is read without them)."""
-        pb = campaign.personal_best(runs)
+    def _personal_best(
+        self, runs: list[campaign.CampaignRun], run: campaign.CampaignRun | None
+    ) -> campaign.CampaignRun | None:
+        """The best finished run of `run`'s base class, with its splits (the list is read
+        without them). None until the run's class is known."""
+        base = campaign.base_class(run.char_class) if run is not None else None
+        pb = campaign.personal_best(runs, base) if base else None
         return self._store.get_campaign_run(pb.id) if pb is not None and pb.id else pb
 
     def campaign_overview(self, limit: int = 200) -> dict[str, Any]:
@@ -341,17 +345,17 @@ class AppRuntime:
         with self._lock:
             runs = self._store.list_campaign_runs(limit, splits=False)
             active = self.campaign.active
-            pb = self._personal_best(runs) if active else campaign.personal_best(runs)
+            pb = self._personal_best(runs, active) if active else None
         return {
             "active": campaign.run_detail(active, now, pb) if active else None,
-            "pb": campaign.run_summary(pb, now) if pb else None,
+            "pb_ids": campaign.best_per_class(runs),  # base class -> its best run
             "runs": [campaign.run_summary(r, now) for r in runs],
         }
 
     def campaign_run(self, run_id: int) -> dict[str, Any] | None:
         with self._lock:
             run = self._store.get_campaign_run(run_id)
-            pb = self._personal_best(self._store.list_campaign_runs(1000, splits=False))
+            pb = self._personal_best(self._store.list_campaign_runs(1000, splits=False), run)
         if run is None:
             return None
         return campaign.run_detail(run, self.now(), pb)

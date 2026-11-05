@@ -1185,7 +1185,11 @@ function tickCampaign() {
 function renderCampaignSplits(r) {
   const pbActs = new Map((r?.pb_acts || []).map((a) => [a.name, a]));
   const acts = new Map((r?.acts || []).map((a) => [a.name, a]));
-  $("cp-pb-label").textContent = !r ? "" : r.pb_id ? "· compared with your best finished run" : cpData.pb && cpData.pb.id === r.id ? "· this is your best run" : "· no finished run to compare with yet";
+  const cls = r?.base_class;
+  const isPb = r && cls && cpData.pb_ids?.[cls] === r.id;
+  $("cp-pb-label").textContent = !r ? "" : !cls ? "· PB comparison starts once your class is known"
+    : r.pb_id ? `· compared with your best ${cls} run` : isPb ? `· this is your best ${cls} run`
+    : `· no finished ${cls} run to compare with yet`;
   let prev = 0, prevPb = 0;
   const rows = [];
   for (let n = 1; n <= 10; n++) {
@@ -1216,8 +1220,10 @@ function renderCampaignZones(r) {
     ...(r?.acts || []).map((z) => ({ ...z, name: `${z.name} done`, cls: "actdone" })),
   ].sort((a, b) => b.rta - a.rta || (a.cls === "actdone" ? -1 : 1));
   $("cp-zones-empty").hidden = entries.length > 0;
+  // zone and act splits also show the PB's time there and the difference
   $("cp-zones").innerHTML = entries.map((z) => `<li class="${z.cls}">
-    <span class="t">${duration(z.rta)}</span><span class="act">${z.act ? `A${z.act}` : ""}</span><span>${esc(z.name)}</span></li>`).join("");
+    <span class="t">${duration(z.rta)}</span><span class="act">${z.act ? `A${z.act}` : ""}</span><span class="zn">${esc(z.name)}</span>${
+      z.pb_rta != null ? `<span class="zpb" title="Your PB's time here">${duration(z.pb_rta)}</span><span class="zd">${signed(z.delta)}</span>` : ""}</li>`).join("");
 }
 
 function renderCampaignRuns() {
@@ -1227,7 +1233,8 @@ function renderCampaignRuns() {
   $("cp-runs-body").innerHTML = rows.map((r) => {
     const mark = r.status === "running" ? '<span class="live-dot" title="in progress"></span>'
       : r.status === "abandoned" ? '<span class="dim" title="stopped">✕ </span>' : "";
-    const best = cpData.pb && cpData.pb.id === r.id ? ' <span class="chip ok">PB</span>' : "";
+    const best = r.base_class && cpData.pb_ids?.[r.base_class] === r.id
+      ? ` <span class="chip ok" title="Best ${esc(r.base_class)} run">PB</span>` : "";
     const t = r.status === "running" ? cpLive(r) : r;
     return `<tr data-id="${r.id}" class="${r.id === shownId ? "selected" : ""}">
       <td>${mark}${dateTimeOf(r.started_at)}</td>
