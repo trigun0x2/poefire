@@ -324,11 +324,11 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
 .campaign {
   display: grid; gap: 14px; padding: 14px 18px 18px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-areas: "run run splits splits splits" "top top top top top" "history history history history history" "zones zones zones zones zones";
+  grid-template-areas: "run run splits splits splits" "worst worst worst worst worst" "top top top top top" "history history history history history" "zones zones zones zones zones";
   align-items: start;
 }
 @media (max-width: 1250px) {
-  .campaign { grid-template-columns: 1fr; grid-template-areas: "run" "splits" "top" "history" "zones"; }
+  .campaign { grid-template-columns: 1fr; grid-template-areas: "run" "splits" "worst" "top" "history" "zones"; }
 }
 .cp-run { grid-area: run; }
 .cp-splits { grid-area: splits; }
@@ -466,3 +466,23 @@ tbody tr.top.rank3 td:first-child { box-shadow: inset 3px 0 0 var(--bronze); }
 .cp-top-list .t { grid-area: t; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .cp-top-list .who { grid-area: who; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-top-list .when { grid-area: when; font-size: 12px; }
+
+/* campaign: where you lost time, with CyclonDefinitiv's layout guides */
+.cp-worst { grid-area: worst; }
+.cp-worst-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.cp-worst-list > li { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); padding: 12px 14px; }
+.cp-worst-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cp-worst-head .rank { color: var(--muted); font-weight: 700; }
+.cp-worst-head .zone { font-weight: 700; font-size: 15px; }
+.cp-worst-head .act { color: var(--muted); font-size: 12px; }
+.cp-worst-head .lost { margin-left: auto; font-variant-numeric: tabular-nums; }
+.cp-guide { margin-top: 10px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 900px) { .cp-guide { grid-template-columns: 1fr; } }
+.cp-layouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.cp-layouts a { display: block; color: var(--muted); font-size: 11px; text-decoration: none; }
+.cp-layouts img { display: block; width: 100%; aspect-ratio: 5 / 4; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #000; margin-bottom: 3px; }
+.cp-layouts a:hover img { border-color: var(--accent); }
+.cp-read p { margin: 0 0 6px; font-size: 13px; line-height: 1.45; }
+.cp-read .poi { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.cp-guide-link { font-size: 12px; }
+.cp-credit { margin-top: 10px; }

@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from poefire import __version__, builds, diagnostics, logs, patches, pob, pob_tree
+from poefire import __version__, builds, diagnostics, layouts, logs, patches, pob, pob_tree
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import hud, overview, sessions, settings, views
@@ -272,6 +272,15 @@ def create_app(rt: AppRuntime) -> FastAPI:
         if not rt.campaign_delete(run_id):
             raise HTTPException(404, "no such campaign run")
         return {"ok": True}
+
+    @app.get("/api/campaign/layout")
+    def campaign_layout(act: int, zone: str) -> dict[str, Any]:
+        """CyclonDefinitiv's layout guide for a campaign zone (from definitivguide.com,
+        credited), or 404 when his guide has no page for it."""
+        guide = rt.layouts.zone(act, zone[:100])
+        if guide is None:
+            raise HTTPException(404, "no layout guide for that zone")
+        return {**guide, "credit": layouts.CREDIT}
 
     @app.get("/api/overlay")
     def overlay_data() -> dict[str, Any]:

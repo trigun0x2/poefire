@@ -1233,6 +1233,7 @@ function renderCampaign() {
   }
   tickCampaign();
   renderCampaignSplits(r);
+  renderCampaignWorst(r);
   renderCampaignZones(r);
   renderCampaignRuns();
 }
@@ -1299,6 +1300,58 @@ function renderCampaignZones(r) {
     <span class="t">${duration(z.rta)}</span><span class="act">${z.act ? `A${z.act}` : ""}</span><span class="zn">${esc(z.name)}</span>${
       z.pb_rta != null ? `<span class="zpb" title="Your PB's time here">${duration(z.pb_rta)}</span><span class="zd">${signed(z.delta)}</span>` : ""}${
       z.best_delta != null && z.best_delta < 0 ? '<span class="zgold" title="Your fastest time here yet">best</span>' : ""}</li>`).join("");
+}
+
+// --- where you lost time: the worst zones, with CyclonDefinitiv's layout guides ---
+
+const cpGuides = new Map(); // "act|zone" -> guide, null (none), or a pending promise
+let cpWorstKey = "";
+
+function cpGuideFor(act, zone) {
+  const key = `${act}|${zone}`;
+  if (!cpGuides.has(key)) {
+    cpGuides.set(key, api(`/api/campaign/layout?act=${act}&zone=${encodeURIComponent(zone)}`)
+      .then((g) => { cpGuides.set(key, g); return g; })
+      .catch(() => { cpGuides.set(key, null); return null; }));
+  }
+  return Promise.resolve(cpGuides.get(key));
+}
+
+function guideHtml(g) {
+  if (!g) return '<div class="hint">No layout guide for this zone yet.</div>';
+  const pics = (g.layouts || []).map((l) => `<a href="${esc(l.src)}" target="_blank" rel="noopener" title="${esc(l.label)}">
+      <img src="${esc(l.src)}" alt="${esc(l.label || g.title)}" loading="lazy">${esc(l.label)}</a>`).join("");
+  const poi = (g.points_of_interest || []).map((p) => `<span class="chip">${esc(p)}</span>`).join("");
+  const read = (g.zone_read || []).map((p) => `<p>${esc(p)}</p>`).join("");
+  return `<div class="cp-guide">
+      <div class="cp-layouts">${pics || '<div class="hint">No layout pictures yet.</div>'}</div>
+      <div class="cp-read">${poi ? `<div class="poi">${poi}</div>` : ""}${read}
+        <a class="cp-guide-link" href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.title || "This zone")} in Cyclon’s guide by CyclonDefinitiv →</a></div>
+    </div>`;
+}
+
+function renderCampaignWorst(r) {
+  const worst = r?.worst_zones || [];
+  $("cp-worst-card").hidden = worst.length === 0;
+  const key = JSON.stringify([r?.id, worst]);
+  if (key === cpWorstKey) return; // unchanged: keep the loaded guides on screen
+  cpWorstKey = key;
+  const basis = worst[0]?.basis;
+  $("cp-worst-sub").textContent = basis === "longest" ? "· your longest zones (nothing to compare with yet)"
+    : "· against your fastest time in each zone";
+  $("cp-worst").innerHTML = worst.map((w, i) => {
+    const vs = w.lost == null ? `${duration(w.seconds)}`
+      : `${duration(w.seconds)} <span class="behind">+${duration(w.lost)}</span> <span class="muted">vs ${w.basis === "pb" ? "your PB" : "your best"} ${duration(w.reference)}</span>`;
+    return `<li data-act="${w.act}" data-zone="${esc(w.zone)}">
+      <div class="cp-worst-head"><span class="rank">#${i + 1}</span><span class="zone">${esc(w.zone)}</span>
+        <span class="act">Act ${w.act}</span><span class="lost">${vs}</span></div>
+      <div class="cp-guide-slot hint">Loading the layout guide…</div></li>`;
+  }).join("");
+  for (const li of $("cp-worst").children) {
+    cpGuideFor(Number(li.dataset.act), li.dataset.zone).then((g) => {
+      if (li.isConnected) li.querySelector(".cp-guide-slot").outerHTML = guideHtml(g);
+    });
+  }
 }
 
 const RANKS = ["1st", "2nd", "3rd"];

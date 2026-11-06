@@ -192,6 +192,14 @@ The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit 
   at each split over every run of that class that got past Act 1 (finished or not); a gold
   segment is an act you've never done faster.
 - **Top runs:** your 3 fastest finished runs, also marked 1st / 2nd / 3rd in the runs list.
+- **Where you lost time:** the 3 zones of a run with the most time lost, measured from first
+  entering a zone to reaching the next new one, against your fastest time in that zone (any
+  run of the class past Act 1), else your PB's, else the run's longest zones. Each comes with
+  its layout guide from
+  [Cyclon's Advanced Campaign Guide](https://www.definitivguide.com/docs/PoE1/layout) by
+  **CyclonDefinitiv** ([YouTube](https://www.youtube.com/@CyclonDefinitiv)): his layout
+  pictures, points of interest and zone read, loaded from his site (kept for a week) and
+  credited, with a link to his page. poefire ships none of his content.
 - Every run is kept with its notes and the game patch it was played on (e.g. 3.27, filled in
   from the PoE wiki's patch list, editable); past runs can be deleted.
 

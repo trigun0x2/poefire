@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import __version__, campaign, logs, patches, wiring
+from poefire import __version__, campaign, layouts, logs, patches, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -137,6 +137,9 @@ class AppRuntime:
         self.hotkey_errors: dict[str, str] = {}
         self.hotkey_last: tuple[str, datetime] | None = None
         self._bests_cache: dict[tuple[str, tuple[int, ...]], campaign.Bests] = {}
+        self.layouts = layouts.LayoutGuide(
+            self._kv_get, self._kv_set, f"poefire/{__version__} (+{wiring.PROJECT_URL})"
+        )
         self.overlay: Any = None  # the overlay window's controller, when the native window runs
         self.log_path: Path | None = None
         self.service: TrackerService | None = None
@@ -359,6 +362,14 @@ class AppRuntime:
             self.values.clear()  # cached values of the deleted maps and session
 
     # --- campaign runs (shares the tail thread's connection and lock) ---
+
+    def _kv_get(self, key: str) -> Any:
+        with Store(self.cfg.db_path) as store:
+            return store.get_json(key)
+
+    def _kv_set(self, key: str, value: Any) -> None:
+        with Store(self.cfg.db_path) as store:
+            store.set_json(key, value)
 
     def _patch_for_new_run(self, when: datetime) -> str | None:
         """The patch out at `when`; without a patch list, the latest run's (called under

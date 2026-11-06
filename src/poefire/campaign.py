@@ -19,6 +19,7 @@ not change the act.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import re
 from collections.abc import Callable, Iterable
@@ -398,6 +399,8 @@ class Bests:
     acts: dict[str, Split]  # "Act N" -> fastest time to finish that act
     act_segments: dict[str, float]  # "Act N" -> fastest time spent in that act
     zones: dict[tuple[int | None, str], Split]  # (act, zone) -> fastest time to first get there
+    # (act, zone) -> fastest time from first entering it to reaching the next new zone
+    zone_segments: dict[tuple[int | None, str], float] = field(default_factory=dict)
 
 
 def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
@@ -406,6 +409,7 @@ def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
     acts: dict[str, Split] = {}
     segments: dict[str, float] = {}
     zones: dict[tuple[int | None, str], Split] = {}
+    zone_segs: dict[tuple[int | None, str], float] = {}
     count = 0
     for run in runs:
         if base_class(run.char_class) != base or not counts_for_bests(run):
@@ -423,7 +427,51 @@ def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
             key = (s.act, s.name)
             if s.kind == SplitKind.ZONE and (key not in zones or s.rta < zones[key].rta):
                 zones[key] = s
-    return Bests(base, count, acts, segments, zones)
+        for s, seconds in zone_times(run):
+            key = (s.act, s.name)
+            if key not in zone_segs or seconds < zone_segs[key]:
+                zone_segs[key] = seconds
+    return Bests(base, count, acts, segments, zones, zone_segs)
+
+
+def zone_times(run: CampaignRun) -> list[tuple[Split, float]]:
+    """Each zone and the time from first entering it until the next new zone (or, for a
+    finished run, its end). The last zone of a run in progress or stopped has no time: it
+    would count the time until the run was stopped."""
+    zones = sorted((s for s in run.splits if s.kind == SplitKind.ZONE), key=lambda s: s.rta)
+    out = [(a, b.rta - a.rta) for a, b in itertools.pairwise(zones)]
+    if zones and run.status == "finished" and run.ended_at is not None:
+        out.append((zones[-1], max(0.0, run.rta(run.ended_at) - zones[-1].rta)))
+    return out
+
+
+WORST_ZONES = 3
+
+
+def worst_zones(run: CampaignRun, pb: CampaignRun | None, bests: Bests | None,
+                n: int = WORST_ZONES) -> list[dict[str, Any]]:  # fmt: skip
+    """The zones where the run lost the most time: against your fastest time in that zone
+    (any run of the class past Act 1), else against your PB's, else the longest zones."""
+    best = bests.zone_segments if bests is not None else {}
+    mine = {(s.act, s.name): t for s, t in zone_times(pb)} if pb and pb.id != run.id else {}
+    rows: list[dict[str, Any]] = []
+    for s, seconds in zone_times(run):
+        key = (s.act, s.name)
+        ref, basis = (best[key], "best") if key in best else (
+            (mine[key], "pb") if key in mine else (None, None))  # fmt: skip
+        rows.append({
+            "act": s.act, "zone": s.name, "seconds": round(seconds, 1),
+            "reference": round(ref, 1) if ref is not None else None, "basis": basis,
+            "lost": round(seconds - ref, 1) if ref is not None else None,
+        })  # fmt: skip
+    compared = [r for r in rows if r["lost"] is not None and r["lost"] > 0]
+    if compared:
+        return sorted(compared, key=lambda r: -r["lost"])[:n]
+    if any(r["lost"] is not None for r in rows):
+        return []  # as fast as ever everywhere
+    for r in rows:
+        r["basis"] = "longest"
+    return sorted(rows, key=lambda r: -r["seconds"])[:n]
 
 
 TOP_RUNS = 3
@@ -505,6 +553,7 @@ def run_detail(
             if s.kind == SplitKind.ZONE
         ],
         "levels": [s.to_json() for s in run.splits if s.kind == SplitKind.LEVEL],
+        "worst_zones": worst_zones(run, pb, bests),
         "pb_acts": [{"name": s.name, "rta": s.rta, "igt": s.igt} for s in pb_acts.values()],
         "best_acts": [
             {
