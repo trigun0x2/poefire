@@ -176,14 +176,6 @@
       </div>
     </section>
 
-    <section class="card cp-worst" id="cp-worst-card" hidden>
-      <div class="card-title">Where you lost time <span class="muted" id="cp-worst-sub"></span></div>
-      <ol class="cp-worst-list" id="cp-worst"></ol>
-      <div class="hint cp-credit">Layout guides are from
-        <a href="https://www.definitivguide.com/docs/PoE1/layout" target="_blank" rel="noopener">Cyclon’s Advanced Campaign Guide</a>
-        by <b>CyclonDefinitiv</b> (<a href="https://www.youtube.com/@CyclonDefinitiv" target="_blank" rel="noopener">YouTube</a>).
-        The layout pictures and zone reads are his work, shown from his site.</div>
-    </section>
 
     <section class="card cp-top" id="cp-top-card" hidden>
       <div class="card-title">Top runs <span class="muted">· your fastest finished runs</span></div>
@@ -207,6 +199,15 @@
       <div class="card-title">Zones &amp; levels</div>
       <ol class="cp-zone-list" id="cp-zones"></ol>
       <div class="empty" id="cp-zones-empty">Zones show up here as you enter them.</div>
+    </section>
+
+    <section class="card cp-worst" id="cp-worst-card" hidden>
+      <div class="card-title">Where you lost time <span class="muted" id="cp-worst-sub"></span></div>
+      <ol class="cp-worst-list" id="cp-worst"></ol>
+      <div class="hint cp-credit">Layout guides are from
+        <a href="https://www.definitivguide.com/docs/PoE1/layout" target="_blank" rel="noopener">Cyclon’s Advanced Campaign Guide</a>
+        by <b>CyclonDefinitiv</b> (<a href="https://www.youtube.com/@CyclonDefinitiv" target="_blank" rel="noopener">YouTube</a>).
+        The layout pictures and zone reads are his work, shown from his site.</div>
     </section>
   </section>
 
@@ -518,7 +519,17 @@
   <div class="resize-handle se" data-edge="se" hidden></div>
 
   <!-- in-app dialog (instead of the browser's confirm/alert/prompt boxes) -->
-  <dialog class="modal" id="modal" aria-labelledby="modal-title" aria-describedby="modal-body">
+  <dialog class="lightbox" id="lightbox" aria-label="Layout picture">
+  <figure>
+    <img id="lightbox-img" alt="">
+    <figcaption><span id="lightbox-label"></span> <span class="muted" id="lightbox-count"></span>
+      <span class="muted lightbox-credit">· layout by CyclonDefinitiv</span></figcaption>
+  </figure>
+  <button type="button" class="lightbox-nav prev" id="lightbox-prev" aria-label="Previous picture">‹</button>
+  <button type="button" class="lightbox-nav next" id="lightbox-next" aria-label="Next picture">›</button>
+  <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Close">✕</button>
+</dialog>
+<dialog class="modal" id="modal" aria-labelledby="modal-title" aria-describedby="modal-body">
     <form method="dialog" class="modal-box">
       <h2 class="modal-title" id="modal-title"></h2>
       <div class="modal-body" id="modal-body"></div>

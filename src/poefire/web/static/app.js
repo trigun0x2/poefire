@@ -1319,7 +1319,7 @@ function cpGuideFor(act, zone) {
 
 function guideHtml(g) {
   if (!g) return '<div class="hint">No layout guide for this zone yet.</div>';
-  const pics = (g.layouts || []).map((l) => `<a href="${esc(l.src)}" target="_blank" rel="noopener" title="${esc(l.label)}">
+  const pics = (g.layouts || []).map((l, i) => `<a href="${esc(l.src)}" data-lightbox="${i}" title="${esc(l.label)}">
       <img src="${esc(l.src)}" alt="${esc(l.label || g.title)}" loading="lazy">${esc(l.label)}</a>`).join("");
   const poi = (g.points_of_interest || []).map((p) => `<span class="chip">${esc(p)}</span>`).join("");
   const read = (g.zone_read || []).map((p) => `<p>${esc(p)}</p>`).join("");
@@ -1353,6 +1353,36 @@ function renderCampaignWorst(r) {
     });
   }
 }
+
+// Layout pictures open in a viewer in the app (arrows / ← → step through the zone's pictures)
+let lightbox = { items: [], at: 0 };
+function showLightbox(i) {
+  const { items } = lightbox;
+  lightbox.at = (i + items.length) % items.length;
+  const it = items[lightbox.at];
+  $("lightbox-img").src = it.src;
+  $("lightbox-img").alt = it.label;
+  $("lightbox-label").textContent = it.label;
+  $("lightbox-count").textContent = items.length > 1 ? `${lightbox.at + 1} / ${items.length}` : "";
+  $("lightbox-prev").hidden = $("lightbox-next").hidden = items.length < 2;
+}
+$("cp-worst").addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-lightbox]");
+  if (!a) return;
+  e.preventDefault();
+  const links = [...a.closest(".cp-layouts").querySelectorAll("a[data-lightbox]")];
+  lightbox.items = links.map((l) => ({ src: l.getAttribute("href"), label: l.title }));
+  showLightbox(links.indexOf(a));
+  $("lightbox").showModal();
+});
+$("lightbox-prev").addEventListener("click", () => showLightbox(lightbox.at - 1));
+$("lightbox-next").addEventListener("click", () => showLightbox(lightbox.at + 1));
+$("lightbox-close").addEventListener("click", () => $("lightbox").close());
+$("lightbox").addEventListener("click", (e) => { if (e.target === e.currentTarget) $("lightbox").close(); });
+$("lightbox").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") showLightbox(lightbox.at - 1);
+  else if (e.key === "ArrowRight") showLightbox(lightbox.at + 1);
+});
 
 const RANKS = ["1st", "2nd", "3rd"];
 
