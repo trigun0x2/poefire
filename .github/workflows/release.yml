@@ -10,12 +10,19 @@ name: Windows release
 # Only users on the beta update channel get it.
 #
 # Running the workflow manually (Actions > Windows release > Run workflow) only builds the app
-# as a workflow artifact, versioned <next>-dev.<run number>.
+# as a workflow artifact, versioned <next>-dev.<run number>; on dev with "publish beta" ticked
+# it replaces the beta like a push does (the PoB tree workflow uses that: its own commits
+# can't trigger a push run).
 on:
   push:
     branches: ["**"]
     tags-ignore: ["**"]
   workflow_dispatch:
+    inputs:
+      publish_beta:
+        description: "On dev: publish this build as the beta"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,6 +64,8 @@ jobs:
 
       - name: Version
         id: version
+        env:
+          PUBLISH_BETA: ${{ inputs.publish_beta }}
         run: |
           # latest *public* release tag (pre-releases have a "-dev." suffix)
           latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -- '-' | head -n 1 || true)
@@ -75,7 +84,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "master" ]]; then
             channel=public
             version="$next"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "dev" ]]; then
+          elif [[ "$GITHUB_REF_NAME" == "dev" && ( "$GITHUB_EVENT_NAME" == "push" || "$PUBLISH_BETA" == "true" ) ]]; then
             channel=prerelease
             version="$next-dev.$GITHUB_RUN_NUMBER"
           else
@@ -174,7 +183,7 @@ jobs:
   release:
     name: Publish GitHub release
     needs: build
-    if: github.event_name == 'push' && needs.build.outputs.channel != 'none'
+    if: needs.build.outputs.channel != 'none'
     runs-on: ubuntu-latest
     permissions:
       contents: write

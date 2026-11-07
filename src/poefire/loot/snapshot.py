@@ -112,6 +112,7 @@ class Snapshotter:
         self.clock = clock
         self._tabs: list[TabRef] | None = None
         self._listed_names: dict[str, str] = {}
+        self.missing_tabs: list[str] = []  # watched names/ids the league's tab list lacks
 
     def set_league(self, league: str) -> None:
         """Switch leagues: tab ids and the auto-picked character are per league."""
@@ -179,6 +180,7 @@ class Snapshotter:
                 add(tab, parent if parent and parent.get("type") != "Folder" else None)
         if missing:
             log.warning("stash tabs not found in %s: %s", self.league, ", ".join(sorted(missing)))
+        self.missing_tabs = [w for w in self.wanted if w.casefold() in missing]
         self._tabs = refs
         return refs
 

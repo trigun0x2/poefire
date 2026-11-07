@@ -3,6 +3,7 @@
 Run when a new league adds a tree version (see PoB's src/GameVersions.lua):
 
     uv run python scripts/update_pob_tree.py 3_29
+    uv run python scripts/update_pob_tree.py --latest   # PoB's newest tree (weekly workflow)
 
 It reads PathOfBuildingCommunity/PathOfBuilding's TreeData/<version>/tree.lua and keeps only
 what poefire's PoB export needs: the classes with their ascendancies (for classId /
@@ -18,7 +19,19 @@ from pathlib import Path
 import httpx
 
 URL = "https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/master/src/TreeData/{}/tree.lua"
+VERSIONS_URL = "https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/master/src/GameVersions.lua"
 OUT = Path(__file__).resolve().parents[1] / "src" / "poefire" / "pob_tree.py"
+
+
+def latest_version() -> str:
+    """PoB's newest regular tree version: "3_29" (not the _ruthless / _alternate ones)."""
+    r = httpx.get(VERSIONS_URL, timeout=60, follow_redirects=True)
+    r.raise_for_status()
+    listed = re.search(r"treeVersionList\s*=\s*\{(.*?)\}", r.text, re.S)
+    if listed is None:
+        raise SystemExit("treeVersionList not found in GameVersions.lua")
+    regular = re.findall(r'"(\d+_\d+)"', listed.group(1))
+    return max(regular, key=lambda v: tuple(int(x) for x in v.split("_")))
 
 
 def block(lines: list[str], start: str) -> str:
@@ -64,4 +77,5 @@ def main(version: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "3_29")
+    arg = sys.argv[1] if len(sys.argv) > 1 else "--latest"
+    main(latest_version() if arg == "--latest" else arg)

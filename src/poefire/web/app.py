@@ -119,6 +119,8 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "hotkey": rt.hotkey_json(),
             "overlay": rt.overlay_json(),
             "campaign": rt.campaign_brief(),
+            "league_hint": rt.league_hint,
+            "tabs_hint": rt.tabs_hint,
             "value": value,
             "prices": {
                 "league": rt.price_league,
@@ -363,6 +365,11 @@ def create_app(rt: AppRuntime) -> FastAPI:
             raise HTTPException(400, "bad league name")
         rt.set_league(name)
         return {"current": rt.league}
+
+    @app.post("/api/league/hint/dismiss")
+    def dismiss_league_hint() -> dict[str, Any]:
+        rt.dismiss_league_hint()
+        return {"ok": True}
 
     @app.post("/api/prices/refresh")
     def refresh_prices() -> dict[str, Any]:

@@ -119,6 +119,7 @@ function renderStatus() {
     ? "The website rejected your POESESSID. Click to paste a new one in Settings."
     : !l.enabled ? `${l.reason} (click to open Settings)` : l.last?.error || "Take a snapshot now";
   renderSessionBanner(l.session);
+  renderLeagueBanners(s);
   renderUpdate(s.update);
   $("last-empty").innerHTML = s.log_path
     ? "No map finished yet. Stats appear when you're back in your hideout."
@@ -232,6 +233,46 @@ $("update-row").addEventListener("click", () => {
   try { localStorage.removeItem("poefire.update.dismissed"); } catch { /* ignore */ }
   $("update-banner").dataset.key = "";
   renderUpdate(status?.update);
+});
+
+// A new league: your newest character plays somewhere else, or your watched tabs are gone.
+function renderLeagueBanners(s) {
+  const lh = s.league_hint, b = $("league-banner");
+  b.hidden = !lh;
+  if (lh && b.dataset.key !== lh.league) {
+    b.dataset.key = lh.league;
+    const who = lh.character ? ` (${esc(lh.character)}${lh.level ? `, level ${lh.level}` : ""})` : "";
+    b.innerHTML = `<span><b>Playing ${esc(lh.league)}?</b> Your newest character${who} is in ${esc(lh.league)}, ` +
+      `but poefire tracks ${esc(lh.current)}. Loot, stash tabs and prices follow the league you pick.</span>` +
+      `<button type="button" class="btn primary" data-act="switch">Switch to ${esc(lh.league)}</button>` +
+      '<button type="button" class="btn" data-act="dismiss">Not now</button>';
+  }
+  if (!lh) b.dataset.key = "";
+  const th = s.tabs_hint, t = $("tabs-banner");
+  const showTabs = th && !lh && location.hash !== "#settings";
+  t.hidden = !showTabs;
+  if (showTabs) {
+    t.innerHTML = th.none_found
+      ? `<span><b>None of your watched stash tabs are in ${esc(th.league)}.</b> Only your inventory is tracked: pick this league's tabs in Settings.</span><a class="btn primary" href="#settings">Pick tabs</a>`
+      : `<span><b>Some watched tabs aren't in ${esc(th.league)}:</b> ${th.missing.map(esc).join(", ")}. Loot moved into other tabs isn't counted.</span><a class="btn" href="#settings">Check tabs</a>`;
+  }
+}
+$("league-banner").addEventListener("click", async (e) => {
+  const act = e.target.closest("button[data-act]")?.dataset.act;
+  const lh = status?.league_hint;
+  if (!act || !lh) return;
+  try {
+    if (act === "switch") {
+      await api("/api/league", { method: "POST", body: JSON.stringify({ league: lh.league }) });
+      await loadLeagues().catch(() => {});
+    } else {
+      await api("/api/league/hint/dismiss", { method: "POST" });
+    }
+    $("league-banner").hidden = true;
+    await pollStatus();
+  } catch (err) {
+    alertModal("That didn't work", err.message);
+  }
 });
 
 function renderSessionBanner(h) {

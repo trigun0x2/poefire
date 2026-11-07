@@ -49,6 +49,8 @@ from poefire.web.cache import BookCache
 log = logging.getLogger(__name__)
 GAME_LOG_KEY = "game_log_path"  # where the running game's Client.txt was last found
 GAME_LOG_CHECK = 15.0  # seconds
+LEAGUE_CHECK = 15 * 60.0  # seconds between checks of your characters' league and your tabs
+DISMISSED_LEAGUES_KEY = "league_hint_dismissed"
 
 LEAGUE_KEY = "ui_league"
 SESSION_GAP = timedelta(minutes=30)
@@ -123,6 +125,11 @@ class AppRuntime:
         self._log_override = log_path
         # the Client.txt of the game last seen running (when none is configured), remembered
         self.detected_log: Path | None = None
+        # set by the league check: your newest character plays in another league / none of
+        # the watched stash tabs exist in this league
+        self.league_hint: dict[str, Any] | None = None
+        self.tabs_hint: dict[str, Any] | None = None
+        self._league_check_now = threading.Event()
         self._auto_recorder = recorder is True
 
         self.patches = patches.PatchBook(
@@ -242,6 +249,7 @@ class AppRuntime:
         old = self.cfg
         self.cfg = cfg
         self.builds.enabled = cfg.build_snapshots
+        self._league_check_now.set()  # tabs, account or cookie may have changed
         if cfg.debug_logging != old.debug_logging:
             logs.set_verbose(cfg.debug_logging)
             log.info("verbose logging %s", "on" if cfg.debug_logging else "off")
@@ -284,6 +292,8 @@ class AppRuntime:
             store.set_json(LEAGUE_KEY, league)
         if self.recorder is not None:
             self.recorder.snapshotter.set_league(league)
+        self.league_hint = self.tabs_hint = None
+        self._league_check_now.set()  # check the new league's tabs
         self.refresh_prices()
 
     def ninja_leagues(self) -> list[str]:
@@ -640,6 +650,62 @@ class AppRuntime:
             self._session_health = cached
         return cached[1]
 
+    def dismiss_league_hint(self) -> None:
+        """'Not now' on the league banner: don't suggest that league again."""
+        hint = self.league_hint
+        if hint is None:
+            return
+        with Store(self.cfg.db_path) as store:
+            dismissed = list(store.get_json(DISMISSED_LEAGUES_KEY) or [])
+            store.set_json(DISMISSED_LEAGUES_KEY, [*dismissed, hint["league"]][-20:])
+        self.league_hint = None
+
+    def check_league(self) -> None:
+        """Your account's newest character in another league -> league_hint; watched stash
+        tabs that don't exist in this league -> tabs_hint. Uses the loot connection (its rate
+        limits); does nothing while loot tracking is off."""
+        rec = self.recorder
+        if rec is None:
+            self.league_hint = self.tabs_hint = None
+            return
+        snap = rec.snapshotter
+        league = self.league
+        chars = snap.api.list_characters()
+        newest = next((c for c in chars if c.get("current")), None)
+        dismissed = set(self._kv_get(DISMISSED_LEAGUES_KEY) or [])
+        other = newest.get("league") if newest else None
+        if newest and other and other != league and other not in dismissed:
+            self.league_hint = {
+                "league": other, "current": league,
+                "character": newest.get("name"), "level": newest.get("level"),
+            }  # fmt: skip
+        else:
+            self.league_hint = None
+        if snap.wanted:
+            snap.resolve_tabs(refresh=True)
+            missing = list(snap.missing_tabs)
+            none_found = len(missing) == len(snap.wanted)
+            self.tabs_hint = (
+                {"league": league, "missing": missing, "none_found": none_found}
+                if missing
+                else None
+            )
+        else:
+            self.tabs_hint = None
+
+    def _league_loop(self) -> None:
+        if self._stop.wait(20):  # let loot tracking start first
+            return
+        while not self._stop.is_set():
+            self._league_check_now.clear()
+            try:
+                self.check_league()
+            except Exception as e:  # offline, rate limited, cookie expired: try next time
+                log.info("league check skipped: %s", e)
+            self._league_check_now.wait(LEAGUE_CHECK)
+            if self._stop.is_set():
+                return
+
     def _game_log_loop(self) -> None:
         """Windows: while the game runs, read the Client.txt of the install it runs from
         (unless a path is set in Settings). Picks up a second install, or one in an unusual
@@ -728,6 +794,7 @@ class AppRuntime:
         )
         self._spawn("updates", self._update_loop)
         self._spawn("maintenance", self._maintenance_loop)
+        self._spawn("league-check", self._league_loop)
         if sys.platform == "win32":
             self._spawn("game-log", self._game_log_loop)
         self._build_hotkeys()
@@ -751,6 +818,7 @@ class AppRuntime:
 
     def stop(self) -> None:
         self._stop.set()
+        self._league_check_now.set()
         self.builds.stop()
         for hk in self.hotkeys.values():
             hk.stop()
