@@ -226,3 +226,12 @@ def test_builds_api(client: tuple[TestClient, AppRuntime], monkeypatch: pytest.M
     off = c.post("/api/settings", headers=H, json={"build_snapshots": False}).json()
     assert off["build_snapshots"] is False and rt.builds.enabled is False
     rt.stop()
+
+
+def test_characters_are_listed_by_level(tmp_path: Path) -> None:
+    t = datetime(2026, 11, 7, 12)
+    with Store(tmp_path / "db") as s:
+        for char, level, age in [("Fresh", 12, 0), ("Main", 92, 5), ("Alt", 60, 2)]:
+            s.add_build_snapshot(BuildSnapshot(char, level, t - timedelta(days=age), "L", "Witch",
+                                               {"items": [], "passives": {}}))  # fmt: skip
+        assert [c["character"] for c in s.build_characters()] == ["Main", "Alt", "Fresh"]

@@ -686,7 +686,8 @@ function renderAccountPickers() {
   const s = settings;
   const chars = account?.characters || [];
   const opts = [`<option value="">Current character (auto)</option>`]
-    .concat(chars.filter((c) => c.league === $("set-league").value || c.name === s.character).map((c) =>
+    .concat(chars.filter((c) => c.league === $("set-league").value || c.name === s.character)
+      .sort((a, b) => (b.level ?? 0) - (a.level ?? 0)).map((c) =>
       `<option value="${esc(c.name)}"${c.name === s.character ? " selected" : ""}>${esc(c.name)} · ${esc(c.class || "")} ${c.level ?? ""}</option>`));
   if (s.character && !chars.some((c) => c.name === s.character)) {
     opts.push(`<option value="${esc(s.character)}" selected>${esc(s.character)}</option>`);
@@ -1597,7 +1598,9 @@ function bdStatus() {
 async function loadBuilds() {
   bdData = await api("/api/builds");
   const chars = bdData.characters;
-  if (!bdChar || !chars.some((c) => c.character === bdChar)) bdChar = chars[0]?.character ?? null;
+  // listed by level, highest first; opens on the character captured most recently
+  const latest = [...chars].sort((a, b) => (b.last_at || "").localeCompare(a.last_at || ""))[0];
+  if (!bdChar || !chars.some((c) => c.character === bdChar)) bdChar = latest?.character ?? null;
   $("bd-character").innerHTML = chars.map((c) =>
     `<option value="${esc(c.character)}"${c.character === bdChar ? " selected" : ""}>${esc(c.character)} — ${esc(c.class || "?")} ${c.level}</option>`).join("");
   $("bd-character").disabled = !chars.length;

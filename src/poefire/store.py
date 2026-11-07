@@ -738,7 +738,7 @@ class Store:
         return int(cur.lastrowid or 0)
 
     def build_characters(self) -> list[dict[str, Any]]:
-        """Characters with snapshots, most recently captured first."""
+        """Characters with snapshots, highest level first."""
         rows = self.conn.execute(
             "SELECT character, MAX(taken_at) AS last_at, MAX(level) AS level, "
             "COUNT(data) AS snapshots, COUNT(*) - COUNT(data) AS missed, "
@@ -746,7 +746,7 @@ class Store:
             " ORDER BY id DESC LIMIT 1) AS class, "
             "(SELECT league FROM build_snapshots b3 WHERE b3.character = b.character "
             " AND league IS NOT NULL ORDER BY id DESC LIMIT 1) AS league "
-            "FROM build_snapshots b GROUP BY character ORDER BY last_at DESC"
+            "FROM build_snapshots b GROUP BY character ORDER BY level DESC, last_at DESC"
         )
         return [dict(r) for r in rows]
 
