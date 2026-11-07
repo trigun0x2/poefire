@@ -123,3 +123,28 @@ def test_a_failing_line_handler_does_not_stall_the_tail(
     assert len(seen) == 3 and svc.observer_errors == 3  # every line still reached the others
     assert svc.tailer is not None and svc.tailer.offset == path.stat().st_size  # moved on
     assert "broken failed on line" in caplog.text
+
+
+def test_running_games_client_txt_is_remembered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from poefire import config
+    from poefire.config import Config
+    from poefire.web import runtime
+
+    monkeypatch.setattr(config, "WINDOWS_LOG_CANDIDATES", ())
+    game = tmp_path / "Path of Exile" / "logs" / "Client.txt"
+    game.parent.mkdir(parents=True)
+    game.write_text("")
+    db = tmp_path / "db.sqlite3"
+    with Store(db) as s:  # as saved when the running game was last seen
+        s.set_json(runtime.GAME_LOG_KEY, str(game))
+    rt = AppRuntime(Config(db_path=db), recorder=None)
+    try:
+        assert rt.log_path == game and rt.detected_log == game
+        assert rt.campaign_brief() is None
+        rt.campaign.start()
+        brief = rt.campaign_brief()
+        assert brief is not None and brief["paused"] is False and brief["rta"] >= 0
+    finally:
+        rt.stop()

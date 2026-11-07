@@ -500,3 +500,9 @@ tbody tr.top.rank3 td:first-child { box-shadow: inset 3px 0 0 var(--bronze); }
 .lightbox-close { top: 16px; right: 18px; width: 34px; height: 34px; font-size: 14px; }
 .lightbox-nav:hover, .lightbox-close:hover { border-color: var(--accent); }
 .cp-layouts a { cursor: zoom-in; }
+
+/* sidebar: the campaign run in progress */
+.side-campaign { display: block; color: inherit; text-decoration: none; border: 1px solid transparent; }
+.side-campaign:hover { border-color: var(--accent); }
+.side-campaign .side-timer { color: var(--accent); }
+.side-campaign.paused .side-timer { color: var(--muted); }

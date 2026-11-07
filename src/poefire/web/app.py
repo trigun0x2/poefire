@@ -118,6 +118,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "update": rt.update.to_json(),
             "hotkey": rt.hotkey_json(),
             "overlay": rt.overlay_json(),
+            "campaign": rt.campaign_brief(),
             "value": value,
             "prices": {
                 "league": rt.price_league,

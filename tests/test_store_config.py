@@ -1,6 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from poefire.config import Config
 from poefire.events import Whisper, WhisperDirection
 from poefire.store import Store
@@ -64,3 +66,23 @@ def test_config_int_field_round_trips(tmp_path: Path) -> None:
     path = Config(overlay_opacity=65).save(tmp_path / "config.toml")
     cfg = Config.load(path)
     assert cfg.overlay_opacity == 65 and type(cfg.overlay_opacity) is int
+
+
+def test_log_path_prefers_the_newest_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    from poefire import config
+
+    old, new = tmp_path / "old" / "Client.txt", tmp_path / "new" / "Client.txt"
+    for p, t in ((old, 1_000_000), (new, 2_000_000)):
+        p.parent.mkdir()
+        p.write_text("x")
+        os.utime(p, (t, t))
+    monkeypatch.setattr(config, "WINDOWS_LOG_CANDIDATES", (old, tmp_path / "missing.txt", new))
+    assert Config().resolve_log_path() == new
+    assert Config(log_path=old).resolve_log_path() == old  # a configured path always wins
+    from poefire.gamepath import log_for_exe
+
+    assert log_for_exe(Path("D:/Games/PoE/PathOfExile.exe")) == Path("D:/Games/PoE/logs/Client.txt")

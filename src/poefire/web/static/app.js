@@ -135,6 +135,14 @@ function renderStatus() {
     $("now-dot").className = `live-dot${run.status === "active" ? "" : " paused"}`;
     $("side-now").title = run.status === "active" ? "In map" : "Paused: in hideout";
   }
+  // The campaign run in progress: its timer on every page, not only the Campaign tab.
+  const cp = s.campaign;
+  $("side-campaign").hidden = !cp;
+  if (cp) {
+    $("side-campaign").classList.toggle("paused", !!cp.paused);
+    $("side-cp-meta").textContent = [cp.paused ? "Paused" : null, cp.act ? (cp.act > 10 ? "Epilogue" : `Act ${cp.act}`) : null,
+      cp.character].filter(Boolean).join(" · ") || "Waiting for your character to level up";
+  }
   const v = s.value;
   $("side-value").innerHTML = !v ? '<span class="dim">—</span>'
     : v.divine != null ? `<span class="divine">${nf2.format(v.divine)}d</span>` : chaos(v.chaos);
@@ -143,6 +151,8 @@ function renderStatus() {
 }
 
 function tickTimer() {
+  const cp = status?.campaign;
+  if (cp) $("side-cp-timer").textContent = duration(cp.rta + (cp.paused ? 0 : (performance.now() - statusAt) / 1000));
   const run = status?.run;
   if (!run) return;
   const extra = run.status === "active" ? (performance.now() - statusAt) / 1000 : 0;

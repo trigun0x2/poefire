@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import __version__, campaign, layouts, logs, patches, wiring
+from poefire import __version__, campaign, gamepath, layouts, logs, patches, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -47,6 +47,8 @@ from poefire.web import sessions
 from poefire.web.cache import BookCache
 
 log = logging.getLogger(__name__)
+GAME_LOG_KEY = "game_log_path"  # where the running game's Client.txt was last found
+GAME_LOG_CHECK = 15.0  # seconds
 
 LEAGUE_KEY = "ui_league"
 SESSION_GAP = timedelta(minutes=30)
@@ -119,6 +121,8 @@ class AppRuntime:
         self._threads: list[threading.Thread] = []
         self._started = False
         self._log_override = log_path
+        # the Client.txt of the game last seen running (when none is configured), remembered
+        self.detected_log: Path | None = None
         self._auto_recorder = recorder is True
 
         self.patches = patches.PatchBook(
@@ -177,7 +181,15 @@ class AppRuntime:
     # --- building blocks (rebuilt by reconfigure) ---
 
     def _build_service(self) -> None:
-        self.log_path = self._log_override or self.cfg.resolve_log_path()
+        if self.detected_log is None and self._log_override is None:
+            saved = self._store.get_json(GAME_LOG_KEY)
+            self.detected_log = Path(saved) if saved and Path(saved).is_file() else None
+        self.log_path = (
+            self._log_override
+            or self.cfg.log_path
+            or self.detected_log
+            or self.cfg.resolve_log_path()
+        )
         self.service = None
         if self.log_path is None:
             log.warning("no Client.txt: none configured and none at the usual install "
@@ -436,6 +448,15 @@ class AppRuntime:
             return None
         return campaign.run_detail(run, self.now(), pb, bests)
 
+    def campaign_brief(self) -> dict[str, Any] | None:
+        """The run in progress, for the sidebar (the status poll): its timer and where."""
+        run = self.campaign.active
+        if run is None:
+            return None
+        now = self.now()
+        return {"id": run.id, "rta": round(run.rta(now), 1), "paused": run.paused,
+                "act": run.act, "character": run.character}  # fmt: skip
+
     def campaign_set_patch(self, run_id: int, patch: str | None) -> bool:
         with self._lock:
             ok = self._store.set_campaign_patch(run_id, patch)
@@ -619,6 +640,27 @@ class AppRuntime:
             self._session_health = cached
         return cached[1]
 
+    def _game_log_loop(self) -> None:
+        """Windows: while the game runs, read the Client.txt of the install it runs from
+        (unless a path is set in Settings). Picks up a second install, or one in an unusual
+        place, without the user finding the file."""
+        while not self._stop.wait(GAME_LOG_CHECK):
+            if self.cfg.log_path is not None or self._log_override is not None:
+                continue
+            try:
+                found = gamepath.running_game_log()
+            except Exception:
+                log.exception("couldn't look up the running game's folder")
+                continue
+            if found is None or found == self.log_path or not found.is_file():
+                continue
+            log.info("the game runs from %s: reading its Client.txt instead of %s",
+                     found.parent.parent, self.log_path)  # fmt: skip
+            with self._lock:
+                self.detected_log = found
+                self._store.set_json(GAME_LOG_KEY, str(found))
+                self._build_service()
+
     def _maintenance_loop(self) -> None:
         """Once a day: drop log events older than EVENT_RETENTION (nothing reads them), and
         refresh the game's patch list (noting the patch on runs that have none)."""
@@ -686,6 +728,8 @@ class AppRuntime:
         )
         self._spawn("updates", self._update_loop)
         self._spawn("maintenance", self._maintenance_loop)
+        if sys.platform == "win32":
+            self._spawn("game-log", self._game_log_loop)
         self._build_hotkeys()
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:

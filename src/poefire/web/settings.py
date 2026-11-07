@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from poefire import hotkey
 from poefire.api.session import SessionStore
-from poefire.config import WINDOWS_LOG_CANDIDATES, Config
+from poefire.config import WINDOWS_LOG_CANDIDATES, Config, newest_existing
 from poefire.leagues import is_private
 from poefire.store import Store
 from poefire.web.runtime import AppRuntime
@@ -83,7 +83,7 @@ def log_characters(rt: AppRuntime) -> list[dict[str, Any]]:
 
 def settings_json(rt: AppRuntime) -> dict[str, Any]:
     cfg = rt.cfg
-    detected = next((p for p in WINDOWS_LOG_CANDIDATES if p.exists()), None)
+    detected = rt.detected_log or newest_existing(WINDOWS_LOG_CANDIDATES)
     effective = rt.log_path
     from_env = bool(os.environ.get(SessionStore.ENV, "").strip())
     return {

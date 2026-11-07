@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import zlib
 from collections.abc import Callable, Iterable, Iterator
@@ -19,6 +20,8 @@ from poefire.loot.items import ItemEntry, is_tracked
 from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
+
+log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 11
 
@@ -552,11 +555,16 @@ class Store:
         rows = self.conn.execute(
             "SELECT source, type, fetched_at, lines FROM price_cache WHERE league = ?", (league,)
         ).fetchall()
-        return [
-            (r["source"], r["type"], r["fetched_at"],
-             [PriceLine.from_json(d) for d in json.loads(r["lines"])])
-            for r in rows
-        ]  # fmt: skip
+        out = []
+        for r in rows:
+            try:
+                lines = [PriceLine.from_json(d) for d in json.loads(r["lines"])]
+            except (ValueError, TypeError) as e:  # unreadable: as if never fetched
+                log.warning("dropping cached prices %s/%s for %s: %s", r["source"], r["type"],
+                            league, e)  # fmt: skip
+                continue
+            out.append((r["source"], r["type"], r["fetched_at"], lines))
+        return out
 
     # --- key/value (log cursor, tracker state) ---
 

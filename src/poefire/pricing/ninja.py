@@ -66,11 +66,18 @@ class PriceLine:
     icon: str | None = None
 
     def to_json(self) -> Json:
-        return {k: v for k, v in self.__dict__.items() if v not in (None, False)}
+        # Leave out what's unset. Not "falsy": 0 (a price of 0c, quality 0) is a value, and
+        # dropping it made such lines unreadable (no chaos) or changed them (quality None).
+        return {k: v for k, v in self.__dict__.items() if v is not None and v is not False}
 
     @classmethod
     def from_json(cls, d: Json) -> PriceLine:
-        return cls(**d)
+        known = {k: v for k, v in d.items() if k in _LINE_FIELDS}
+        known.setdefault("chaos", 0.0)  # saved by versions that left 0 out
+        return cls(**known)
+
+
+_LINE_FIELDS = frozenset(PriceLine.__dataclass_fields__)
 
 
 class NinjaError(Exception):

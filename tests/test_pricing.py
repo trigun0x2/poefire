@@ -238,3 +238,18 @@ def test_refresh_loop_survives_an_error(tmp_path: Path) -> None:
     svc.refresh = broken  # type: ignore[method-assign,assignment]
     svc.run_forever(lambda: "Keepers", stop)  # returns once stopped, didn't raise
     assert calls == ["Keepers"]
+
+
+def test_price_lines_keep_zero_values(tmp_path: Path) -> None:
+    line = PriceLine("Scroll Fragment", 0.0, gem_quality=0)
+    assert PriceLine.from_json(line.to_json()) == line
+    # what older versions saved: no chaos when it was 0, and keys they didn't know
+    assert PriceLine.from_json({"name": "Old"}) == PriceLine("Old", 0.0)
+    assert PriceLine.from_json({"name": "X", "chaos": 2, "future": 1}) == PriceLine("X", 2)
+    store = Store(tmp_path / "db")
+    with store.transaction():
+        store.save_prices("L", "item", "Card", 1.0, [line])
+        store.conn.execute("INSERT INTO price_cache (league, source, type, fetched_at, lines) "
+                           "VALUES ('L', 'item', 'Broken', 1.0, 'not json')")  # fmt: skip
+    tables = store.load_prices("L")  # the unreadable table is skipped, not an error
+    assert [(t[1], t[3]) for t in tables] == [("Card", [line])]

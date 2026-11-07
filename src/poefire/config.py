@@ -34,7 +34,20 @@ WINDOWS_LOG_CANDIDATES: tuple[Path, ...] = (
     Path(r"C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt"),
     Path(r"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile\logs\Client.txt"),
     Path(r"C:\Program Files\Steam\steamapps\common\Path of Exile\logs\Client.txt"),
+    Path(r"C:\Program Files\Epic Games\PathOfExile\logs\Client.txt"),
+    Path(r"C:\Program Files (x86)\Epic Games\PathOfExile\logs\Client.txt"),
 )
+
+
+def newest_existing(paths: tuple[Path, ...] | list[Path]) -> Path | None:
+    """The most recently written of these files (the install you actually play from)."""
+    found = []
+    for p in paths:
+        try:
+            found.append((p.stat().st_mtime, p))
+        except OSError:
+            continue
+    return max(found)[1] if found else None
 
 
 def default_data_dir() -> Path:
@@ -157,4 +170,4 @@ class Config:
         """Configured path, else the first default install location that exists."""
         if self.log_path is not None:
             return self.log_path
-        return next((p for p in WINDOWS_LOG_CANDIDATES if p.exists()), None)
+        return newest_existing(WINDOWS_LOG_CANDIDATES)

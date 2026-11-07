@@ -69,3 +69,9 @@ def test_real_overlay_window_is_transparent_around_the_panel() -> None:
     finally:
         ov.stop()
     assert wait_for(lambda: not any(t.name == "overlay" for t in threading.enumerate()))
+
+
+def test_running_game_log_without_the_game() -> None:
+    from poefire.gamepath import running_game_log
+
+    assert running_game_log() is None  # no game window on the test machine

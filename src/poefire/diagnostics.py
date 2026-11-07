@@ -89,6 +89,13 @@ def client_lines(path: Path | None) -> tuple[list[str], dict[str, Any]]:
     info["unrecognised_system_messages"] = [m for m, _ in unknown.most_common(15)]
     info["last_line"] = text[-1][:200] if text else None
     info["hints"] = hints(counts, len(text))
+    age_days = (datetime.now().timestamp() - st.st_mtime) / 86400
+    if age_days > 1:
+        info["hints"].insert(0, (
+            f"Client.txt was last written {age_days:.0f} days ago: the game probably runs from "
+            "another install. Set the right one in Settings > Game log (poefire also switches "
+            "to the running game's own Client.txt by itself)."
+        ))  # fmt: skip
     return kept[-CLIENT_MAX_LINES:], info
 
 
@@ -149,6 +156,7 @@ def report_text(rt: AppRuntime, client: dict[str, Any], campaign: dict[str, Any]
         "== Client.txt ==",
         f"configured: {rt.cfg.log_path or '(automatic)'}",
         f"in use: {rt.log_path}",
+        f"running game's (last seen): {rt.detected_log}",
         f"exists: {bool(rt.log_path and rt.log_path.exists())}, size: {client.get('size')}, "
         f"modified: {client.get('modified')}",
         f"reading: {'yes' if tailer is not None else 'NO'}"
