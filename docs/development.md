@@ -124,7 +124,7 @@ uv run ruff check src tests && uv run ruff format --check src tests
 ### Passive tree data (PoB codes)
 
 `src/poefire/pob_tree.py` holds the bits of Path of Building's passive tree that PoB codes need.
-The **PoB tree data** workflow (`.github/workflows/pob-tree.yml`) checks every Monday for a newer
+The **PoB tree data** workflow (`.github/workflows/pob-tree.yml`) checks every Friday for a newer
 tree in PoB (`src/GameVersions.lua`); when there is one it regenerates the file
 (`scripts/update_pob_tree.py --latest`), runs the tests, commits to `dev` and starts a beta
 build. Run it by hand from the Actions tab right after a league launches.

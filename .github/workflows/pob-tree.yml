@@ -5,7 +5,7 @@ name: PoB tree data
 # this regenerates the file, runs the tests and commits to dev, which publishes a beta.
 on:
   schedule:
-    - cron: "17 9 * * 1" # Mondays
+    - cron: "17 9 * * 5" # Fridays
   workflow_dispatch:
 
 permissions:
