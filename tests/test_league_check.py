@@ -69,3 +69,22 @@ def test_league_hint_and_tabs(tmp_path: Path) -> None:
         assert rt.league_hint is None  # not suggested again once dismissed
     finally:
         rt.stop()
+
+
+def test_changing_watched_tabs_takes_a_snapshot(tmp_path: Path) -> None:
+    rt = AppRuntime(Config(db_path=tmp_path / "db", league="Keepers", stash_tabs=["Dump"]),
+                    recorder=None, log_path=tmp_path / "Client.txt")  # fmt: skip
+    rt.refresh_prices = lambda force=False: None  # type: ignore[method-assign]
+    snaps: list[bool] = []
+    rt.snapshot_now = lambda: snaps.append(True) or True  # type: ignore[method-assign,func-returns-value]
+    client = TestClient(create_app(rt))
+    client.headers["host"] = "127.0.0.1:8460"
+    try:
+        r = client.post("/api/settings", json={"stash_tabs": ["dump"]}, headers=H).json()
+        assert r["snapshot"] is False and snaps == []  # same tab (any case): nothing to do
+        r = client.post("/api/settings", json={"stash_tabs": ["Dump", "Currency"]}, headers=H)
+        assert r.json()["snapshot"] is True and snaps == [True]
+        r = client.post("/api/settings", json={"check_updates": False}, headers=H)
+        assert r.json()["snapshot"] is False and snaps == [True]
+    finally:
+        rt.stop()

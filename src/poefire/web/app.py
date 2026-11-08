@@ -456,11 +456,16 @@ def create_app(rt: AppRuntime) -> FastAPI:
 
     @app.post("/api/settings")
     def post_settings(body: settings.SettingsIn) -> dict[str, Any]:
+        tabs_before = sorted(t.casefold() for t in rt.cfg.stash_tabs)
         try:
             warnings = settings.update_settings(rt, body)
         except settings.SettingsError as e:
             raise HTTPException(400, str(e)) from e
-        return {**settings.settings_json(rt), "warnings": warnings}
+        # Watched tabs changed: snapshot now, so what's already in a newly watched tab isn't
+        # counted as the next map's loot (or a dropped tab's items as spent).
+        tabs_after = sorted(t.casefold() for t in rt.cfg.stash_tabs)
+        snapped = tabs_after != tabs_before and rt.snapshot_now()
+        return {**settings.settings_json(rt), "warnings": warnings, "snapshot": snapped}
 
     @app.post("/api/settings/session")
     def post_session(body: settings.SessionIn) -> dict[str, Any]:

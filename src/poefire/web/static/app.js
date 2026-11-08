@@ -735,18 +735,21 @@ function renderAccountPickers() {
   }
   $("set-character").innerHTML = opts.join("");
 
-  const chosen = new Set(s.stash_tabs.map((t) => t.toLowerCase()));
+  // saved entries (names or ids, any case) -> as saved, so an unchanged pick saves the same
+  const chosen = new Map(s.stash_tabs.map((t) => [t.toLowerCase(), t]));
   const tabs = account?.tabs || [];
   const known = new Set();
   let html = tabs.map((t) => {
-    const on = chosen.has(String(t.name).toLowerCase()) || chosen.has(String(t.id).toLowerCase());
+    const saved = chosen.get(String(t.name).toLowerCase()) ?? chosen.get(String(t.id).toLowerCase());
+    const on = saved != null;
     if (on) { known.add(String(t.name).toLowerCase()); known.add(String(t.id).toLowerCase()); }
-    return `<label><input type="checkbox" value="${esc(t.name)}"${on ? " checked" : ""}>${esc(t.name)}<span class="type">${esc(String(t.type || "").replace(/Stash$/, ""))}</span></label>`;
+    return `<label><input type="checkbox" value="${esc(saved ?? t.name)}"${on ? " checked" : ""}>${esc(t.name)}<span class="type">${esc(String(t.type || "").replace(/Stash$/, ""))}</span></label>`;
   }).join("");
   // tabs saved earlier but not in the loaded list (or nothing loaded yet)
   html += s.stash_tabs.filter((t) => !known.has(t.toLowerCase())).map((t) =>
     `<label><input type="checkbox" value="${esc(t)}" checked>${esc(t)}</label>`).join("");
   $("set-tabs").innerHTML = html || '<span class="hint">Check the connection above to load your stash tabs.</span>';
+  renderDirty();
 }
 
 async function checkAccount() {
@@ -830,9 +833,8 @@ $("set-deaths-seen").addEventListener("click", (e) => {
   renderDeathNames();
 });
 
-$("settings-view").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const body = {
+function settingsBody() {
+  return {
     log_path: $("set-log").value,
     account_name: $("set-account").value,
     league: $("set-league").value.trim(),
@@ -853,6 +855,60 @@ $("settings-view").addEventListener("submit", async (e) => {
     build_snapshots: $("set-build-snapshots").checked,
     update_channel: $("set-update-channel").value,
   };
+}
+
+// --- unsaved changes: which fields differ from what's saved ---
+
+// field -> [its element, its name in the save bar]. Opacity and verbose logging save at once.
+const SETTING_FIELDS = {
+  log_path: ["set-log", "Game log"], account_name: ["set-account", "Account name"],
+  league: ["set-league", "League"], price_league: ["set-price-league", "Prices from"],
+  character: ["set-character", "Character"], characters: ["set-deaths", "Deaths counted"],
+  stash_tabs: ["set-tabs", "Stash tabs"], snapshot_on_run_start: ["set-run-start", "Map-start snapshot"],
+  snapshot_delay: ["set-delay", "Snapshot delay"], check_updates: ["set-check-updates", "Update checks"],
+  campaign_hotkey: ["set-hotkey", "Campaign hotkey"], campaign_hotkey_sound: ["set-hotkey-sound", "Hotkey sound"],
+  overlay_enabled: ["set-overlay", "Overlay"], overlay_toggle_hotkey: ["set-overlay-key", "Overlay hotkey"],
+  overlay_move_hotkey: ["set-overlay-move", "Overlay move hotkey"],
+  build_snapshots: ["set-build-snapshots", "Build snapshots"], update_channel: ["set-update-channel", "Update channel"],
+};
+
+function sameSetting(a, b) {
+  const norm = (v) => Array.isArray(v) ? JSON.stringify(v.map((x) => String(x).trim()).sort())
+    : typeof v === "string" ? v.trim() : v ?? "";
+  return norm(a) === norm(b);
+}
+
+function changedSettings() {
+  if (!settings || $("settings-view").hidden) return [];
+  const body = settingsBody();
+  return Object.keys(SETTING_FIELDS).filter((k) => !sameSetting(body[k], settings[k] ?? (Array.isArray(body[k]) ? [] : "")));
+}
+
+function renderDirty() {
+  const changed = changedSettings();
+  for (const [key, [id]] of Object.entries(SETTING_FIELDS)) {
+    const field = $(id)?.closest(".field, .check, .tabs-list") || $(id);
+    field?.classList.toggle("changed", changed.includes(key));
+  }
+  $("save-bar").classList.toggle("dirty", changed.length > 0);
+  $("set-discard").hidden = !changed.length;
+  $("set-dirty").hidden = !changed.length;
+  $("set-dirty").textContent = changed.length
+    ? `Unsaved: ${changed.map((k) => SETTING_FIELDS[k][1]).join(", ")}` : "";
+  if (changed.length) $("set-save-status").textContent = "";
+  return changed;
+}
+for (const ev of ["input", "change", "keyup", "click"]) {
+  $("settings-view").addEventListener(ev, () => setTimeout(renderDirty, 0));
+}
+$("set-discard").addEventListener("click", async () => {
+  await loadSettings().catch(() => {});
+  renderDirty();
+});
+
+$("settings-view").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = settingsBody();
   $("set-save").disabled = true;
   try {
     const leagueChanged = settings && body.league !== settings.league;
@@ -860,7 +916,8 @@ $("settings-view").addEventListener("submit", async (e) => {
     await loadSettings();
     if (leagueChanged && account) await checkAccount(); // stash tabs are per league
     await loadLeagues().catch(() => {});
-    showWarnings(r, "Saved.");
+    showWarnings(r, r.snapshot ? "Saved. Took a snapshot with your new stash tabs, so what's already in them doesn't count as loot." : "Saved.");
+    renderDirty();
   } catch (err) {
     setStatus("set-save-status", `✗ ${err.message}`, "bad");
   } finally {
@@ -1782,8 +1839,25 @@ $("bd-delete").addEventListener("click", async () => {
 
 const VIEWS = { session: "dashboard", overview: "overview-view", campaign: "campaign-view", builds: "builds-view", settings: "settings-view" };
 
-function route() {
+let routeView = null;
+let leavingSettings = false;
+async function route() {
   const name = Object.hasOwn(VIEWS, location.hash.slice(1)) ? location.hash.slice(1) : "session";
+  if (routeView === "settings" && name !== "settings" && !leavingSettings && changedSettings().length) {
+    const target = location.hash || "#session";
+    history.replaceState(null, "", "#settings"); // stay until they choose
+    const go = await confirmModal({
+      title: "Leave without saving?",
+      body: `You have unsaved settings: <b>${esc(changedSettings().map((k) => SETTING_FIELDS[k][1]).join(", "))}</b>.`,
+      ok: "Discard and leave", cancel: "Keep editing", danger: true,
+    });
+    if (!go) return;
+    leavingSettings = true;
+    location.hash = target; // routes again
+    return;
+  }
+  leavingSettings = false;
+  routeView = name;
   for (const [key, id] of Object.entries(VIEWS)) {
     $(id).hidden = key !== name;
     $(`nav-${key}`).classList.toggle("active", key === name);

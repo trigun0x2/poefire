@@ -448,8 +448,10 @@
       <div class="hint">The report has poefire's log, your settings (never your POESESSID), your campaign runs, and the game's system lines from the end of Client.txt (area changes, zone entries, level-ups, deaths). No chat or whispers.</div>
     </section>
 
-    <div class="save-bar">
+    <div class="save-bar" id="save-bar">
       <button type="submit" class="btn primary" id="set-save">Save settings</button>
+      <button type="button" class="btn" id="set-discard" hidden>Discard changes</button>
+      <span id="set-dirty" class="save-dirty" hidden></span>
       <span id="set-save-status" class="hint"></span>
     </div>
   </form>

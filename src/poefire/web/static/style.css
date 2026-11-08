@@ -506,3 +506,9 @@ tbody tr.top.rank3 td:first-child { box-shadow: inset 3px 0 0 var(--bronze); }
 .side-campaign:hover { border-color: var(--accent); }
 .side-campaign .side-timer { color: var(--accent); }
 .side-campaign.paused .side-timer { color: var(--muted); }
+
+/* settings: unsaved changes */
+.save-bar.dirty { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-top: 2px solid var(--accent); }
+.save-dirty { color: var(--accent); font-weight: 600; font-size: 13px; }
+.settings .changed { box-shadow: -3px 0 0 var(--accent); border-radius: 2px; }
+.settings .field.changed > span:first-child::after, .settings .check.changed > span::after { content: " · unsaved"; color: var(--accent); font-weight: 600; font-size: 11.5px; }
