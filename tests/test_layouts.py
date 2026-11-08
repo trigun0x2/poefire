@@ -27,7 +27,13 @@ PAGE = """<html><body><nav>menu</nav><article><header><h1>Test Zone</h1></header
 <td>Variant B text <img alt="Test Zone" src="/assets/images/zone2.png"></td></tr></tbody></table>
 <h3 id="points-of-interest">Points of Interest</h3><p>Waypoint
 Some Chest</p>
-<h2 id="zone-read">Zone Read</h2><p>Go north first.
+<h2 id="zone-read">Zone Read</h2>
+<div class="theme-admonition theme-admonition-tip alert"><div class="admonitionHeading_x"><span>
+<svg><path d="M0"></path></svg></span>Simple Read</div><div class="admonitionContent_y">
+<p>Exit is always east.</p></div></div>
+<div class="theme-admonition theme-admonition-note alert">
+<div class="admonitionHeading_x">Note</div>
+<div class="admonitionContent_y"><p>Other box.</p></div></div><p>Go north first.
 Then east.</p></article><footer>Copyright</footer></body></html>"""
 
 
@@ -58,7 +64,8 @@ def test_parse_page() -> None:
         {"src": images + "zone2.png", "label": "Variant B text"},
     ]
     assert g["points_of_interest"] == ["Waypoint", "Some Chest"]
-    assert g["zone_read"] == ["Go north first.", "Then east."]
+    assert g["simple_read"] == ["Exit is always east."]
+    assert g["zone_read"] == ["Note", "Other box.", "Go north first.", "Then east."]
 
 
 def test_guide_is_fetched_once_and_kept() -> None:
@@ -76,7 +83,7 @@ def test_guide_is_fetched_once_and_kept() -> None:
                                 httpx.Client(transport=httpx.MockTransport(site)),
                                 clock=lambda: now[0])  # fmt: skip
     g = guide.zone(2, "The Crossroads")
-    assert g is not None and g["zone_read"] == ["Go north first.", "Then east."]
+    assert g is not None and g["simple_read"] == ["Exit is always east."]
     assert guide.zone(2, "The Crossroads") == g
     assert hits == ["/sitemap.xml", "/docs/PoE1/Act%202/Crossroads"]  # second time from the db
     assert guide.zone(5, "Nowhere") is None

@@ -23,6 +23,7 @@ from datetime import datetime
 from poefire.events import (
     AreaGenerated,
     ClientClosed,
+    KitavaAffliction,
     LevelUp,
     LogEvent,
     LogOpened,
@@ -53,6 +54,12 @@ _STATUS_RE = re.compile(
 _WHISPER_RE = re.compile(
     r"^@(?P<dir>From|To) (?:<(?P<guild>[^>]*)> )?(?P<name>[^\s:<>]+): (?P<msg>.*)$"
 )
+# "You have been permanently weakened by Kitava's merciless affliction. You now have a total of
+# -60% to all Resistances."
+_KITAVA_RE = re.compile(
+    r"^You have been permanently weakened by Kitava.s merciless affliction\. "
+    r"You now have a total of (?P<total>-?\d+)% to all Resistances\.$"
+)
 _LOG_OPENING = "***** LOG FILE OPENING *****"
 _CLIENT_CLOSING = "Closing game gracefully"
 
@@ -82,6 +89,8 @@ def parse_line(line: str) -> LogEvent | None:
         return LogOpened(ts=_timestamp(m))
     if msg == _CLIENT_CLOSING:
         return ClientClosed(ts=_timestamp(m))
+    if msg.startswith("You have been permanently weakened by Kitava"):  # if not ": "-prefixed
+        return _parse_system(_timestamp(m), msg)
     return None
 
 
@@ -107,6 +116,9 @@ def _parse_system(ts: datetime, body: str) -> LogEvent | None:
         return LevelUp(
             ts=ts, character=lv["name"], character_class=lv["cls"], level=int(lv["level"])
         )
+    if body.startswith("You have been permanently weakened by Kitava"):
+        k = _KITAVA_RE.match(body)
+        return KitavaAffliction(ts=ts, total_resistance=int(k["total"])) if k else None
     if " mode is now " in body:
         st = _STATUS_RE.match(body)
         if st is None:

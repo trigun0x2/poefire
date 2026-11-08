@@ -37,7 +37,7 @@ CREDIT = {
 }
 KEEP_FOR = 7 * 24 * 3600  # seconds
 INDEX_KEY = "definitiv_index"
-PAGE_KEY = "definitiv_page:"
+PAGE_KEY = "definitiv_page2:"  # 2: pages now carry the Simple Read
 
 type Json = dict[str, Any]
 type Index = dict[str, str]  # "act|normalised zone" -> page url
@@ -157,7 +157,35 @@ class _Page(HTMLParser):
         return [" ".join(x.split()) for x in raw.replace("​", "").splitlines() if x.strip()]
 
 
+_ADMONITION = re.compile(
+    r'<div class="theme-admonition[^"]*">.*?<div class="admonitionHeading[^"]*">(.*?)</div>'
+    r'\s*<div class="admonitionContent[^"]*">(.*?)</div>\s*</div>',
+    re.S,
+)
+
+
+def _text(fragment: str) -> list[str]:
+    plain = html.unescape(re.sub(r"<[^>]+>", "\n", fragment)).replace("\u200b", "")
+    return [" ".join(x.split()) for x in plain.splitlines() if x.strip()]
+
+
+def simple_read(page_html: str) -> tuple[list[str], str]:
+    """The page's "Simple Read" boxes (the quick version of a zone read), and the page
+    without them so they aren't repeated in the zone read."""
+    found: list[str] = []
+
+    def take(m: re.Match[str]) -> str:
+        heading = " ".join(_text(m.group(1)))
+        if normalise(heading) != "simple read":
+            return m.group(0)
+        found.extend(_text(m.group(2)))
+        return ""
+
+    return found, _ADMONITION.sub(take, page_html)
+
+
 def parse_page(page_html: str, url: str) -> Json:
+    simple, page_html = simple_read(page_html)
     p = _Page(url)
     p.feed(page_html)
     title = re.search(r"<h1[^>]*>(.*?)</h1>", page_html, re.S)
@@ -166,6 +194,7 @@ def parse_page(page_html: str, url: str) -> Json:
         "title": html.unescape(re.sub(r"<[^>]+>", "", title.group(1))).strip() if title else "",
         "layouts": p.images[:12],
         "points_of_interest": p.lines("points of interest"),
+        "simple_read": simple,
         "zone_read": p.lines("zone read"),
     }
 
@@ -219,6 +248,6 @@ class LayoutGuide:
         except httpx.HTTPError as e:
             log.info("layout guide page %s unavailable: %s", url, e)
             return {"url": url, "title": zone, "layouts": [], "points_of_interest": [],
-                    "zone_read": []}  # fmt: skip
+                    "simple_read": [], "zone_read": []}  # fmt: skip
         self._save(PAGE_KEY + url, {"at": self.clock(), "data": page})
         return page

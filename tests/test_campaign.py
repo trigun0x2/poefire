@@ -432,3 +432,33 @@ def test_patch_is_noted_on_new_runs(tmp_path: Path) -> None:
         store.conn.execute("UPDATE campaign_runs SET patch = NULL")
     assert store.fill_campaign_patches(lambda when: "3.26") == 2
     assert {r.patch for r in store.list_campaign_runs(splits=False)} == {"3.26"}
+
+
+def test_kitavas_minus_60_finishes_the_run(tmp_path: Path) -> None:
+    from poefire.events import KitavaAffliction
+
+    line = (": You have been permanently weakened by Kitava's merciless affliction. "
+            "You now have a total of {}% to all Resistances.")  # fmt: skip
+    assert parse_line(f"2026/11/08 10:00:00 1 a [INFO Client 1] {line.format(-60)}") == \
+        KitavaAffliction(datetime(2026, 11, 8, 10), -60)  # fmt: skip
+    store = Store(tmp_path / "db.sqlite3")
+    tracker = CampaignTracker(store, lambda: T0)
+    run = tracker.start()
+    log = Log()
+    log.wait(1)
+    log.enter("2_10_9", "The Feeding Trough")  # Act 10
+    log.wait(60)
+    log.line(line.format(-30))  # (Act 5's penalty: not the end)
+    feed(tracker, log)
+    assert tracker.active is run and run.status == "running"
+    log.wait(30)
+    log.line(line.format(-60))
+    feed(tracker, log)
+    assert tracker.active is None and run.status == "finished" and run.act == 11
+    assert run.ended_at == T0 + timedelta(seconds=1 + 2 + 60 + 30)
+    assert run.splits[-1].name == "Act 10" and run.splits[-1].rta == 1 + 2 + 60 + 30
+    log.wait(120)
+    log.enter("2_11_1", "Karui Shores")  # the Epilogue afterwards: nothing more happens
+    feed(tracker, log)
+    saved = store.get_campaign_run(run.id or 0)
+    assert saved is not None and saved.ended_at == run.ended_at

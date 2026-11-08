@@ -1432,9 +1432,11 @@ function guideHtml(g) {
       <img src="${esc(l.src)}" alt="${esc(l.label || g.title)}" loading="lazy">${esc(l.label)}</a>`).join("");
   const poi = (g.points_of_interest || []).map((p) => `<span class="chip">${esc(p)}</span>`).join("");
   const read = (g.zone_read || []).map((p) => `<p>${esc(p)}</p>`).join("");
+  const simple = (g.simple_read || []).length
+    ? `<div class="cp-simple"><div class="cp-simple-title">Simple Read</div>${g.simple_read.map((p) => `<p>${esc(p)}</p>`).join("")}</div>` : "";
   return `<div class="cp-guide">
       <div class="cp-layouts">${pics || '<div class="hint">No layout pictures yet.</div>'}</div>
-      <div class="cp-read">${poi ? `<div class="poi">${poi}</div>` : ""}${read}
+      <div class="cp-read">${simple}${poi ? `<div class="poi">${poi}</div>` : ""}${read}
         <a class="cp-guide-link" href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.title || "This zone")} in Cyclon’s guide by CyclonDefinitiv →</a></div>
     </div>`;
 }

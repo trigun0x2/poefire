@@ -27,11 +27,19 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from poefire.events import AreaGenerated, LevelUp, LogEvent, PlayerSlain, ZoneEntered
+from poefire.events import (
+    AreaGenerated,
+    KitavaAffliction,
+    LevelUp,
+    LogEvent,
+    PlayerSlain,
+    ZoneEntered,
+)
 
 log = logging.getLogger(__name__)
 
 FINAL_ACT = 10
+FINAL_KITAVA = -60  # Kitava's total resistance penalty after Act 10: the run ends there
 MAX_LOAD_MS = 5 * 60 * 1000  # longer "loads" are a sleeping PC or a reboot, not a load
 
 _ACT_RE = re.compile(r"^\d+_(\d+)_")
@@ -277,6 +285,8 @@ class CampaignTracker:
             self._entered(run, event, log_tick(line))
         elif isinstance(event, LevelUp):
             self._levelled(run, event)
+        elif isinstance(event, KitavaAffliction):
+            self._kitava(run, event)
         elif isinstance(event, PlayerSlain):
             if run.character and event.character.casefold() == run.character.casefold():
                 run.deaths += 1
@@ -320,6 +330,20 @@ class CampaignTracker:
         elif act is None:
             log.debug("entered %s: not a campaign area (no act from the last area id)", event.zone)
         self.store.save_campaign_run(run)
+
+    def _kitava(self, run: CampaignRun, event: KitavaAffliction) -> None:
+        """Kitava's -60% penalty is the end of Act 10's last fight: the run is finished there
+        (entering the Epilogue still finishes it if this line was missed)."""
+        if event.total_resistance > FINAL_KITAVA:
+            log.debug("Kitava's %d%% penalty (Act 5): not the end", event.total_resistance)
+            return
+        if run.act is not None and run.act <= FINAL_ACT:
+            self._split(run, SplitKind.ACT, f"Act {run.act}", event.ts)
+        run.act = FINAL_ACT + 1  # done with the campaign
+        log.info("campaign run %s: Kitava's %d%% penalty: the run is finished", run.id,
+                 event.total_resistance)  # fmt: skip
+        self.store.save_campaign_run(run)
+        self._end("finished", event.ts)
 
     def _drop_mule(self, run: CampaignRun, mule: str) -> None:
         """The timer keeps running; the mule's level-ups, zones and deaths don't count, so the

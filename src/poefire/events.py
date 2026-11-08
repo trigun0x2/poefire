@@ -97,6 +97,15 @@ class StatusModeChanged:
     autoreply: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class KitavaAffliction:
+    """Kitava's permanent resistance penalty: -30 after Act 5, -60 after Act 10 (the end of
+    the campaign's last fight)."""
+
+    ts: datetime
+    total_resistance: int  # the new total, e.g. -60
+
+
 type LogEvent = (
     LogOpened
     | ClientClosed
@@ -107,6 +116,7 @@ type LogEvent = (
     | Whisper
     | StatusModeChanged
     | TradeAccepted
+    | KitavaAffliction
 )
 
 
