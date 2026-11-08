@@ -35,6 +35,7 @@ from poefire.events import (
     PlayerSlain,
     ZoneEntered,
 )
+from poefire.zones import ZoneRules
 
 log = logging.getLogger(__name__)
 
@@ -116,6 +117,18 @@ class CampaignRun:
     paused_ms: int = 0  # earlier pauses, in total
     mule: str | None = None  # the Ranger mule this run started with (its name)
     patch: str | None = None  # the game's patch when the run started, e.g. "3.27"
+    # act -> seconds spent in towns and hideouts during that act (without loading screens)
+    town: dict[int, float] = field(default_factory=dict)
+    # (act, timer time) since when you're in a town or hideout now; not saved
+    town_since: tuple[int, float] | None = field(default=None, compare=False)
+
+    def town_seconds(self, now: datetime) -> dict[int, float]:
+        """Town time per act, including the town you're in right now."""
+        out = dict(self.town)
+        if self.town_since is not None and self.status == "running":
+            act, since = self.town_since
+            out[act] = out.get(act, 0.0) + max(0.0, self.rta(now) - since)
+        return out
 
     @property
     def running(self) -> bool:
@@ -184,6 +197,7 @@ class CampaignTracker:
         self._load_start: int | None = None
         self._next_act: int | None = None
         self._last_zone: tuple[str, int, datetime] | None = None  # campaign zone you're in
+        self._next_area: str | None = None  # area id of the zone being loaded
         self._early_lines = 0  # lines from before the run's start (logged once)
 
     # --- manual controls ---
@@ -199,7 +213,7 @@ class CampaignTracker:
             run.patch = None
         run.id = self.store.save_campaign_run(run)
         self.active = run
-        self._load_start = self._next_act = self._last_zone = None
+        self._load_start = self._next_act = self._last_zone = self._next_area = None
         self._early_lines = 0
         log.info("campaign run %s started (character %s, patch %s)", run.id,
                  run.character or "from the first level-up", run.patch or "unknown")  # fmt: skip
@@ -246,10 +260,18 @@ class CampaignTracker:
     def stop(self) -> CampaignRun | None:
         return self._end("abandoned", self.now())
 
+    @staticmethod
+    def _leave_town(run: CampaignRun, at: datetime) -> None:
+        if run.town_since is not None:
+            act, since = run.town_since
+            run.town[act] = round(run.town.get(act, 0.0) + max(0.0, run.rta(at) - since), 3)
+            run.town_since = None
+
     def _end(self, status: str, at: datetime) -> CampaignRun | None:
         run = self.active
         if run is None:
             return None
+        self._leave_town(run, at)
         if run.paused_at is not None:
             at = max(at, run.paused_at)
             self._unpause(run, at)
@@ -280,9 +302,14 @@ class CampaignTracker:
             if self._load_start is None:
                 self._load_start = log_tick(line)
             self._next_act = act_of(event.area_id)
+            self._next_area = event.area_id
+            self._leave_town(run, event.ts)  # a loading screen starts: out of town
             log.debug("area %s generated (act %s)", event.area_id, self._next_act)
         elif isinstance(event, ZoneEntered):
+            area, self._next_area = self._next_area, None
             self._entered(run, event, log_tick(line))
+            if self.active is run and run.act is not None and is_safe_area(area, event.zone):
+                run.town_since = (run.act, run.rta(event.ts))
         elif isinstance(event, LevelUp):
             self._levelled(run, event)
         elif isinstance(event, KitavaAffliction):
@@ -396,6 +423,43 @@ class CampaignTracker:
                  run.level)  # fmt: skip
 
 
+_ZONES = ZoneRules()
+
+
+def is_safe_area(area_id: str | None, zone: str) -> bool:
+    """A town or hideout (by its area id, else its name)."""
+    kind = _ZONES.classify(area_id) if area_id else _ZONES.classify_name(zone)
+    return kind.is_safe
+
+
+def town_from_events(run: CampaignRun, events: Iterable[dict[str, Any]]) -> dict[int, float]:
+    """Town time per act rebuilt from saved log events (AreaGenerated / ZoneEntered, oldest
+    first) for a run recorded before town time was. Wall-clock: pauses aren't known."""
+    town: dict[int, float] = {}
+    act: int | None = None
+    area: str | None = None
+    since: tuple[int, datetime] | None = None
+    for e in events:
+        ts = datetime.fromisoformat(e["ts"])
+        if ts < run.started_at or (run.ended_at is not None and ts > run.ended_at):
+            continue
+        if e["kind"] == "AreaGenerated":
+            if since is not None:
+                town[since[0]] = town.get(since[0], 0.0) + (ts - since[1]).total_seconds()
+                since = None
+            area = e.get("area_id")
+            new_act = act_of(area or "")
+            if new_act is not None and new_act <= FINAL_ACT and (act is None or new_act > act):
+                act = new_act
+        elif e["kind"] == "ZoneEntered":
+            if act is not None and is_safe_area(area, e.get("zone", "")):
+                since = (act, ts)
+            area = None
+    if since is not None and run.ended_at is not None:
+        town[since[0]] = town.get(since[0], 0.0) + (run.ended_at - since[1]).total_seconds()
+    return {a: round(t, 3) for a, t in town.items()}
+
+
 # --- views ---
 
 
@@ -425,6 +489,7 @@ class Bests:
     zones: dict[tuple[int | None, str], Split]  # (act, zone) -> fastest time to first get there
     # (act, zone) -> fastest time from first entering it to reaching the next new zone
     zone_segments: dict[tuple[int | None, str], float] = field(default_factory=dict)
+    town: dict[int, float] = field(default_factory=dict)  # act -> least town time in it
 
 
 def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
@@ -434,6 +499,7 @@ def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
     segments: dict[str, float] = {}
     zones: dict[tuple[int | None, str], Split] = {}
     zone_segs: dict[tuple[int | None, str], float] = {}
+    town: dict[int, float] = {}
     count = 0
     for run in runs:
         if base_class(run.char_class) != base or not counts_for_bests(run):
@@ -455,7 +521,11 @@ def best_splits(runs: Iterable[CampaignRun], base: str) -> Bests:
             key = (s.act, s.name)
             if key not in zone_segs or seconds < zone_segs[key]:
                 zone_segs[key] = seconds
-    return Bests(base, count, acts, segments, zones, zone_segs)
+        done = {s.act for s in run.act_splits()}  # only acts the run finished
+        for act, seconds in run.town.items():
+            if act in done and (act not in town or seconds < town[act]):
+                town[act] = seconds
+    return Bests(base, count, acts, segments, zones, zone_segs, town)
 
 
 def zone_times(run: CampaignRun) -> list[tuple[Split, float]]:
@@ -578,6 +648,14 @@ def run_detail(
         ],
         "levels": [s.to_json() for s in run.splits if s.kind == SplitKind.LEVEL],
         "worst_zones": worst_zones(run, pb, bests),
+        # time in towns and hideouts per act ("1": seconds), yours / your best / your PB's
+        "town": {str(a): round(t, 1) for a, t in sorted(run.town_seconds(now).items())},
+        "best_town": {
+            str(a): round(t, 1) for a, t in sorted((bests.town if bests else {}).items())
+        },
+        "pb_town": {str(a): round(t, 1) for a, t in sorted(pb.town.items())}
+        if other and pb
+        else {},
         "pb_acts": [{"name": s.name, "rta": s.rta, "igt": s.igt} for s in pb_acts.values()],
         "best_acts": [
             {

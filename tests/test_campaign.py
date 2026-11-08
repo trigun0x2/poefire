@@ -462,3 +462,67 @@ def test_kitavas_minus_60_finishes_the_run(tmp_path: Path) -> None:
     feed(tracker, log)
     saved = store.get_campaign_run(run.id or 0)
     assert saved is not None and saved.ended_at == run.ended_at
+
+
+def test_town_time_per_act(tmp_path: Path) -> None:
+    from poefire.campaign import run_detail
+
+    store = Store(tmp_path / "db.sqlite3")
+    clock = [T0]
+    tracker = CampaignTracker(store, lambda: clock[0])
+    run = tracker.start()
+    log = Log()
+    log.wait(1)
+    log.enter("1_1_1", "The Twilight Strand")
+    log.wait(30)
+    log.enter("1_1_town", "Lioneye's Watch")  # in town 40 s
+    log.wait(40)
+    log.enter("1_1_2", "The Coast")
+    log.wait(60)
+    log.enter("HideoutSpace", "Celestial Hideout")  # a hideout counts too: 20 s
+    log.wait(20)
+    log.enter("1_1_2", "The Coast")
+    log.wait(30)
+    log.enter("1_2_1", "The Southern Forest")  # Act 2
+    log.wait(10)
+    log.enter("1_2_town", "The Forest Encampment")
+    feed(tracker, log)
+    assert run.town == {1: 60.0}  # 40 + 20: from arriving until the next loading screen
+    clock[0] = log.t + timedelta(seconds=15)
+    assert run.town_seconds(clock[0]) == {1: 60.0, 2: 15.0}  # in town right now
+    d = run_detail(run, clock[0], None)
+    assert d["town"] == {"1": 60.0, "2": 15.0} and d["best_town"] == {}
+    tracker.pause()  # paused in town: the timer stops, so does town time
+    clock[0] += timedelta(seconds=100)
+    tracker.resume()
+    log.t = clock[0] + timedelta(seconds=5)
+    log.enter("1_2_2", "The Old Fields")
+    feed(tracker, log)
+    assert run.town[2] == 15 + 5  # (the load into The Old Fields started at +5 s)
+    saved = store.get_campaign_run(run.id or 0)
+    assert saved is not None and saved.town == run.town
+
+
+def test_town_time_is_filled_in_from_saved_events(tmp_path: Path) -> None:
+    import dataclasses
+
+    from poefire.campaign import CampaignRun, town_from_events
+    from poefire.events import AreaGenerated, ZoneEntered
+
+    store = Store(tmp_path / "db.sqlite3")
+    run = CampaignRun(started_at=T0, status="finished", ended_at=T0 + timedelta(minutes=10))
+    run.id = store.save_campaign_run(run)
+    with store.transaction():
+        store.conn.execute("UPDATE campaign_runs SET town = NULL")  # recorded before town time
+        events: list[tuple[int, AreaGenerated | ZoneEntered]] = [
+            (5, AreaGenerated(T0, 1, "1_1_1", 1)), (7, ZoneEntered(T0, "The Twilight Strand")),
+            (60, AreaGenerated(T0, 1, "1_1_town", 2)), (62, ZoneEntered(T0, "Lioneye's Watch")),
+            (92, AreaGenerated(T0, 1, "1_1_2", 3)), (94, ZoneEntered(T0, "The Coast")),
+            (200, AreaGenerated(T0, 1, "1_2_town", 4)), (203, ZoneEntered(T0, "Forest Camp")),
+        ]  # fmt: skip
+        for sec, ev in events:
+            store.add_event(dataclasses.replace(ev, ts=T0 + timedelta(seconds=sec)), None)
+    assert store.fill_campaign_town(town_from_events) == 1
+    filled = store.get_campaign_run(run.id)
+    assert filled is not None and filled.town == {1: 30.0, 2: 600 - 203}
+    assert store.fill_campaign_town(town_from_events) == 0  # done once

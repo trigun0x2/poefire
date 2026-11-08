@@ -264,6 +264,8 @@ def seed(folder: Path) -> None:
                 sec = n * 1740 * pace * rnd.uniform(0.94, 1.06)
                 r.splits.append(Split(SplitKind.ACT, f"Act {n}", n,
                                       st + timedelta(seconds=sec), sec, sec * 0.93))  # fmt: skip
+            # time in towns and hideouts per act (vendoring, gems, quests)
+            r.town = {n: round(rnd.uniform(70, 160) * pace, 1) for n in range(1, min(act, 10) + 1)}
             if status != "running":
                 r.ended_at = st + timedelta(minutes=minutes)
             return r

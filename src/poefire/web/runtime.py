@@ -728,11 +728,20 @@ class AppRuntime:
                 self._build_service()
 
     def _maintenance_loop(self) -> None:
-        """Once a day: drop log events older than EVENT_RETENTION (nothing reads them), and
-        refresh the game's patch list (noting the patch on runs that have none)."""
+        """Once a day: fill in town time for campaign runs recorded before it was (from the
+        saved log events, before old ones are dropped), drop log events older than
+        EVENT_RETENTION, and refresh the game's patch list (noting the patch on runs that
+        have none)."""
         if self._stop.wait(30):
             return
         while True:
+            try:
+                with Store(self.cfg.db_path) as store:
+                    filled = store.fill_campaign_town(campaign.town_from_events)
+                if filled:
+                    log.info("town time filled in for %d earlier campaign runs", filled)
+            except Exception:
+                log.exception("town time back-fill failed")
             try:
                 if self.patches.stale():
                     self.patches.refresh()

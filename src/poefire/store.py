@@ -23,7 +23,7 @@ from poefire.tracker import Run, RunStatus, Segment
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -195,6 +195,11 @@ _SCHEMA_V11 = """
 ALTER TABLE campaign_runs ADD COLUMN patch TEXT
 """
 
+_SCHEMA_V12 = """
+-- Campaign runs: seconds spent in towns and hideouts per act, as JSON (NULL: not known yet).
+ALTER TABLE campaign_runs ADD COLUMN town TEXT
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -207,6 +212,7 @@ _MIGRATIONS = (
     _SCHEMA_V9,
     _SCHEMA_V10,
     _SCHEMA_V11,
+    _SCHEMA_V12,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -587,13 +593,13 @@ class Store:
             _dt(run.started_at), _dt(run.ended_at), run.status, run.character, run.char_class,
             run.level, run.deaths, run.act, run.load_ms, run.notes,
             json.dumps([s.to_json() for s in run.splits]), _dt(run.paused_at), run.paused_ms,
-            run.mule, run.patch,
+            run.mule, run.patch, json.dumps({str(a): t for a, t in run.town.items()}),
         )  # fmt: skip
         if run.id is None:
             cur = self.conn.execute(
                 "INSERT INTO campaign_runs (started_at, ended_at, status, character, class, "
-                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms, mule, patch) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "level, deaths, act, load_ms, notes, splits, paused_at, paused_ms, mule, patch, "
+                "town) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
             run.id = int(cur.lastrowid or 0)
@@ -601,7 +607,7 @@ class Store:
             self.conn.execute(
                 "UPDATE campaign_runs SET started_at=?, ended_at=?, status=?, character=?, "
                 "class=?, level=?, deaths=?, act=?, load_ms=?, notes=?, splits=?, paused_at=?, "
-                "paused_ms=?, mule=?, patch=? WHERE id=?",
+                "paused_ms=?, mule=?, patch=?, town=? WHERE id=?",
                 (*values, run.id),
             )
         return run.id
@@ -618,6 +624,7 @@ class Store:
             paused_at=datetime.fromisoformat(row["paused_at"]) if row["paused_at"] else None,
             paused_ms=row["paused_ms"],
             mule=row["mule"], patch=row["patch"],
+            town={int(a): float(t) for a, t in json.loads(row["town"] or "{}").items()},
         )  # fmt: skip
 
     def list_campaign_runs(self, limit: int = 200, splits: bool = True) -> list[CampaignRun]:
@@ -627,7 +634,7 @@ class Store:
             if splits
             else (
                 "id, started_at, ended_at, status, character, class, level, deaths, act, load_ms, "
-                "notes, paused_at, paused_ms, mule, patch, '[]' AS splits"
+                "notes, paused_at, paused_ms, mule, patch, town, '[]' AS splits"
             )
         )
         rows = self.conn.execute(
@@ -658,6 +665,32 @@ class Store:
     def set_campaign_patch(self, run_id: int, patch: str | None) -> bool:
         cur = self.conn.execute("UPDATE campaign_runs SET patch = ? WHERE id = ?", (patch, run_id))
         return cur.rowcount > 0
+
+    def fill_campaign_town(
+        self, compute: Callable[[CampaignRun, list[dict[str, Any]]], dict[int, float]]
+    ) -> int:
+        """Town time for runs recorded before it was (town IS NULL), from the saved log events
+        in their time span (kept 90 days; older runs get none). Returns how many were filled."""
+        rows = self.conn.execute(
+            "SELECT * FROM campaign_runs WHERE town IS NULL AND status != 'running'"
+        ).fetchall()
+        for row in rows:
+            run = self._campaign_run(row)
+            end = run.ended_at or run.started_at
+            events = [
+                {"ts": r["ts"], "kind": r["kind"], **json.loads(r["payload"])}
+                for r in self.conn.execute(
+                    "SELECT ts, kind, payload FROM events WHERE ts >= ? AND ts <= ? AND kind IN "
+                    "('AreaGenerated', 'ZoneEntered') ORDER BY ts, id",
+                    (run.started_at.isoformat(), end.isoformat()),
+                )
+            ]
+            town = compute(run, events) if events else {}
+            self.conn.execute(
+                "UPDATE campaign_runs SET town = ? WHERE id = ?",
+                (json.dumps({str(a): t for a, t in town.items()}), run.id),
+            )
+        return len(rows)
 
     def fill_campaign_patches(self, patch_at: Callable[[datetime], str | None]) -> int:
         """Note the patch on runs that have none (recorded before patches were); returns how

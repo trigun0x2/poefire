@@ -1361,6 +1361,18 @@ function tickCampaign() {
   }
 }
 
+// Time in towns and hideouts during act n, against your least town time in that act.
+function townCell(r, n) {
+  const t = r?.town?.[n];
+  if (t == null) return '<span class="dim">—</span>';
+  const best = r.best_town?.[n], pb = r.pb_town?.[n];
+  const tip = [best != null ? `Your best: ${duration(best)}` : null, pb != null ? `Your PB: ${duration(pb)}` : null]
+    .filter(Boolean).join(" · ") || "No other run to compare with yet";
+  const d = best != null ? t - best : null;
+  const delta = d == null ? "" : ` <span class="town-d ${d > 0.5 ? "behind" : "ahead"}">${d > 0.5 ? "+" : "−"}${duration(Math.abs(d))}</span>`;
+  return `<span title="${esc(tip)}">${duration(t)}${delta}</span>`;
+}
+
 function renderCampaignSplits(r) {
   const pbActs = new Map((r?.pb_acts || []).map((a) => [a.name, a]));
   const bestActs = new Map((r?.best_acts || []).map((a) => [a.name, a]));
@@ -1387,6 +1399,7 @@ function renderCampaignSplits(r) {
       <td class="num i">${s ? duration(s.igt) : isNow ? "" : "—"}</td>
       <td class="num d">${s ? signed(s.delta) : isNow ? "" : '<span class="dim">—</span>'}</td>
       <td class="num"><span class="${segCls}">${seg != null ? duration(seg) : "—"}</span></td>
+      <td class="num">${townCell(r, n)}</td>
       <td class="num">${pb ? duration(pb.rta) : '<span class="dim">—</span>'}</td>
       <td class="num">${b ? `<span title="${s && s.best_delta != null ? `${s.best_delta < 0 ? "−" : "+"}${duration(Math.abs(s.best_delta))} vs your best` : ""}">${duration(b.rta)}</span>` : '<span class="dim">—</span>'}</td>
     </tr>`);
