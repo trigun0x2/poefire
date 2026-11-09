@@ -516,3 +516,29 @@ tbody tr.top.rank3 td:first-child { box-shadow: inset 3px 0 0 var(--bronze); }
 .cp-simple-title { color: var(--good); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
 .cp-simple p { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text); }
 .town-d { font-size: 11.5px; }
+
+/* setup wizard */
+.wizard { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(760px, 94vw); background: var(--panel); color: var(--text); }
+.wizard::backdrop { background: rgba(8, 9, 12, 0.75); backdrop-filter: blur(3px); }
+.wz-box { padding: 22px 26px 18px; display: flex; flex-direction: column; gap: 14px; }
+.wz-head { display: flex; align-items: center; gap: 14px; }
+.wz-logo { width: 42px; height: 42px; }
+.wz-title { font-size: 19px; font-weight: 700; }
+.wz-skip { margin-left: auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; text-decoration: underline; }
+.wz-steps { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; padding: 0; counter-reset: wz; }
+.wz-steps li { counter-increment: wz; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); color: var(--muted); font-size: 13px; border-top: 3px solid var(--line); }
+.wz-steps li::before { content: counter(wz) ". "; }
+.wz-steps li.now { color: var(--text); border-top-color: var(--accent); font-weight: 600; }
+.wz-steps li.done { color: var(--good); border-top-color: var(--good); }
+.wz-page h3 { margin: 0 0 6px; font-size: 16px; }
+.wz-page p { margin: 0 0 10px; line-height: 1.5; font-size: 13.5px; }
+.wz-found { margin-bottom: 10px; font-size: 13.5px; }
+.wz-found .ok { color: var(--good); } .wz-found .warn { color: var(--warn); }
+.wz-howto { margin: 0 0 12px; padding-left: 20px; line-height: 1.7; font-size: 13.5px; }
+.wz-choices { display: grid; gap: 8px; }
+.wz-choice { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); cursor: pointer; }
+.wz-choice.on { border-color: var(--accent); background: var(--accent-soft); }
+.wz-choice input { accent-color: var(--accent); }
+.wz-done { margin: 0 0 10px; padding-left: 20px; line-height: 1.8; }
+.wz-actions { display: flex; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.wz-spacer { flex: 1; }

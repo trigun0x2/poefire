@@ -480,6 +480,12 @@ def create_app(rt: AppRuntime) -> FastAPI:
         settings.clear_session(rt)
         return settings.settings_json(rt)
 
+    @app.post("/api/onboarding/done")
+    def onboarding_done() -> dict[str, Any]:
+        """The setup wizard was finished or skipped: don't open it on start again."""
+        rt.kv_set(settings.ONBOARDED_KEY, True)
+        return {"ok": True}
+
     @app.post("/api/settings/check-account")
     def check_account() -> dict[str, Any]:
         return settings.check_account(rt)

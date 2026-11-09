@@ -385,6 +385,12 @@ class AppRuntime:
 
     # --- campaign runs (shares the tail thread's connection and lock) ---
 
+    def kv_get(self, key: str) -> Any:
+        return self._kv_get(key)
+
+    def kv_set(self, key: str, value: Any) -> None:
+        self._kv_set(key, value)
+
     def _kv_get(self, key: str) -> Any:
         with Store(self.cfg.db_path) as store:
             return store.get_json(key)

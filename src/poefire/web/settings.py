@@ -22,6 +22,9 @@ from poefire.web.runtime import AppRuntime
 POESESSID_RE = re.compile(r"[0-9a-fA-F]{32}")
 
 
+ONBOARDED_KEY = "onboarded"
+
+
 class SettingsIn(BaseModel):
     """Partial update: fields left out keep their current value."""
 
@@ -119,6 +122,8 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "overlay_move_hotkey": cfg.overlay_move_hotkey,
         "overlay_opacity": cfg.overlay_opacity,
         "debug_logging": cfg.debug_logging,
+        # the setup wizard was finished or skipped (or loot tracking already works)
+        "onboarded": bool(rt.loot.enabled or rt.kv_get(ONBOARDED_KEY)),
         "campaign_hotkey_sound": cfg.campaign_hotkey_sound,
         "version": rt.update.current,
     }

@@ -88,3 +88,15 @@ def test_changing_watched_tabs_takes_a_snapshot(tmp_path: Path) -> None:
         assert r.json()["snapshot"] is False and snaps == [True]
     finally:
         rt.stop()
+
+
+def test_setup_wizard_is_shown_until_done(tmp_path: Path) -> None:
+    rt = AppRuntime(Config(db_path=tmp_path / "db"), recorder=None, log_path=tmp_path / "x.txt")
+    client = TestClient(create_app(rt))
+    client.headers["host"] = "127.0.0.1:8460"
+    try:
+        assert client.get("/api/settings").json()["onboarded"] is False
+        assert client.post("/api/onboarding/done", headers=H).json() == {"ok": True}
+        assert client.get("/api/settings").json()["onboarded"] is True
+    finally:
+        rt.stop()

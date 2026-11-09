@@ -48,6 +48,9 @@ makeSortable("ov-items-table", "items", itemsSort, () => { if (ovItems) renderHo
   await loadLeagues().catch(() => {});
   await pollStatus();
   if (!runsData) await pollRuns();
+  // first start (or setup never finished): the setup wizard
+  const setup = await api("/api/settings").catch(() => null);
+  if (setup && !setup.onboarded) openWizard().catch(() => {});
   // Polling only redraws the page: tracking, snapshots and prices run in the app itself.
   // While the window is minimized or hidden nothing is fetched or drawn; it catches up at once
   // when it's shown again.

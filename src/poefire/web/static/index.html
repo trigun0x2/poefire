@@ -412,6 +412,12 @@
     </section>
 
     <section class="card">
+      <div class="card-title">Setup</div>
+      <div class="row" style="margin-top:0"><button type="button" class="btn" id="set-wizard">Run the setup again</button>
+        <span class="hint">Game log, account, league and stash tabs, step by step.</span></div>
+    </section>
+
+    <section class="card">
       <div class="card-title">Updates</div>
       <div class="row" style="margin-top:0">
         <span>poefire <b id="set-version"></b></span>
@@ -539,6 +545,70 @@
   <button type="button" class="lightbox-nav next" id="lightbox-next" aria-label="Next picture">›</button>
   <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Close">✕</button>
 </dialog>
+<dialog class="wizard" id="wizard" aria-labelledby="wz-title">
+  <div class="wz-box">
+    <div class="wz-head">
+      <img src="/static/logo.png" alt="" class="wz-logo">
+      <div><div class="wz-title" id="wz-title">Set up poefire</div><div class="muted" id="wz-sub"></div></div>
+      <button type="button" class="wz-skip" id="wz-skip">Skip setup</button>
+    </div>
+    <ol class="wz-steps" id="wz-steps">
+      <li data-step="0">Game</li><li data-step="1">Account</li><li data-step="2">League</li><li data-step="3">Stash tabs</li>
+    </ol>
+
+    <section class="wz-page" data-page="0">
+      <h3>Where's the game?</h3>
+      <p class="muted">poefire reads the game's log, <code>Client.txt</code>, to time your maps and campaign runs. It finds it by itself for the usual installs, and switches to the right one once the game is running.</p>
+      <div class="wz-found" id="wz-log-found"></div>
+      <label class="field"><span>Game folder or Client.txt <span class="muted">(only if it isn't found)</span></span>
+        <input type="text" id="wz-log" placeholder="D:\Games\Path of Exile" spellcheck="false"></label>
+      <div class="hint" id="wz-log-status"></div>
+    </section>
+
+    <section class="wz-page" data-page="1" hidden>
+      <h3>Connect your account <span class="muted">(for loot)</span></h3>
+      <p class="muted">To see what your maps drop, poefire reads your stash and inventory through pathofexile.com, with your session cookie. It stays on this PC and is never shown or logged. Skip this to only time maps and campaign runs.</p>
+      <ol class="wz-howto">
+        <li>Log in on <a href="https://www.pathofexile.com" target="_blank" rel="noopener">pathofexile.com</a> in your browser.</li>
+        <li>Press <b>F12</b> → <b>Application</b> (Chrome/Edge) or <b>Storage</b> (Firefox) → <b>Cookies</b> → pathofexile.com.</li>
+        <li>Copy the value of <b>POESESSID</b> and paste it below.</li>
+      </ol>
+      <div class="grid2">
+        <label class="field"><span>Account name <span class="muted">with the #1234</span></span>
+          <input type="text" id="wz-account" placeholder="Exile#1234" spellcheck="false"></label>
+        <label class="field"><span>POESESSID</span>
+          <input type="password" id="wz-cookie" placeholder="32 letters and numbers" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <div class="hint" id="wz-account-status"></div>
+    </section>
+
+    <section class="wz-page" data-page="2" hidden>
+      <h3>Which league are you playing?</h3>
+      <p class="muted">Loot, stash tabs and prices follow this league. Your characters are in:</p>
+      <div class="wz-choices" id="wz-leagues"></div>
+    </section>
+
+    <section class="wz-page" data-page="3" hidden>
+      <h3>Which tabs does your loot go into?</h3>
+      <p class="muted">Tick every tab your loot lands in, including the ones Ctrl+click sends items to. Loot moved into a tab that isn't ticked counts as lost. Suggestions are ticked for you.</p>
+      <div class="tabs-list" id="wz-tabs"></div>
+      <div class="hint" id="wz-tabs-status"></div>
+    </section>
+
+    <section class="wz-page" data-page="4" hidden>
+      <h3>You're set</h3>
+      <ul class="wz-done" id="wz-summary"></ul>
+      <p class="muted">Run a map: when you're back in your hideout, its loot and value show on the Session page. Press <b>Ctrl+Alt+R</b> in game to time a campaign run. Everything can be changed later in Settings.</p>
+    </section>
+
+    <div class="wz-actions">
+      <button type="button" class="btn" id="wz-back">Back</button>
+      <span class="wz-spacer"></span>
+      <button type="button" class="btn" id="wz-later" hidden>Skip this step</button>
+      <button type="button" class="btn primary" id="wz-next">Next</button>
+    </div>
+  </div>
+</dialog>
 <dialog class="modal" id="modal" aria-labelledby="modal-title" aria-describedby="modal-body">
     <form method="dialog" class="modal-box">
       <h2 class="modal-title" id="modal-title"></h2>
@@ -558,6 +628,7 @@
   <script src="/static/window.js"></script>
   <script src="/static/campaign.js"></script>
   <script src="/static/builds.js"></script>
+  <script src="/static/wizard.js"></script>
   <script src="/static/main.js"></script>
 </body>
 </html>

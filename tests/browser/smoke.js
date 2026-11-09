@@ -70,6 +70,38 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
   await page.waitForTimeout(500);
   check(!(await page.$eval("#save-bar", (e) => e.classList.contains("dirty"))), "settings: discard clears it");
 
+  // Setup wizard (from Settings), with the account check answered by a fake account
+  await page.route("**/api/settings/session", (r) => r.fulfill({ json: { warnings: [] } }));
+  await page.route("**/api/settings/check-account", (r) => r.fulfill({ json: {
+    ok: true,
+    characters: [{ name: "Fresh", league: "Keepers", level: 14, class: "Witch", current: true },
+                 { name: "Old", league: "Standard", level: 92, class: "Ranger", current: false }],
+    tabs: [{ id: "a", name: "Currency", type: "CurrencyStash" }, { id: "b", name: "Trade", type: "PremiumStash" },
+           { id: "c", name: "Dump", type: "QuadStash" }],
+  } }));
+  await go("settings");
+  await page.click("#set-wizard");
+  await page.waitForTimeout(500);
+  check(await page.$eval("#wizard", (d) => d.open), "wizard: opens from Settings");
+  await page.click("#wz-next"); // game
+  await page.waitForTimeout(400);
+  await page.fill("#wz-account", "Exile#1234");
+  await page.fill("#wz-cookie", "0123456789abcdef0123456789abcdef");
+  await page.click("#wz-next"); // account
+  await page.waitForTimeout(600);
+  check(await count("#wz-leagues .wz-choice") === 2, "wizard: leagues from the characters");
+  check(await page.$eval('input[name="wz-league"]:checked', (i) => i.value) === "Keepers", "wizard: league being played is picked");
+  await page.click("#wz-next"); // league
+  await page.waitForTimeout(600);
+  const ticked = await page.$$eval("#wz-tabs input:checked", (els) => els.map((e) => e.value));
+  check(ticked.includes("Currency") && ticked.includes("Dump") && !ticked.includes("Trade"), "wizard: loot tabs suggested");
+  await page.click("#wz-next"); // tabs: save
+  await page.waitForTimeout(800);
+  check(/Keepers/.test(await text("#wz-summary")), "wizard: summary");
+  await page.click("#wz-next"); // done
+  await page.waitForTimeout(500);
+  check(!(await page.$eval("#wizard", (d) => d.open)), "wizard: closes");
+
   await browser.close();
   if (problems.length) {
     console.error(`\n${problems.length} problem(s)`);
