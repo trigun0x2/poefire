@@ -192,10 +192,19 @@ jobs:
       NAME: ${{ needs.build.outputs.artifact }}
       CHANNEL: ${{ needs.build.outputs.channel }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the commits since the last release, for the notes
+          path: repo
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.build.outputs.artifact }}
           path: app
+
+      - name: Release notes (what's new since the last public release)
+        run: |
+          (cd repo && python3 scripts/release_notes.py --head "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY") > notes.md
+          cat notes.md
 
       - name: Zip (app files at the top level, no nested folder)
         run: |
@@ -210,14 +219,14 @@ jobs:
           if [[ "$CHANNEL" == "public" ]]; then
             gh release create "v$VERSION" "$NAME.zip" "$NAME.zip.sha256" \
               --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --latest --title "poefire v$VERSION" --generate-notes
+              --latest --title "poefire v$VERSION" --notes-file notes.md
           else
             # one rolling beta: replace the previous one (release and tag)
             gh release delete beta --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
             gh release create beta "$NAME.zip" "$NAME.zip.sha256" \
               --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --prerelease --latest=false --title "poefire beta (v$VERSION)" \
-              --notes "Latest development build from \`$GITHUB_REF_NAME\` ($GITHUB_SHA), version $VERSION. Replaced on every push to \`$GITHUB_REF_NAME\`; only installed by the beta update channel."
+              --notes "$(printf 'Latest development build from `%s` (%s), version %s. Replaced on every push to `%s`; only installed by the beta update channel.\n\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" "$VERSION" "$GITHUB_REF_NAME"; cat notes.md)"
           fi
 
       - name: Remove older per-build pre-releases
