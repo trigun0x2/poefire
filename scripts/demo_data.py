@@ -1,6 +1,6 @@
 """Fill a fresh data folder with made-up demo data, for the README screenshots.
 
-    uv run python scripts/demo_data.py <data folder>
+    uv run python scripts/demo_data.py <data folder> [--no-icons]
 
 Then run poefire against it (see scripts/screenshots.js). Nothing here touches your real data.
 Item icons are the game's own, looked up on poe.ninja (needs internet; without it the items
@@ -296,5 +296,6 @@ def seed(folder: Path) -> None:
 
 
 if __name__ == "__main__":
-    load_icons()
+    if "--no-icons" not in sys.argv:  # (the browser tests don't need them, nor the network)
+        load_icons()
     seed(Path(sys.argv[1]))
