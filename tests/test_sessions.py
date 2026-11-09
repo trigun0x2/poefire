@@ -6,8 +6,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from test_web import HEADERS, app, mkrun  # noqa: F401  (app is a fixture)
 
+from poefire.pricing.valuation import Valuation
 from poefire.store import Store
-from poefire.web import sessions
+from poefire.web import sessions, views
 
 
 def test_first_start_opens_the_current_play_session(tmp_path: Path) -> None:
@@ -83,3 +84,37 @@ def test_delete_runs_removes_their_loot(tmp_path: Path) -> None:
         s.add_loot("a", "run", a, b, [ItemDelta("c", "Chaos Orb", 5, 3, {})])
         s.delete_runs(["a"])
         assert [r.id for r in s.list_runs()] == ["b"] and s.run_loot("a") == []
+
+
+def _row(rid: str, name: str, start: datetime, minutes: int, chaos: float | None) -> views.RunRow:
+    r = mkrun(rid, start, minutes)
+    r.map_name = name
+    return views.RunRow(r, Valuation(chaos or 0.0), chaos is not None, minutes * 60.0)
+
+
+def test_chaos_per_hour_counts_hideout_time() -> None:
+    t = datetime(2026, 11, 1, 12)
+    rows = [  # newest first: 10 min maps with 5 min in the hideout after each
+        _row("c", "Strand", t + timedelta(minutes=30), 10, 100),
+        _row("b", "Strand", t + timedelta(minutes=15), 10, 200),
+        _row("a", "Dunes", t, 10, None),  # no loot data: counts with the average rate
+    ]
+    # 300c in 20 map minutes = 15c/min; 30 map minutes of 40 played: 15 * 60 * 30/40
+    assert views.per_hour(rows, 100.0) == {"chaos_per_hour": 675, "divine_per_hour": 6.75}
+    assert views.per_hour(rows[2:], None)["chaos_per_hour"] is None  # nothing priced
+
+    late = [_row("d", "Dunes", t + timedelta(hours=2), 10, 0), *rows]  # a long break: capped
+    assert views.per_hour(late, None)["chaos_per_hour"] == round(300 / 30 * 40 / 60 * 60)
+
+    strand, dunes = views.map_stats(late, 100.0)
+    assert strand == {"map_name": "Strand", "maps": 2, "loot_tracked_maps": 2,
+                      "avg_chaos": 150.0, "avg_divine": 1.5, "avg_seconds": 600, "deaths": 0,
+                      "chaos_per_hour": round(300 / 35 * 60), "best_chaos": 200.0}  # fmt: skip
+    assert dunes["maps"] == 2 and dunes["loot_tracked_maps"] == 1 and dunes["avg_chaos"] == 0
+
+
+def test_runs_and_history_include_rates(app: TestClient) -> None:  # noqa: F811
+    data = app.get("/api/runs").json()
+    assert "chaos_per_hour" in data["session"] and data["maps"]
+    assert {m["map_name"] for m in data["maps"]} <= {r["map_name"] for r in data["runs"]}
+    assert "chaos_per_hour" in app.get("/api/sessions").json()["sessions"][0]

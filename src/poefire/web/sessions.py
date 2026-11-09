@@ -13,7 +13,7 @@ from poefire.pricing.book import PriceBook
 from poefire.store import Store
 from poefire.tracker import Run, RunStatus
 from poefire.web.cache import SETTLED_AFTER, BookCache
-from poefire.web.views import Json, RunRow, _iso, _round, run_rows
+from poefire.web.views import Json, RunRow, _iso, _round, per_hour, run_rows
 
 INIT_KEY = "sessions_initialized"
 
@@ -98,6 +98,7 @@ def summary(span: Span, rows: list[RunRow], chaos_per_divine: float | None, now:
         "avg_chaos": round(avg, 1) if avg is not None else None,
         "avg_divine": _round(avg / cpd) if avg is not None and cpd else None,
         "in_progress": any(r.run.status is not RunStatus.FINISHED for r in rows),
+        **per_hour(rows, cpd),
     }
 
 

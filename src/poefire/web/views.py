@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -119,6 +120,73 @@ def session_summary(rows: Sequence[RunRow], chaos_per_divine: float | None, now:
         "best_run": {"id": best.run.id, "map_name": best.run.map_name,
                      "chaos": round(best.value.chaos, 1)} if best else None,
     }  # fmt: skip
+
+
+# time back in the hideout after a map counts towards that map, up to this (longer is a break)
+HIDEOUT_CAP = timedelta(minutes=10)
+
+
+def _hideout_after(rows: Sequence[RunRow]) -> dict[str, float]:
+    """Seconds between each finished map's end and the next map's start (rows newest first),
+    capped at HIDEOUT_CAP. The newest map has none yet."""
+    out: dict[str, float] = {}
+    for newer, row in itertools.pairwise(rows):
+        end = row.run.ended_at
+        if row.run.status is RunStatus.FINISHED and end is not None:
+            gap = min(max(newer.run.started_at - end, timedelta(0)), HIDEOUT_CAP)
+            out[row.run.id] = gap.total_seconds()
+    return out
+
+
+def per_hour(rows: Sequence[RunRow], chaos_per_divine: float | None) -> Json:
+    """Loot per hour played: finished maps' loot over the time from the first map's start to
+    the last map's end, hideout time included (breaks longer than HIDEOUT_CAP left out). Maps
+    without loot data count with the session's average rate."""
+    done = [r for r in rows if r.run.status is RunStatus.FINISHED]
+    tracked = [r for r in done if r.tracked]
+    active_tracked = sum(r.active_seconds for r in tracked)
+    if not tracked or active_tracked <= 0:
+        return {"chaos_per_hour": None, "divine_per_hour": None}
+    gaps = _hideout_after(rows)
+    played = sum(r.active_seconds + gaps.get(r.run.id, 0.0) for r in done)
+    if played < 60:
+        return {"chaos_per_hour": None, "divine_per_hour": None}
+    chaos = sum(r.value.chaos for r in tracked)
+    # the tracked maps' loot rate, applied to all the time played
+    rate = chaos / active_tracked * sum(r.active_seconds for r in done) / played * 3600
+    cpd = chaos_per_divine
+    return {"chaos_per_hour": round(rate), "divine_per_hour": _round(rate / cpd) if cpd else None}
+
+
+def map_stats(rows: Sequence[RunRow], chaos_per_divine: float | None) -> list[Json]:
+    """Finished maps grouped by name: how many, average loot and time, and loot per hour
+    (with the hideout time after each map). Most run first."""
+    gaps = _hideout_after(rows)
+    groups: dict[str, list[RunRow]] = {}
+    for r in rows:
+        if r.run.status is RunStatus.FINISHED:
+            groups.setdefault(r.run.map_name, []).append(r)
+    out: list[Json] = []
+    for name, rs in groups.items():
+        tracked = [r for r in rs if r.tracked]
+        chaos = sum(r.value.chaos for r in tracked)
+        played = sum(r.active_seconds + gaps.get(r.run.id, 0.0) for r in tracked)
+        avg = chaos / len(tracked) if tracked else None
+        rate = chaos / played * 3600 if tracked and played >= 60 else None
+        cpd = chaos_per_divine
+        out.append({
+            "map_name": name,
+            "maps": len(rs),
+            "loot_tracked_maps": len(tracked),
+            "avg_chaos": round(avg, 1) if avg is not None else None,
+            "avg_divine": _round(avg / cpd) if avg is not None and cpd else None,
+            "avg_seconds": round(sum(r.active_seconds for r in rs) / len(rs)),
+            "deaths": sum(r.run.deaths for r in rs),
+            "chaos_per_hour": round(rate) if rate is not None else None,
+            "best_chaos": round(max(r.value.chaos for r in tracked), 1) if tracked else None,
+        })  # fmt: skip
+    out.sort(key=lambda m: (-int(m["maps"]), -float(m["chaos_per_hour"] or 0), m["map_name"]))
+    return out
 
 
 RECENT_MAPS = 10

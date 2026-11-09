@@ -40,6 +40,7 @@ window.addEventListener("hashchange", route);
 
 makeSortable("runs-table", "runs", runsSort, () => { if (runsData) renderRuns(); });
 makeSortable("sessions-table", "sessions", sessionsSort, () => { if (sessionsData) renderSessions(); });
+makeSortable("maps-table", "maps", mapsSort, () => { if (runsData) renderMapStats(); });
 makeSortable("ov-items-table", "items", itemsSort, () => { if (ovItems) renderHoldings(); });
 
 (async function init() {

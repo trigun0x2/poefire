@@ -265,7 +265,8 @@ function renderSession() {
     tile("Runs", s.runs, `avg ${duration(s.avg_run_seconds)}`),
     tile("Map time", duration(s.active_seconds), `${duration(s.wall_seconds)} played`),
     tile("Deaths", s.deaths, s.runs ? `${nf1.format(s.deaths / s.runs)} per run` : ""),
-    tile("Prices", status?.prices.chaos_per_divine ? `${nf0.format(status.prices.chaos_per_divine)}c` : "—", "per divine (poe.ninja)"),
+    tile("Loot / hour", s.chaos_per_hour == null ? "—" : `${nf0.format(s.chaos_per_hour)}c`,
+      (s.divine_per_hour == null ? "" : `${nf2.format(s.divine_per_hour)}d · `) + "with hideout time"),
   ].join("");
 }
 
@@ -414,6 +415,7 @@ async function pollRuns({ sessions = true } = {}) {
   renderLastMap();
   renderSidebarStats();
   renderRuns();
+  renderMapStats();
   await renderDetail();
   if (sessions || !sessionsData) loadSessions().catch(() => {});
 }
@@ -443,10 +445,31 @@ function renderSessions() {
       <td class="num">${s.avg_map_seconds == null ? "—" : duration(s.avg_map_seconds)}</td>
       <td class="num">${avg}</td>
       <td class="num">${total}</td>
+      <td class="num">${s.chaos_per_hour == null ? '<span class="dim">—</span>' : chaos(s.chaos_per_hour)}</td>
       <td class="num">${s.deaths || '<span class="dim">0</span>'}</td>
       <td class="num">${del}</td>
     </tr>`;
   }).join("");
+}
+
+const mapsSort = loadSort("maps", { key: "maps", dir: -1 });
+
+/** Finished maps of the shown session grouped by map: which maps pay best per hour. */
+function renderMapStats() {
+  const rows = sortRows(runsData.maps || [], mapsSort.key, mapsSort.dir);
+  const dash = '<span class="dim">—</span>';
+  $("maps-sub").textContent = `· finished maps ${viewSession == null ? "this" : "in that"} session, by map`;
+  $("maps-empty").hidden = rows.length > 0;
+  const top = Math.max(0, ...rows.map((m) => m.chaos_per_hour || 0));
+  $("maps-body").innerHTML = rows.map((m) => `<tr>
+      <td>${esc(m.map_name)}</td>
+      <td class="num">${m.maps}${m.loot_tracked_maps < m.maps ? ` <span class="dim" title="maps with loot data">(${m.loot_tracked_maps})</span>` : ""}</td>
+      <td class="num">${duration(m.avg_seconds)}</td>
+      <td class="num">${m.avg_chaos == null ? dash : chaos(m.avg_chaos)}</td>
+      <td class="num">${m.best_chaos == null ? dash : chaos(m.best_chaos)}</td>
+      <td class="num${m.chaos_per_hour && m.chaos_per_hour === top && rows.length > 1 ? " best-rate" : ""}">${m.chaos_per_hour == null ? dash : chaos(m.chaos_per_hour)}</td>
+      <td class="num">${m.deaths || '<span class="dim">0</span>'}</td>
+    </tr>`).join("");
 }
 
 async function showSession(id) {

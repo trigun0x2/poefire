@@ -169,6 +169,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
                 rows, cpd, n=views.RECENT_MAPS if span.current else max(len(rows), 1)
             ),
             "last_map": views.last_map(rows, cpd),
+            "maps": views.map_stats(rows, cpd),
             "session_run_ids": [r.run.id for r in rows],
         }
 

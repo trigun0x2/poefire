@@ -36,6 +36,8 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
   check(await count("#runs-body tr") > 5, "session: maps listed");
   check(!(await page.$eval("#last-body", (e) => e.hidden)), "session: last map shown");
   check(await count("#sessions-body tr") >= 3, "session: session history listed");
+  check(await count("#maps-body tr") >= 2, "session: per-map stats");
+  check(/\d/.test(await text("#tiles")) && (await text("#tiles")).includes("Loot / hour"), "session: loot per hour tile");
   check(/\d/.test(await text("#side-avg")), "sidebar: avg / map");
   await page.click("#runs-body tr:nth-child(2)");
   await page.waitForTimeout(500);

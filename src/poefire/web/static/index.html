@@ -523,12 +523,25 @@
       <div id="detail"></div>
     </section>
 
+    <section class="card maps-stats">
+      <div class="card-title">Maps <span class="muted" id="maps-sub">· finished maps this session, by map</span></div>
+      <div class="table-wrap">
+        <table id="maps-table">
+          <thead>
+            <tr><th data-sort="map_name" aria-sort="none"><button type="button">Map<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="maps" aria-sort="none"><button type="button">Runs<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_seconds" aria-sort="none"><button type="button">Avg time<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_chaos" aria-sort="none"><button type="button">Avg / map<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="best_chaos" aria-sort="none"><button type="button">Best<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos_per_hour" aria-sort="none"><button type="button">Per hour<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="deaths" aria-sort="none"><button type="button">Deaths<span class="sort-ind" aria-hidden="true"></span></button></th></tr>
+          </thead>
+          <tbody id="maps-body"></tbody>
+        </table>
+        <div class="empty" id="maps-empty" hidden>No finished maps yet.</div>
+      </div>
+    </section>
+
     <section class="card history">
       <div class="card-title">Sessions</div>
       <div class="table-wrap">
         <table id="sessions-table">
           <thead>
-            <tr><th data-sort="started_at" aria-sort="none"><button type="button">Started<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="wall_seconds" aria-sort="none"><button type="button">Length<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="maps" aria-sort="none"><button type="button">Maps<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_map_seconds" aria-sort="none"><button type="button">Avg map time<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_chaos" aria-sort="none"><button type="button">Avg / map<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos" aria-sort="none"><button type="button">Total loot<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="deaths" aria-sort="none"><button type="button">Deaths<span class="sort-ind" aria-hidden="true"></span></button></th><th><span class="sr-only">Actions</span></th></tr>
+            <tr><th data-sort="started_at" aria-sort="none"><button type="button">Started<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="wall_seconds" aria-sort="none"><button type="button">Length<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="maps" aria-sort="none"><button type="button">Maps<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_map_seconds" aria-sort="none"><button type="button">Avg map time<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="avg_chaos" aria-sort="none"><button type="button">Avg / map<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos" aria-sort="none"><button type="button">Total loot<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="chaos_per_hour" aria-sort="none"><button type="button">Per hour<span class="sort-ind" aria-hidden="true"></span></button></th><th class="num" data-sort="deaths" aria-sort="none"><button type="button">Deaths<span class="sort-ind" aria-hidden="true"></span></button></th><th><span class="sr-only">Actions</span></th></tr>
           </thead>
           <tbody id="sessions-body"></tbody>
         </table>
