@@ -97,12 +97,14 @@ function renderLeagueHints() {
 }
 
 function renderDeathNames() {
-  const seen = settings.log_characters || [];
-  if (!seen.length) {
+  const all = settings.log_characters || []; // most recently seen first
+  if (!all.length) {
     $("set-deaths-seen").innerHTML = '<span class="hint">No deaths or level-ups in the log yet. Character names show up here once they appear.</span>';
     return;
   }
   const typed = $("set-deaths").value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  // the last 5 characters, plus any already in the list
+  const seen = all.filter((c, i) => i < 5 || typed.includes(c.name.toLowerCase()));
   $("set-deaths-seen").innerHTML = '<span class="hint">Seen in your log (click to add):</span>' + seen.map((c) => {
     const counted = !typed.length || typed.includes(c.name.toLowerCase());
     return `<button type="button" class="name-chip ${counted ? "on" : "off"}" data-name="${esc(c.name)}" title="${counted ? "Deaths counted" : "Deaths ignored: not in the list"}">` +
