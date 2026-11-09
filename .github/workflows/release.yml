@@ -117,7 +117,7 @@ jobs:
             sleep 1
           done
           grep -q "<title>poefire</title>" page.html
-          curl -fsS -o /dev/null http://127.0.0.1:8460/static/app.js
+          curl -fsS -o /dev/null http://127.0.0.1:8460/static/main.js
           curl -fsS http://127.0.0.1:8460/api/status
           taskkill //F //IM poefire-cli.exe
 

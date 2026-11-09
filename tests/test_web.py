@@ -129,7 +129,8 @@ def test_foreign_host_rejected(app: TestClient) -> None:
 def test_index_served(app: TestClient) -> None:
     r = app.get("/")
     assert r.status_code == 200 and "poefire" in r.text
-    assert app.get("/static/app.js").status_code == 200
+    for js in ("core", "dashboard", "settings", "overview", "window", "campaign", "builds", "main"):
+        assert app.get(f"/static/{js}.js").status_code == 200
 
 
 # --- views ---
