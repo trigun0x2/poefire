@@ -90,6 +90,8 @@ function renderCampaign() {
   tickCampaign();
   renderCampaignSplits(r);
   renderCampaignWorst(r);
+  $("cp-tabs-run").textContent = r ? `${cpSelected != null ? "Showing the run of" : "Run in progress, started"} ${dateTimeOf(r.started_at)}${r.character ? ` · ${r.character}` : ""}` : "";
+  $("cp-analysis-empty").hidden = (r?.worst_zones || []).length > 0;
   renderCampaignZones(r);
   renderCampaignRuns();
 }
@@ -269,7 +271,7 @@ function renderCampaignTop() {
 }
 $("cp-top").addEventListener("click", (e) => {
   const li = e.target.closest("li[data-id]");
-  if (li) selectCampaignRun(Number(li.dataset.id)).catch(() => {});
+  if (li) { showCampaignTab("run"); selectCampaignRun(Number(li.dataset.id)).catch(() => {}); }
 });
 $("cp-top").addEventListener("keydown", (e) => {
   const li = e.target.closest("li[data-id]");
@@ -349,7 +351,7 @@ $("cp-delete").addEventListener("click", async () => {
 });
 $("cp-runs-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]");
-  if (tr) selectCampaignRun(Number(tr.dataset.id)).catch(() => {});
+  if (tr) { showCampaignTab("run"); selectCampaignRun(Number(tr.dataset.id)).catch(() => {}); }
 });
 $("cp-patch").addEventListener("change", async () => {
   const r = cpShown();
@@ -383,3 +385,18 @@ $("cp-notes").addEventListener("input", () => {
   }, 700);
 });
 makeSortable("cp-runs-table", "campaign", cpSort, () => { if (cpData) renderCampaignRuns(); });
+
+// --- tabs: Run (the run and its splits), History (top runs, all runs), Analysis ---
+
+let cpTab = (() => { try { return localStorage.getItem("poefire.cpTab") || "run"; } catch { return "run"; } })();
+function showCampaignTab(tab) {
+  cpTab = tab;
+  $("campaign-view").dataset.tab = tab;
+  for (const b of document.querySelectorAll(".cp-tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  try { localStorage.setItem("poefire.cpTab", tab); } catch { /* private mode */ }
+}
+document.querySelector(".cp-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-tab]");
+  if (b) showCampaignTab(b.dataset.tab);
+});
+showCampaignTab(cpTab);

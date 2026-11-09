@@ -47,13 +47,20 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
 
   // Campaign
   await go("campaign");
+  const visible = (sel) => page.$eval(sel, (e) => getComputedStyle(e).display !== "none" && !e.hidden);
+  await page.click('.cp-tabs button[data-tab="history"]');
+  check(await visible(".cp-history") && !(await visible(".cp-splits")), "campaign: History tab");
   check(await count("#cp-runs-body tr") >= 4, "campaign: runs listed");
+  check(await count("#cp-top li") === 3, "campaign: top 3 runs");
   await page.click('#cp-runs-body tr:has-text("Tornado Shot league start")');
   await page.waitForTimeout(800);
+  check(await visible(".cp-splits"), "campaign: picking a run opens the Run tab");
   check(await count("#cp-acts-body tr") === 10, "campaign: act splits");
   check(/\d/.test(await text("#cp-acts-body tr:first-child")), "campaign: split times");
-  check(await count("#cp-top li") === 3, "campaign: top 3 runs");
-  check(await count("#cp-worst > li") >= 1, "campaign: where you lost time");
+  await page.click('.cp-tabs button[data-tab="analysis"]');
+  await page.waitForTimeout(300);
+  check(await count("#cp-worst > li") >= 1 && await visible("#cp-worst-card"), "campaign: Analysis tab: where you lost time");
+  await page.click('.cp-tabs button[data-tab="run"]');
 
   // Builds
   await go("builds");

@@ -138,7 +138,13 @@
     </section>
   </section>
 
-  <section class="view campaign" id="campaign-view" hidden>
+  <section class="view campaign" id="campaign-view" data-tab="run" hidden>
+    <nav class="cp-tabs" role="tablist" aria-label="Campaign">
+      <button type="button" role="tab" data-tab="run" aria-selected="true">Run</button>
+      <button type="button" role="tab" data-tab="history" aria-selected="false">History</button>
+      <button type="button" role="tab" data-tab="analysis" aria-selected="false">Analysis</button>
+      <span class="cp-tabs-run muted" id="cp-tabs-run"></span>
+    </nav>
     <section class="card cp-run">
       <div class="cp-run-head">
         <div class="card-title"><span id="cp-run-title">Campaign run</span> <span class="chip mule" id="cp-mule" hidden>Muled with a Ranger</span></div>
@@ -207,6 +213,10 @@
       <div class="card-title">Zones &amp; levels</div>
       <ol class="cp-zone-list" id="cp-zones"></ol>
       <div class="empty" id="cp-zones-empty">Zones show up here as you enter them.</div>
+    </section>
+
+    <section class="card cp-analysis-empty" id="cp-analysis-empty">
+      <div class="empty">Pick a run in <b>History</b> (or play one) to see where it lost time against your best runs.</div>
     </section>
 
     <section class="card cp-worst" id="cp-worst-card" hidden>

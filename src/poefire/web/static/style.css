@@ -324,12 +324,26 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
 .campaign {
   display: grid; gap: 14px; padding: 14px 18px 18px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-areas: "run run splits splits splits" "top top top top top" "history history history history history" "zones zones zones zones zones" "worst worst worst worst worst";
+  grid-template-areas: "tabs tabs tabs tabs tabs" "run run splits splits splits" "zones zones zones zones zones";
   align-items: start;
 }
+.campaign[data-tab="history"] { grid-template-areas: "tabs tabs tabs tabs tabs" "top top top top top" "history history history history history"; }
+.campaign[data-tab="analysis"] { grid-template-areas: "tabs tabs tabs tabs tabs" "worst worst worst worst worst"; }
 @media (max-width: 1250px) {
-  .campaign { grid-template-columns: 1fr; grid-template-areas: "run" "splits" "top" "history" "zones" "worst"; }
+  .campaign { grid-template-columns: 1fr; grid-template-areas: "tabs" "run" "splits" "zones"; }
+  .campaign[data-tab="history"] { grid-template-areas: "tabs" "top" "history"; }
+  .campaign[data-tab="analysis"] { grid-template-areas: "tabs" "worst"; }
 }
+/* each tab shows its own cards */
+.campaign:not([data-tab="run"]) :is(.cp-run, .cp-splits, .cp-zones),
+.campaign:not([data-tab="history"]) :is(.cp-top, .cp-history),
+.campaign:not([data-tab="analysis"]) :is(.cp-worst, .cp-analysis-empty) { display: none; }
+.cp-tabs { grid-area: tabs; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+.cp-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px 9px; cursor: pointer; margin-bottom: -1px; }
+.cp-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.cp-tabs button:hover { color: var(--text); }
+.cp-tabs-run { margin-left: auto; font-size: 12.5px; }
+.cp-analysis-empty { grid-area: worst; }
 .cp-run { grid-area: run; }
 .cp-splits { grid-area: splits; }
 .cp-history { grid-area: history; }
