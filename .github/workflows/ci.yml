@@ -32,6 +32,19 @@ jobs:
       - run: uv run mypy
       - run: uv run pytest
 
+  audit:
+    name: Dependency audit (known vulnerabilities)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: pip-audit (everything the app ships with)
+        run: |
+          uv export --locked --no-dev --all-extras --no-emit-project --format requirements-txt > requirements.txt
+          uvx pip-audit --strict --disable-pip --require-hashes -r requirements.txt
+
   ui:
     name: Browser smoke test
     runs-on: ubuntu-latest

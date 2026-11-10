@@ -187,6 +187,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write # to sign the build attestation (Sigstore, keyless)
+      attestations: write
     env:
       VERSION: ${{ needs.build.outputs.version }}
       NAME: ${{ needs.build.outputs.artifact }}
@@ -212,18 +214,50 @@ jobs:
           sha256sum "$NAME.zip" > "$NAME.zip.sha256"
           unzip -l "$NAME.zip" | head -n 12
 
+      # Signed proof that this zip was built by this workflow from this commit, in public CI.
+      # Anyone can check it: gh attestation verify <zip> --repo trigun0x2/poefire. The app's
+      # updater checks the same bundle (the .sigstore.json asset) before installing an update.
+      - name: Attest the build
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ env.NAME }}.zip
+      - name: Keep the attestation next to the zip
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" "$NAME.zip.sigstore.json"
+
+      # Optional: with a VT_API_KEY secret (a free VirusTotal account), the zip is uploaded for a
+      # scan. The report link (by the zip's sha256) goes in the notes either way.
+      - name: VirusTotal scan
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: |
+          sha=$(cut -d" " -f1 "$NAME.zip.sha256")
+          if [[ -n "$VT_API_KEY" ]]; then
+            url=$(curl -fsS -H "x-apikey: $VT_API_KEY" https://www.virustotal.com/api/v3/files/upload_url | jq -r .data)
+            curl -fsS -H "x-apikey: $VT_API_KEY" -F "file=@$NAME.zip" "$url" > /dev/null && echo "uploaded to VirusTotal"
+          fi
+          {
+            echo
+            echo "Verify this download:"
+            echo "- SHA-256: \`$sha\`"
+            echo "- Built by GitHub Actions from this commit: \`gh attestation verify $NAME.zip --repo $GITHUB_REPOSITORY\`"
+            if [[ -n "$VT_API_KEY" ]]; then echo "- VirusTotal scan: https://www.virustotal.com/gui/file/$sha"; fi
+          } >> notes.md
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$CHANNEL" == "public" ]]; then
-            gh release create "v$VERSION" "$NAME.zip" "$NAME.zip.sha256" \
+            gh release create "v$VERSION" "$NAME.zip" "$NAME.zip.sha256" "$NAME.zip.sigstore.json" \
               --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --latest --title "poefire v$VERSION" --notes-file notes.md
           else
             # one rolling beta: replace the previous one (release and tag)
             gh release delete beta --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
-            gh release create beta "$NAME.zip" "$NAME.zip.sha256" \
+            gh release create beta "$NAME.zip" "$NAME.zip.sha256" "$NAME.zip.sigstore.json" \
               --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --prerelease --latest=false --title "poefire beta (v$VERSION)" \
               --notes "$(printf 'Latest development build from `%s` (%s), version %s. Replaced on every push to `%s`; only installed by the beta update channel.\n\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" "$VERSION" "$GITHUB_REF_NAME"; cat notes.md)"
