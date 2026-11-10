@@ -19,6 +19,13 @@
 
 ![The Session page: last map, session stats and your maps](docs/images/session.png)
 
+## Hi from xyzCat
+Hi I’m the dev. I built this because I wanted live updates on my network without paying a third party. That evolved to a bunch of features I also wanted for my own POE journey.
+
+Yes, this heavily vibe coded. yes I do review and test myself, if you’re scared of security issues, please do review the code yourself. 
+
+Regardless, thanks for taking a view and feel free to check out the AI summary on features!
+
 ## What it does
 
 - **Loot per map.** When you return to your hideout, poefire sees what the map dropped and
