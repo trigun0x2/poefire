@@ -40,7 +40,8 @@ async function fixWindowsOnly(route) {
   await shot("session", "session");
   await shot("overview", "overview");
   await shot("campaign", "campaign", async () => {
-    await page.click('#cp-runs-body tr:has-text("Tornado Shot league start")');
+    await page.click('.cp-tabs button[data-tab="history"]'); // the runs list
+    await page.click('#cp-runs-body tr:has-text("Tornado Shot league start")'); // opens it on Run
   });
   await page.setViewportSize({ width: 1400, height: 600 });
   await shot("builds", "builds", async () => {
