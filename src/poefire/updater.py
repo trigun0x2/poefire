@@ -2,8 +2,9 @@
 
 1. `check()` asks the GitHub API for the newest release (public only, unless the beta channel
    is on) and compares it with the running version.
-2. `stage()` downloads the release zip, verifies it against its .sha256 asset, and unpacks it
-   into a staging folder (refusing any path that would land outside it).
+2. `stage()` downloads the release zip, verifies it against its .sha256 asset and its signed
+   build attestation (`provenance`: built by this repo's release workflow, in public CI), and
+   unpacks it into a staging folder (refusing any path that would land outside it).
 3. `start_install()` starts the *new* version from the staging folder with the hidden
    `apply-update` command (`apply_update()`): it waits for this process to exit (ending it if
    it hangs), copies itself over the install folder, and restarts the app, logging every step
@@ -29,6 +30,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+from poefire import provenance
 
 REPO = "trigun0x2/poefire"
 APP_EXE = "poefire.exe"  # the windowed app (poefire-cli.exe is the command line)
@@ -69,6 +72,11 @@ class UpdateInfo:
     size: int
     prerelease: bool
     published_at: str | None
+    attestation_url: str | None = None
+
+    @property
+    def zip_name(self) -> str:
+        return f"poefire-{self.version}-windows-x64.zip"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -85,6 +93,7 @@ def _release_info(release: dict[str, Any]) -> UpdateInfo | None:
         if m is None:
             continue
         sha = assets.get(f"{name}.sha256")
+        att = assets.get(f"{name}.sigstore.json")
         return UpdateInfo(
             version=m["version"],
             tag=release.get("tag_name", ""),
@@ -95,13 +104,16 @@ def _release_info(release: dict[str, Any]) -> UpdateInfo | None:
             size=int(asset.get("size") or 0),
             prerelease=bool(release.get("prerelease")),
             published_at=release.get("published_at"),
+            attestation_url=att["browser_download_url"] if att else None,
         )
     return None
 
 
 class Updater:
-    def __init__(self, current: str, user_agent: str, http: httpx.Client | None = None) -> None:
+    def __init__(self, current: str, user_agent: str, http: httpx.Client | None = None,
+                 verify: Callable[..., None] = provenance.verify) -> None:  # fmt: skip
         self.current = current
+        self.verify = verify  # the build attestation check (a stub in tests)
         self.http = http or httpx.Client(timeout=60, follow_redirects=True)
         self.headers = {"User-Agent": user_agent, "Accept": "application/vnd.github+json"}
 
@@ -154,6 +166,18 @@ class Updater:
                 expected = r2.text.split()[0].lower() if r2.status_code == 200 and r2.text else ""
                 if expected != digest.hexdigest():
                     raise UpdateError("the download doesn't match its published checksum")
+            if not info.attestation_url:
+                raise UpdateError(
+                    "this release has no build attestation, so it can't be checked: "
+                    "download it from the releases page instead"
+                )
+            r3 = self.http.get(info.attestation_url, headers=self.headers)
+            if r3.status_code != 200:
+                raise UpdateError(f"couldn't download the build attestation: HTTP {r3.status_code}")
+            try:
+                self.verify(r3.content, digest.hexdigest(), info.zip_name, beta=info.prerelease)
+            except provenance.ProvenanceError as e:
+                raise UpdateError(f"the update failed its signature check: {e}") from e
         except httpx.HTTPError as e:
             raise UpdateError(f"download failed: {e}") from e
 

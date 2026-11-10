@@ -121,6 +121,16 @@ jobs:
           curl -fsS http://127.0.0.1:8460/api/status
           taskkill //F //IM poefire-cli.exe
 
+      - name: Smoke test the update signature check (sigstore packaged, real attestation)
+        run: |
+          ./dist/poefire/poefire-cli.exe verify poefire-0.21.0-dev.88-windows-x64.zip --beta --offline \
+            --bundle tests/data/poefire-0.21.0-dev.88-windows-x64.zip.sigstore.json \
+            --sha256 17a703dce83784b6ff87b6f7683a34aea906b9543203e70b4d4d6d8078884772
+          # a beta build must not pass as a public release
+          ! ./dist/poefire/poefire-cli.exe verify poefire-0.21.0-dev.88-windows-x64.zip --offline \
+            --bundle tests/data/poefire-0.21.0-dev.88-windows-x64.zip.sigstore.json \
+            --sha256 17a703dce83784b6ff87b6f7683a34aea906b9543203e70b4d4d6d8078884772
+
       - name: Smoke test the native window (DLLs marked as downloaded, like an extracted zip)
         shell: pwsh
         timeout-minutes: 5

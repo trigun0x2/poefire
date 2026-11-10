@@ -4,16 +4,19 @@
 # Build from the repository root:  pyinstaller packaging/windows/poefire.spec
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 root = Path(SPECPATH).parents[1]  # noqa: F821 (SPECPATH is set by PyInstaller)
 
 a = Analysis(  # noqa: F821
     [str(root / "packaging" / "windows" / "launcher.py")],
     pathex=[str(root / "src")],
-    datas=[(str(root / "src" / "poefire" / "web" / "static"), "poefire/web/static")],
+    # sigstore: its built-in trust roots (the updater checks update attestations with them)
+    datas=[(str(root / "src" / "poefire" / "web" / "static"), "poefire/web/static")]
+    + collect_data_files("sigstore"),
     # uvicorn picks its protocol/loop implementations by import string at runtime
-    hiddenimports=collect_submodules("uvicorn") + collect_submodules("poefire"),
+    hiddenimports=collect_submodules("uvicorn") + collect_submodules("poefire")
+    + collect_submodules("sigstore"),
     excludes=["tkinter"],
 )
 pyz = PYZ(a.pure)  # noqa: F821

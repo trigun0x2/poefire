@@ -304,6 +304,33 @@ def cmd_apply_update(args: argparse.Namespace) -> int:
     return apply_update(args.source, args.target, args.pid, args.log)
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Check a downloaded release zip against its build attestation (.sigstore.json)."""
+    import hashlib
+
+    from poefire import provenance
+
+    zip_path: Path = args.zip
+    bundle = args.bundle or zip_path.with_name(zip_path.name + ".sigstore.json")
+    sha = args.sha256
+    try:
+        if not sha:
+            digest = hashlib.sha256()
+            with open(zip_path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    digest.update(chunk)
+            sha = digest.hexdigest()
+        provenance.verify(bundle.read_bytes(), sha, zip_path.name,
+                          beta=args.beta, offline=args.offline)  # fmt: skip
+    except (OSError, provenance.ProvenanceError) as e:
+        print(f"NOT verified: {e}")
+        return 1
+    branches = "master or dev" if args.beta else "master"
+    print(f"verified: {zip_path.name} (sha256 {sha}) was built by "
+          f"{provenance.WORKFLOW} on {branches}")  # fmt: skip
+    return 0
+
+
 def cmd_debug_report(args: argparse.Namespace) -> int:
     """Save a debug report (as Settings > Diagnostics does) without opening the app."""
     from poefire import diagnostics
@@ -420,6 +447,14 @@ def build_parser() -> argparse.ArgumentParser:
     lp.set_defaults(fn=cmd_runs)
 
     sub.add_parser("paths", help="show resolved paths").set_defaults(fn=cmd_paths)
+    vp = sub.add_parser("verify", help="check a downloaded release zip against its signed "
+                        "build attestation")  # fmt: skip
+    vp.add_argument("zip", type=Path)
+    vp.add_argument("--bundle", type=Path, help="default: <zip>.sigstore.json next to it")
+    vp.add_argument("--beta", action="store_true", help="also accept beta builds (from dev)")
+    vp.add_argument("--sha256", help="the zip's SHA-256, instead of reading the zip")
+    vp.add_argument("--offline", action="store_true", help="use the built-in Sigstore trust root")
+    vp.set_defaults(fn=cmd_verify)
     sub.add_parser("debug-report", help="save a debug report .zip to send when something "
                    "doesn't work").set_defaults(fn=cmd_debug_report)  # fmt: skip
 

@@ -4,6 +4,8 @@ import hashlib
 import io
 import threading
 import zipfile
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +13,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from poefire import updater
+from poefire import provenance, updater
 from poefire.config import Config
 from poefire.pricing.ninja import NinjaClient, NinjaError, PriceLine
 from poefire.pricing.service import PriceService
@@ -63,6 +65,8 @@ def release(version: str, prerelease: bool = False, draft: bool = False,
     assets = [
         {"name": name, "size": len(GOOD_ZIP), "browser_download_url": f"https://dl/{name}"},
         {"name": f"{name}.sha256", "size": 90, "browser_download_url": f"https://dl/{name}.sha256"},
+        {"name": f"{name}.sigstore.json", "size": 9,
+         "browser_download_url": f"https://dl/{name}.sigstore.json"},
     ] if with_asset else []  # fmt: skip
     return {"tag_name": f"v{version}", "body": f"notes for {version}", "prerelease": prerelease,
             "draft": draft, "html_url": f"https://gh/releases/v{version}", "assets": assets,
@@ -81,13 +85,24 @@ class GitHub:
         self.requests.append(r)
         if r.url.host == "api.github.com":
             return httpx.Response(200, json=self.releases)
+        if r.url.path.endswith(".sigstore.json"):
+            return httpx.Response(200, content=b'{"bundle": 1}')
         if r.url.path.endswith(".sha256"):
             return httpx.Response(200, text=f"{self.sha}  {r.url.path.rsplit('/', 1)[1]}\n")
         return httpx.Response(200, content=self.zip)
 
 
-def make_updater(gh: GitHub, current: str = "0.5.0") -> Updater:
-    return Updater(current, "poefire/test", http=httpx.Client(transport=httpx.MockTransport(gh)))
+VERIFIED: list[tuple[bytes, str, str, bool]] = []
+
+
+def stub_verify(bundle: bytes, sha256: str, name: str, *, beta: bool) -> None:
+    VERIFIED.append((bundle, sha256, name, beta))
+
+
+def make_updater(gh: GitHub, current: str = "0.5.0",
+                 verify: Callable[..., None] = stub_verify) -> Updater:  # fmt: skip
+    return Updater(current, "poefire/test", http=httpx.Client(transport=httpx.MockTransport(gh)),
+                   verify=verify)  # fmt: skip
 
 
 def test_check_picks_newest_public_release() -> None:
@@ -316,3 +331,22 @@ def test_rolling_beta_release_is_read_by_its_zip_version() -> None:
     assert info is not None and info.version == "0.9.0-dev.25" and info.tag == "beta"
     assert make_updater(gh, current="0.8.0").check() is None  # stable channel ignores it
     assert make_updater(gh, current="0.9.0-dev.25").check(include_prereleases=True) is None
+
+
+def test_stage_checks_the_build_attestation(tmp_path: Path) -> None:
+    VERIFIED.clear()
+    info = make_updater(GitHub([release("0.6.0-dev.4", prerelease=True)])).check(True)
+    assert info is not None and info.attestation_url
+    make_updater(GitHub([])).stage(info, tmp_path)
+    sha = hashlib.sha256(GOOD_ZIP).hexdigest()
+    assert [(b'{"bundle": 1}', sha, "poefire-0.6.0-dev.4-windows-x64.zip", True)] == VERIFIED
+
+    def forged(*a: Any, **k: Any) -> None:
+        raise provenance.ProvenanceError("signed by someone else")
+
+    with pytest.raises(UpdateError, match="signature check: signed by someone else"):
+        make_updater(GitHub([]), verify=forged).stage(info, tmp_path / "b")
+
+    unsigned = replace(info, attestation_url=None)
+    with pytest.raises(UpdateError, match="no build attestation"):
+        make_updater(GitHub([])).stage(unsigned, tmp_path / "c")

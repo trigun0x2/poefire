@@ -358,6 +358,10 @@ are coming in, what the log's last lines contain (with hints, e.g. a game not se
 and the campaign tracker's state. Turn on **Verbose logging** first to log why lines were
 ignored. Without the app window: `poefire-cli.exe debug-report`.
 
+To check a downloaded release zip against its signed build attestation:
+`poefire-cli.exe verify poefire-<version>-windows-x64.zip` (with the `.sigstore.json` from the
+same release next to it; `--beta` for a beta build). See [SECURITY.md](../SECURITY.md).
+
 Logs: `%APPDATA%\poefire\logs\poefire.log` (rotated, 5 x 2 MB); the windowed app's own output
 and crash tracebacks are in `console.log` next to it.
 

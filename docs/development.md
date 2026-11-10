@@ -107,8 +107,12 @@ and pull request.
 Each build stamps the version into the app, runs the tests, and builds a one-folder app with
 PyInstaller (`packaging/windows/poefire.spec`). It then starts the built exe to check it serves
 the UI and that the native window opens, and publishes `poefire-<version>-windows-x64.zip`
-(app files at the top level) with its SHA-256 checksum. Releases run one at a time, so two
-quick pushes get two versions.
+(app files at the top level) with its SHA-256 checksum and a signed build attestation
+(`<zip>.sigstore.json`, from `actions/attest-build-provenance`). The updater refuses an update
+whose attestation wasn't signed by `release.yml` on `master` (or `dev`, for betas) for that
+exact zip (`src/poefire/provenance.py`); `poefire verify <zip>` runs the same check. See
+[SECURITY.md](../SECURITY.md). Releases run one at a time, so two quick pushes get two
+versions.
 
 ## Development
 

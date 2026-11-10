@@ -15,6 +15,14 @@
   <a href="#getting-started">Getting started</a>
   ·
   <a href="#faq">FAQ</a>
+  ·
+  <a href="SECURITY.md">Security</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/trigun0x2/poefire/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/trigun0x2/poefire/actions/workflows/ci.yml/badge.svg?branch=master"></a>
+  <a href="https://github.com/trigun0x2/poefire/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/trigun0x2/poefire/actions/workflows/codeql.yml/badge.svg?branch=master"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/trigun0x2/poefire"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/trigun0x2/poefire/badge"></a>
 </p>
 
 ![The Session page: last map, session stats and your maps](docs/images/session.png)
@@ -119,6 +127,11 @@ your chaos per map while mapping. Set the game to **Windowed** or **Windowed Ful
 **Is this allowed?** poefire only reads files and website data that are yours: the game's log
 and your own stash and characters. It doesn't read game memory, inspect network traffic, or
 press keys for you.
+
+**Is it safe to run?** Every release is built in public on GitHub from this source code and
+signed, and the app checks that signature before installing an update. You can check your
+download yourself, see what poefire reads and which sites it connects to (no telemetry) in
+[SECURITY.md](SECURITY.md).
 
 **My maps show no loot.** Check that loot tracking is on (bottom left of the window), and that
 you've picked every stash tab your loot goes into in Settings. Loot is counted when you're
