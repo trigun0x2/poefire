@@ -152,3 +152,7 @@ the `.zip` it creates (it never contains your cookie, chat or whispers). Turning
 - [Reference](docs/reference.md): every feature and setting in detail, the config file and
   the command line.
 - [Development](docs/development.md): running from source, how it works, and releases.
+
+## License
+
+[MIT](LICENSE). Path of Exile is a trademark of Grinding Gear Games; poefire isn't affiliated with or endorsed by them.

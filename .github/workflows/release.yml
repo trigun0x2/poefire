@@ -181,8 +181,8 @@ jobs:
       # GitHub zips every artifact itself, so upload the app folder as is (not a zip): the
       # artifact download is then one zip with the app inside. The release zip is made from
       # these same files in the next job.
-      - name: Add the README
-        run: cp README.md dist/poefire/
+      - name: Add the README and license
+        run: cp README.md LICENSE dist/poefire/
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

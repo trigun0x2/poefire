@@ -314,11 +314,14 @@ class CampaignTracker:
             self._levelled(run, event)
         elif isinstance(event, KitavaAffliction):
             self._kitava(run, event)
-        elif isinstance(event, PlayerSlain):
-            if run.character and event.character.casefold() == run.character.casefold():
-                run.deaths += 1
-                self.store.save_campaign_run(run)
-                log.info("campaign run %s: %s died (%d)", run.id, run.character, run.deaths)
+        elif (
+            isinstance(event, PlayerSlain)
+            and run.character
+            and event.character.casefold() == run.character.casefold()
+        ):
+            run.deaths += 1
+            self.store.save_campaign_run(run)
+            log.info("campaign run %s: %s died (%d)", run.id, run.character, run.deaths)
 
     def _split(self, run: CampaignRun, kind: str, name: str, at: datetime,
                level: int | None = None) -> None:  # fmt: skip
