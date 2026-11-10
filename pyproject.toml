@@ -21,6 +21,7 @@ window = [
 ]
 
 [dependency-groups]
+fuzz = ["atheris>=2.3"]
 dev = [
     "pytest>=8",
     "mypy>=1.10",

@@ -45,6 +45,18 @@ jobs:
           uv export --locked --no-dev --all-extras --no-emit-project --format requirements-txt > requirements.txt
           uvx pip-audit --strict --disable-pip --require-hashes -r requirements.txt
 
+  fuzz:
+    name: Fuzz the log parser and the guide page reader
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --group fuzz
+      - run: uv run python fuzz/fuzz_parser.py -max_total_time=60
+      - run: uv run python fuzz/fuzz_layouts.py -max_total_time=60
+
   ui:
     name: Browser smoke test
     runs-on: ubuntu-latest
@@ -64,10 +76,10 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8473/api/status >/dev/null && break; sleep 1; done
       - name: Install Playwright
         run: |
-          cd "$RUNNER_TEMP" && npm init -y >/dev/null && npm install playwright@1.56.1
-          npx --prefix "$RUNNER_TEMP" playwright install --with-deps chromium
+          npm ci --prefix tests/browser --ignore-scripts
+          tests/browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Every page, no errors
-        run: NODE_PATH="$RUNNER_TEMP/node_modules" node tests/browser/smoke.js http://127.0.0.1:8473
+        run: NODE_PATH="$PWD/tests/browser/node_modules" node tests/browser/smoke.js http://127.0.0.1:8473
       - name: Server log
         if: always()
         run: cat "$RUNNER_TEMP/server.log"

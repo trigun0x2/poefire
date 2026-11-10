@@ -7,3 +7,4 @@ __pycache__/
 dist/
 *.sqlite3
 *.db
+node_modules/

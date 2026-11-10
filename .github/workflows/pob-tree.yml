@@ -9,8 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  actions: write # to start the beta build (a commit made here doesn't trigger it)
+  contents: read
 
 concurrency:
   group: pob-tree
@@ -19,6 +18,9 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # to commit the new tree data
+      actions: write # to start the beta build (a commit made here doesn't trigger it)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

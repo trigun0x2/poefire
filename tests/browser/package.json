@@ -1,0 +1,8 @@
+{
+  "name": "poefire-browser-tests",
+  "private": true,
+  "description": "Playwright for the browser smoke test and the README screenshots (CI installs it with npm ci, from the lockfile).",
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}

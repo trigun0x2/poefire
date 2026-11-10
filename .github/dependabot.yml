@@ -17,3 +17,8 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /tests/browser
+    target-branch: dev
+    schedule:
+      interval: weekly

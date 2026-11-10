@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: screenshots-${{ github.ref }}
@@ -24,6 +24,8 @@ concurrency:
 jobs:
   screenshots:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # to commit the screenshots
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -41,11 +43,11 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8473/api/status >/dev/null && break; sleep 1; done
       - name: Install Playwright
         run: |
-          cd "$RUNNER_TEMP" && npm init -y >/dev/null && npm install playwright@1.56.1
-          npx --prefix "$RUNNER_TEMP" playwright install --with-deps chromium
+          npm ci --prefix tests/browser --ignore-scripts
+          tests/browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Screenshots
         run: |
-          NODE_PATH="$RUNNER_TEMP/node_modules" node scripts/screenshots.js http://127.0.0.1:8473 docs/images
+          NODE_PATH="$PWD/tests/browser/node_modules" node scripts/screenshots.js http://127.0.0.1:8473 docs/images
           uv run python scripts/overlay_preview.py docs/images/overlay.png
       - name: Server log
         if: always()
