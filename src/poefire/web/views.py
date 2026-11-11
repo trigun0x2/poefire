@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from poefire.loot.sales import SOLD_PREFIX
 from poefire.pricing.book import PriceBook, Quote
 from poefire.pricing.valuation import Valuation, is_worth_showing, value_deltas
 from poefire.store import Store
@@ -243,6 +244,7 @@ def valuation_json(v: Valuation, chaos_per_divine: float | None) -> Json:
                 "chaos_total": _round(i.chaos_total, 1),
                 "icon": i.icon,
                 "source": i.source,
+                "sold": i.key.startswith(SOLD_PREFIX),  # a trade sale's payment, taken out
             }
             for i in shown
         ],

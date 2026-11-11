@@ -25,6 +25,7 @@ from poefire.campaign import CampaignTracker
 from poefire.config import Config
 from poefire.hotkey import GlobalHotkey, HotkeyError, beep
 from poefire.leagues import default_price_league, is_private
+from poefire.loot import sales
 from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.pricing.ninja import NinjaClient
@@ -235,6 +236,10 @@ class AppRuntime:
         rec.handlers.append(self._on_loot)
         rec.valuer = self.value_snapshot
         rec.snapshotter.set_league(self._league)
+        api = getattr(rec.snapshotter, "api", None)
+        if api is not None and hasattr(api, "trade_history"):  # the POESESSID connection
+            snapshotter = rec.snapshotter
+            rec.sales = lambda: sales.parse_history(api.trade_history(snapshotter.league))
         if self._started:
             rec.start()
 

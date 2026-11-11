@@ -227,7 +227,7 @@ function renderLastMap() {
   $("last-drops").innerHTML = (m.top_items || []).map((i) => `
     <li>
       ${i.icon ? `<img src="${esc(i.icon)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noicon'}))">` : '<span class="noicon"></span>'}
-      <span class="name" title="${esc(i.name)}">${esc(i.name)}</span>
+      <span class="name" title="${esc(i.sold ? `${i.name}: its payment isn't counted as loot` : i.name)}">${esc(i.name)}${i.sold ? ' <span class="chip">trade</span>' : ""}</span>
       <span class="qty">+${i.quantity}</span>
       <span class="val">${chaos(i.chaos_total)}</span>
     </li>`).join("");
@@ -348,7 +348,7 @@ function itemList(items, limit = 40) {
   return `<ul class="items">${shown.map((i) => `
     <li>
       ${i.icon ? `<img src="${esc(i.icon)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noicon'}))">` : '<span class="noicon"></span>'}
-      <span class="name" title="${esc(i.name)}">${esc(i.name)}</span>
+      <span class="name" title="${esc(i.sold ? `${i.name}: its payment isn't counted as loot` : i.name)}">${esc(i.name)}${i.sold ? ' <span class="chip">trade</span>' : ""}</span>
       <span class="qty">${i.quantity > 0 ? "+" : ""}${i.quantity}</span>
       <span class="val">${i.chaos_total == null ? '<span class="dim">no price</span>' : chaos(i.chaos_total)}</span>
     </li>`).join("")}</ul>` + (more > 0 ? `<div class="note">+${more} more</div>` : "");

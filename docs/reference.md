@@ -92,6 +92,16 @@ There are two ways to read your inventory and stash:
   registered with GGG (`oauth@grindinggear.com`). Set `oauth_client_id` and `contact`, then
   run `poefire login`.
 
+**Trade sales aren't loot.** With the POESESSID connection, each snapshot also reads your
+trade history (`/api/trade/history/<league>`, the sales from your merchant tabs, at most once
+a minute). When a sale's payment shows up in a watched tab, at least the whole price in the
+currency it was paid in, that amount is taken back out of the map you were running (or the
+hideout time between maps). The map's loot shows it as a minus line, "Sold on trade · <item>",
+tagged *trade*. Sales from before poefire first read the history are skipped. A sale whose
+payment never shows up in a watched tab is dropped after a week. If the history can't be
+read (OAuth login, the site refusing it), sales count as loot, as before, and poefire tries
+again after 30 minutes.
+
 **Session setup.** Log in on pathofexile.com in your browser and copy the `POESESSID` cookie
 (dev tools → Storage/Application → Cookies). Set `account_name` in `config.toml` to your full
 account name, including the `#1234` part. Then run `poefire-cli.exe set-session` (from source:

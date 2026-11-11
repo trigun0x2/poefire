@@ -39,7 +39,7 @@ It doesn't read game memory, look at network traffic, or send keys or clicks to 
 
 | Host | What for |
 | --- | --- |
-| `www.pathofexile.com`, `api.pathofexile.com` | your characters and stash tabs, with your POESESSID or OAuth login |
+| `www.pathofexile.com`, `api.pathofexile.com` | your characters, stash tabs and trade sales, with your POESESSID or OAuth login |
 | `poe.ninja` | item prices |
 | `www.poewiki.net` | which game patch a campaign run was on |
 | `www.definitivguide.com` | CyclonDefinitiv's zone layout guides |

@@ -10,6 +10,8 @@ endpoints the pathofexile.com website uses, not the documented developer API:
     GET /character-window/get-stash-items?...&tabIndex=N&tabs=0    -> {items}
     GET /api/stash/<league>/<tab id>[/<child id>]                  -> {stash: {children|items}}
         (the only way to read map/unique tab sections; same cookie)
+    GET /api/trade/history/<league>                                -> {result: [sale, ...]}
+        (your merchant tab sales, so their payments aren't counted as loot)
 
 The cookie is a full login session for the account: it is kept out of logs and error
 messages, and stored separately from the config (see SessionStore).
@@ -200,7 +202,10 @@ class SessionApi:
 
     # --- transport ---
 
-    def _get(self, bucket: str, path: str, params: dict[str, str | int] | None = None) -> Any:
+    def _get(self, bucket: str, path: str, params: dict[str, str | int] | None = None,
+             auth: bool = True) -> Any:  # fmt: skip
+        """`auth`: whether a refusal means the cookie is bad (False for endpoints that can
+        refuse for other reasons, like the trade site)."""
         url = WEB_BASE + path + (f"?{urlencode(params)}" if params else "")
         with self._lock:
             self.limiter.acquire(bucket)
@@ -226,7 +231,9 @@ class SessionApi:
             raise SessionError(f"rate limited; retry after {resp.headers.get('Retry-After', '?')}s")
         try:
             data = self._check(resp, path)
-        except SessionExpiredError:
+        except SessionExpiredError as e:
+            if not auth:
+                raise SessionError(f"HTTP {resp.status_code} from {path}") from e
             self._report(False)
             raise
         self._report(True)
@@ -304,6 +311,11 @@ class SessionApi:
             {**self._common(), "character": name},
         )
         return {"source": "website", "items": items, "passives": passives}
+
+    def trade_history(self, league: str) -> Any:
+        """Your sales from merchant tabs in `league`: {"result": [{time, item_id, item,
+        price: {amount, currency}}, ...]} (see poefire.loot.sales)."""
+        return self._get("trade", f"/api/trade/history/{quote(league, safe='')}", auth=False)
 
     def list_stashes(self, league: str) -> list[Json]:
         data = self._get(

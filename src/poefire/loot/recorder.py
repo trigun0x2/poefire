@@ -24,6 +24,7 @@ from enum import StrEnum
 
 from poefire.loot.diff import ItemDelta, diff_items
 from poefire.loot.items import ItemEntry
+from poefire.loot.sales import Sale, SaleBook
 from poefire.loot.snapshot import Snapshot, Snapshotter
 from poefire.store import Store
 from poefire.tracker import Notice, NoticeKind, RunNotice, SafeZoneEntered
@@ -41,6 +42,10 @@ class Trigger(StrEnum):
     RUN_RETURN = "run_return"
     MANUAL = "manual"
 
+
+SALES_KEY = "trade_sales"
+SALES_EVERY = 60.0  # seconds between trade history fetches
+SALES_RETRY = 1800.0  # after a failure
 
 _KIND = {Trigger.RUN_RETURN: "run", Trigger.RUN_START: "between", Trigger.MANUAL: "manual"}
 
@@ -94,6 +99,10 @@ class LootRecorder:
         self.handlers: list[Callable[[LootResult], None]] = []
         # Set by the app: prices a complete snapshot -> (league, chaos, chaos/divine, unpriced)
         self.valuer: Callable[[list[ItemEntry]], SnapshotValue | None] | None = None
+        # Set by the app when the account connection can read the trade history: your sales,
+        # so their payments aren't counted as loot (see poefire.loot.sales).
+        self.sales: Callable[[], list[Sale]] | None = None
+        self._sales_next = float("-inf")  # monotonic time of the next allowed history fetch
         self._store: Store | None = None
         self._pending: list[_Request] = []
         self._cond = threading.Condition()
@@ -178,22 +187,45 @@ class LootRecorder:
         if v is not None:
             store.add_snapshot_value(snapshot_id, snap.taken_at, *v)
 
+    def _fetch_sales(self) -> list[Sale] | None:
+        """The trade history, at most once a minute (once per 30 min after a failure)."""
+        if self.sales is None or self.monotonic() < self._sales_next:
+            return None
+        try:
+            sales = self.sales()
+        except Exception as e:  # network, refused, a changed format
+            log.info("trade history not available (%s): sales are counted as loot", e)
+            self._sales_next = self.monotonic() + SALES_RETRY
+            return None
+        self._sales_next = self.monotonic() + SALES_EVERY
+        return sales
+
     def record(self, trigger: Trigger, run_id: str | None = None) -> LootResult:
         if self._store is None:
             self._store = self.store_factory()
         store = self._store
         snap = self.snapshotter.take()  # network I/O outside the DB transaction
+        sales = self._fetch_sales() if snap.complete else None
         with store.transaction():
             prev = store.last_complete_snapshot()
             sid = store.add_snapshot(snap, trigger.value, run_id)
             if not snap.complete:
                 return LootResult(trigger, run_id, sid, False, False, error=snap.error)
             self._record_value(store, sid, snap)
+            book: SaleBook | None = None
+            if sales is not None:
+                saved = store.get_json(SALES_KEY)
+                book = SaleBook.from_json(saved)
+                book.add(sales, first_fetch=saved is None)
+                store.set_json(SALES_KEY, book.to_json())
             if prev is None or snap.taken_at - prev[1] > self.max_gap:
                 store.prune_snapshot_items()
                 return LootResult(trigger, run_id, sid, True, True)
             prev_id, _, prev_items = prev
             deltas = diff_items(prev_items, snap.items)
+            if book is not None and book.pending:
+                deltas += book.offsets(deltas, snap.taken_at)
+                store.set_json(SALES_KEY, book.to_json())
             store.add_loot(
                 None if trigger is Trigger.MANUAL else run_id, _KIND[trigger], prev_id, sid, deltas
             )
