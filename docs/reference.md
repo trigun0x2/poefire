@@ -239,6 +239,11 @@ level from 15. The website only sees gear and passive changes once the game save
 zone change, so a level is captured at your first zone change after reaching it (two levels in
 one zone make one snapshot, labelled with the higher one).
 
+From level 80, levels come slowly, so there's also a **daily snapshot**. On a day without a
+snapshot (from a level-up or an earlier daily one), the character you're playing is captured
+at a zone change once you've played for an hour that day. A failed try is repeated an hour
+later and isn't recorded as a missed level.
+
 - Any character on your account is captured; a party member's level-up is ignored. Lines read
   while catching up on the log after a restart never trigger a snapshot (the website only has
   the build as it is now).

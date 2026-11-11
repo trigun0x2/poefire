@@ -8,7 +8,7 @@ import sqlite3
 import zlib
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -782,6 +782,15 @@ class Store:
             "FROM build_snapshots b GROUP BY character ORDER BY level DESC, last_at DESC"
         )
         return [dict(r) for r in rows]
+
+    def has_build_snapshot_on(self, character: str, day: date) -> bool:
+        """Whether `character` has a (successful) snapshot taken on `day`, local time."""
+        row = self.conn.execute(
+            "SELECT 1 FROM build_snapshots WHERE character = ? AND data IS NOT NULL "
+            "AND substr(taken_at, 1, 10) = ? LIMIT 1",
+            (character, day.isoformat()),
+        ).fetchone()
+        return row is not None
 
     def list_build_snapshots(self, character: str) -> list[BuildSnapshot]:
         """A character's snapshots by level (without their data)."""

@@ -5,6 +5,11 @@ gear and passive changes once the game saves them, which happens on zone changes
 is captured at the first zone change after reaching it (two levels in one zone make one
 snapshot, labelled with the higher one).
 
+From level 80 levels come slowly, so there's also a daily snapshot: on a day without one, the
+character you're playing (the website's "current" character) is captured at a zone change
+once you've played an hour that day (so a level-up early in the session makes it unneeded,
+and it shows the build as played, not as logged in).
+
 The raw website responses are kept (compressed), so later features (Path of Building codes)
 can be built from them. `summarize()` turns either source into what the Builds tab shows.
 """
@@ -17,7 +22,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 
 from poefire.events import LevelUp, LogEvent, ZoneEntered
@@ -31,6 +36,10 @@ RETRY_AFTER = 180.0  # seconds before a failed snapshot is tried once more
 # Lines older than this (read while catching up on the log after a restart) never trigger a
 # fetch: the website only has the build as it is now, which would be labelled with an old level.
 FRESH = timedelta(minutes=10)
+DAILY_FROM_LEVEL = 80
+DAILY_AFTER = timedelta(hours=1)  # of play that day, before the daily snapshot
+DAILY_RETRY = timedelta(hours=1)  # after a failed daily snapshot
+DAILY = -1  # the job "take today's snapshot if none yet" (in place of a level)
 
 
 def wants_snapshot(level: int) -> bool:
@@ -190,6 +199,10 @@ class BuildWatcher:
         self.retry_after = retry_after
         self.sleep = sleep
         self.enabled = True
+        self.daily = True  # the daily snapshot from DAILY_FROM_LEVEL
+        self._day: tuple[date, datetime] | None = None  # today, and when play started today
+        self._daily_done: date | None = None
+        self._daily_tried: datetime | None = None
         self.pending: dict[str, tuple[int, str]] = {}  # character -> (level, class) to capture
         self.last_error: str | None = None
         self._queue: queue.Queue[tuple[str, int, str, int] | None] = queue.Queue()
@@ -201,6 +214,9 @@ class BuildWatcher:
     def handle(self, event: LogEvent | None, line: str) -> None:
         if not self.enabled or event is None or self.now() - event.ts > FRESH:
             return
+        today = event.ts.date()
+        if self._day is None or self._day[0] != today:
+            self._day = (today, event.ts)
         if isinstance(event, LevelUp):
             if wants_snapshot(event.level):
                 self.pending[event.character] = (event.level, event.character_class)
@@ -214,6 +230,42 @@ class BuildWatcher:
                 self._queue.put((name, level, cls, 0))
             self.pending.clear()
             self._ensure_worker()
+        # after a level snapshot from this zone change, so that one counts for today
+        if isinstance(event, ZoneEntered) and self._daily_due(event.ts):
+            self._daily_tried = event.ts
+            self._queue.put(("", DAILY, "", 0))
+            self._ensure_worker()
+
+    def _daily_due(self, ts: datetime) -> bool:
+        if not self.daily or self._day is None or self._daily_done == ts.date():
+            return False
+        if ts - self._day[1] < DAILY_AFTER:
+            return False
+        return self._daily_tried is None or ts - self._daily_tried >= DAILY_RETRY
+
+    def daily_snapshot(self) -> BuildSnapshot | None:
+        """Today's snapshot of the character being played, from level 80, unless it already
+        has one today (a level-up or an earlier daily one). Runs on the worker."""
+        today = self.now().date()
+        api = self.api_getter()
+        if api is None:
+            return None
+        chars = api.list_characters()
+        self._own = {str(c.get("name", "")).casefold() for c in chars}
+        cur = next((c for c in chars if c.get("current")), None)
+        level = int(cur.get("level") or 0) if cur else 0
+        if cur is None or level < DAILY_FROM_LEVEL:
+            self._daily_done = today  # nothing to do today
+            return None
+        name = str(cur.get("name", ""))
+        with self.store_factory() as store:
+            if store.has_build_snapshot_on(name, today):
+                self._daily_done = today
+                return None
+        snap = self.capture(name, level, str(cur.get("class") or ""), final=False)
+        self._daily_done = today
+        log.info("daily build snapshot of %s (level %d)", name, level)
+        return snap
 
     def request(self, character: str, level: int = 0, char_class: str = "") -> None:
         """Take a snapshot now (the Builds tab's button); level 0 = as the website reports."""
@@ -234,6 +286,12 @@ class BuildWatcher:
     def _run(self) -> None:
         while (job := self._queue.get()) is not None:
             name, level, cls, attempt = job
+            if level == DAILY:
+                try:
+                    self.daily_snapshot()
+                except Exception as e:
+                    log.warning("daily build snapshot failed: %s", e)
+                continue
             try:
                 self.capture(name, level, cls, final=attempt > 0)
             except _Retry:

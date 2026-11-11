@@ -235,3 +235,65 @@ def test_characters_are_listed_by_level(tmp_path: Path) -> None:
             s.add_build_snapshot(BuildSnapshot(char, level, t - timedelta(days=age), "L", "Witch",
                                                {"items": [], "passives": {}}))  # fmt: skip
         assert [c["character"] for c in s.build_characters()] == ["Main", "Alt", "Fresh"]
+
+
+class HighLevelApi(FakeApi):
+    def __init__(self, level: int = 92) -> None:
+        super().__init__()
+        self.level = level
+        self.listed = 0
+
+    def list_characters(self) -> list[dict[str, Any]]:
+        self.listed += 1
+        return [{"name": "Speedy", "league": "Keepers", "level": self.level, "class": "Deadeye",
+                 "current": True}, {"name": "Alt", "league": "Standard", "level": 95}]  # fmt: skip
+
+
+def test_daily_snapshot_from_level_80(tmp_path: Path) -> None:
+    api = HighLevelApi()
+    clock = [NOW]
+    w = BuildWatcher(lambda: api, lambda: Store(tmp_path / "db"), lambda: clock[0])
+    jobs: list[Any] = []
+    w._ensure_worker = lambda: None  # type: ignore[method-assign]  # jobs run here instead
+
+    def zone(minutes: int) -> None:
+        clock[0] = NOW + timedelta(minutes=minutes)
+        w.handle(ZoneEntered(clock[0], "Strand"), "")
+        while not w._queue.empty():
+            jobs.append(job := w._queue.get())
+            if job is not None and job[1] == -1:
+                w.daily_snapshot()
+
+    zone(0)
+    zone(30)
+    assert jobs == []  # not an hour of play yet
+    zone(61)
+    with Store(tmp_path / "db") as s:
+        (snap,) = s.list_build_snapshots("Speedy")
+        assert snap.level == 92 and snap.ok and snap.char_class == "Deadeye"
+    zone(90)
+    zone(200)
+    assert len(jobs) == 1 and api.calls == ["Speedy"]  # once a day
+    zone(24 * 60 + 5)  # the next day: the clock starts again
+    zone(24 * 60 + 70)
+    assert api.calls == ["Speedy", "Speedy"]
+
+
+def test_no_daily_snapshot_after_a_level_one_or_below_80(tmp_path: Path) -> None:
+    api = HighLevelApi()
+    with Store(tmp_path / "db") as s:
+        s.add_build_snapshot(BuildSnapshot("Speedy", 91, NOW - timedelta(hours=2), data=BUILD))
+    w = BuildWatcher(lambda: api, lambda: Store(tmp_path / "db"), lambda: NOW)
+    assert w.daily_snapshot() is None and api.calls == []  # a level-up snapshot today
+    assert w._daily_done == NOW.date()
+    low = HighLevelApi(level=79)
+    w2 = BuildWatcher(lambda: low, lambda: Store(tmp_path / "other"), lambda: NOW)
+    assert w2.daily_snapshot() is None and low.calls == []
+    failing = HighLevelApi()
+    failing.fail = 1
+    w3 = BuildWatcher(lambda: failing, lambda: Store(tmp_path / "third"), lambda: NOW)
+    with pytest.raises(Exception):  # noqa: B017 (retried at a zone change an hour later)
+        w3.daily_snapshot()
+    assert w3._daily_done is None
+    with Store(tmp_path / "third") as s:
+        assert s.build_characters() == []  # a failed daily try isn't stored as a missed level
