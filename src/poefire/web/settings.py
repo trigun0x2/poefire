@@ -13,7 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from poefire import hotkey
-from poefire.api.session import SessionStore
+from poefire.api.session import LeagueError, SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config, newest_existing
 from poefire.leagues import is_private
 from poefire.store import Store
@@ -254,13 +254,34 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
 
     try:
         api = rt.recorder.snapshotter.api if rt.recorder is not None else wiring.account_api(rt.cfg)
-        chars = api.list_characters()
+        chars = api.list_characters()  # this is the cookie check
         rt.note_account_leagues(str(c.get("league") or "") for c in chars)
-        tabs = api.list_stashes(rt.league)
     except Exception as e:  # shown to the user as is (never contains the cookie)
         return {"ok": False, "error": str(e)}
+    # The stash tabs of the chosen league; if that league is wrong, the newest league's (from
+    # poe.ninja), then Standard's: the connection itself is fine either way.
+    tabs: list[Any] = []
+    tabs_league: str | None = None
+    note = None
+    for league in dict.fromkeys((rt.league, rt.default_league(), "Standard")):
+        try:
+            tabs = api.list_stashes(league)
+        except LeagueError as e:
+            note = note or str(e)
+            continue
+        except Exception as e:  # network, rate limit: not about the league
+            note = note or str(e)
+            break
+        tabs_league = league
+        break
+    if tabs_league == rt.league:
+        note = None
+    elif tabs_league is not None:
+        note = f"{note} Showing the stash tabs of {tabs_league} instead."
     return {
         "ok": True,
+        "tabs_league": tabs_league,
+        "league_note": note,
         "characters": [
             {"name": c.get("name"), "league": c.get("league"), "level": c.get("level"),
              "class": c.get("class"), "current": bool(c.get("current"))}

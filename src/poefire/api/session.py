@@ -49,6 +49,18 @@ class SessionExpiredError(SessionError):
     """The website rejected the POESESSID: it expired, or you logged out on pathofexile.com."""
 
 
+class LeagueError(SessionError):
+    """The website wouldn't list stash tabs in this league (the cookie itself is fine)."""
+
+    def __init__(self, league: str, detail: str) -> None:
+        self.league = league
+        super().__init__(
+            f"Couldn't read your stash tabs in the league {league!r} ({detail}). Pick the "
+            "league you play in Settings: its exact name, one your account has characters or "
+            "stash tabs in."
+        )
+
+
 EXPIRED_HELP = (
     "Log in on pathofexile.com, copy the new POESESSID cookie and paste it in "
     "Settings → Path of Exile account."
@@ -318,11 +330,23 @@ class SessionApi:
         return self._get("trade", f"/api/trade/history/{quote(league, safe='')}", auth=False)
 
     def list_stashes(self, league: str) -> list[Json]:
-        data = self._get(
-            "stash",
-            "/character-window/get-stash-items",
-            {**self._common(), "league": league, "tabs": 1, "tabIndex": 0},
-        )
+        """The league's stash tabs. A refusal here is about the league (misspelled, or one
+        the account has nothing in), not the cookie: the character calls catch an expired
+        one. So it raises LeagueError and never marks the cookie as bad."""
+        try:
+            data = self._get(
+                "stash",
+                "/character-window/get-stash-items",
+                {**self._common(), "league": league, "tabs": 1, "tabIndex": 0},
+                auth=False,
+            )
+        except SessionError as e:
+            if "rate limited" in str(e) or "network error" in str(e):
+                raise
+            raise LeagueError(league, str(e)) from e
+        if isinstance(data, dict) and data.get("error"):
+            err = data["error"]
+            raise LeagueError(league, str(err.get("message") if isinstance(err, dict) else err))
         tabs: list[Json] = []
         for t in data.get("tabs") or ():
             tab_id = str(t.get("id") or f"index:{t['i']}")

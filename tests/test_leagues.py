@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from poefire.api.session import SessionStore
 from poefire.config import Config
-from poefire.leagues import default_price_league, is_private
+from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.pricing.ninja import NinjaClient, NinjaError, PriceLine
 from poefire.pricing.service import PriceService
 from poefire.store import Store
@@ -25,6 +25,13 @@ NINJA = ["Keepers", "Hardcore Keepers", "SSF Keepers", "Standard", "Hardcore"]
 )  # fmt: skip
 def test_is_private(league: str, private: bool) -> None:
     assert is_private(league) is private
+
+
+def test_latest_league() -> None:
+    assert latest_league(NINJA) == "Keepers"
+    assert latest_league(["Standard", "Hardcore"]) == "Standard"
+    assert latest_league([]) == "Standard"
+    assert latest_league(["Mine (PL3)", "Ruthless Keepers", "Keepers"]) == "Keepers"
 
 
 def test_default_price_league() -> None:

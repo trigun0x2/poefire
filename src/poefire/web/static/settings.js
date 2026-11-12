@@ -149,7 +149,9 @@ async function checkAccount() {
     if (!r.ok) { setStatus("set-check-result", `✗ ${r.error}`, "bad"); return; }
     account = r;
     const inLeague = r.characters.filter((c) => c.league === $("set-league").value).length;
-    setStatus("set-check-result", `✓ Connected: ${r.characters.length} characters (${inLeague} in ${$("set-league").value}), ${r.tabs.length} stash tabs`, "ok");
+    const tabsIn = r.tabs_league && r.tabs_league !== $("set-league").value ? ` in ${r.tabs_league}` : "";
+    setStatus("set-check-result", `✓ Connected: ${r.characters.length} characters (${inLeague} in ${$("set-league").value}), ${r.tabs.length} stash tabs${tabsIn}` +
+      (r.league_note ? `. ${r.league_note}` : ""), r.league_note ? "warn" : "ok");
     const leagues = (await api("/api/leagues")).options; // now includes your characters' leagues
     $("set-league-options").innerHTML = leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
     renderLeagueHints();

@@ -14,13 +14,18 @@ def is_private(league: str) -> bool:
     return bool(_PRIVATE_RE.search(league))
 
 
+def latest_league(ninja_leagues: Iterable[str]) -> str:
+    """The current softcore challenge league (poe.ninja lists it first), else Standard."""
+    for name in ninja_leagues:
+        if name and not is_private(name) and not any(w in name for w in _NOT_A_TRADE_PARENT):
+            return name
+    return "Standard"
+
+
 def default_price_league(league: str, ninja_leagues: Iterable[str]) -> str:
     """poe.ninja has no data for private leagues. Price them from the current softcore
     challenge league (what most private leagues are based on); the user can override this in
     Settings, e.g. for a hardcore private league. Other leagues price from themselves."""
     if not is_private(league):
         return league
-    for name in ninja_leagues:
-        if not any(word in name for word in _NOT_A_TRADE_PARENT):
-            return name
-    return "Standard"
+    return latest_league(ninja_leagues)

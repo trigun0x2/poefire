@@ -24,7 +24,7 @@ from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
 from poefire.hotkey import GlobalHotkey, HotkeyError, beep
-from poefire.leagues import default_price_league, is_private
+from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.loot import sales
 from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
@@ -168,6 +168,8 @@ class AppRuntime:
         sessions.ensure_session(self._store, SESSION_GAP)
         stored = self._store.get_json(LEAGUE_KEY)
         self._league: str = stored or cfg.league or FALLBACK_LEAGUES[0]
+        # nobody picked a league yet: the newest one on poe.ninja, once it's been asked
+        self._league_chosen = bool(stored or cfg.league)
 
         self.updater = updater or Updater(
             __version__, f"poefire/{__version__} (+{wiring.PROJECT_URL})"
@@ -293,6 +295,7 @@ class AppRuntime:
     def set_league(self, league: str) -> None:
         with self._lock:
             self._league = league
+            self._league_chosen = True
         with Store(self.cfg.db_path) as store, store.transaction():  # own connection: thread
             store.set_json(LEAGUE_KEY, league)
         if self.recorder is not None:
@@ -309,6 +312,23 @@ class AppRuntime:
             self._ninja_leagues = self.prices.client.leagues()
             self._ninja_leagues_at = now
         return self._ninja_leagues
+
+    def default_league(self) -> str:
+        """The newest league on poe.ninja (the current challenge league), else Standard."""
+        try:
+            return latest_league(self.ninja_leagues())
+        except Exception:  # offline
+            return FALLBACK_LEAGUES[0]
+
+    def _pick_default_league(self) -> None:
+        """First start without a league: use the newest one, not Standard."""
+        if self._league_chosen:
+            return
+        league = self.default_league()
+        self._league_chosen = True
+        if league != self._league:
+            log.info("no league chosen yet: using %s", league)
+            self.set_league(league)
 
     def note_account_leagues(self, leagues: Iterable[str]) -> None:
         """Leagues the account's characters are in (private leagues show up here)."""
@@ -710,6 +730,7 @@ class AppRuntime:
         while not self._stop.is_set():
             self._league_check_now.clear()
             try:
+                self._pick_default_league()
                 self.check_league()
             except Exception as e:  # offline, rate limited, cookie expired: try next time
                 log.info("league check skipped: %s", e)

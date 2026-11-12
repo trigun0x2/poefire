@@ -194,3 +194,56 @@ def test_campaign_hotkey_setting(env: tuple[TestClient, AppRuntime, Path]) -> No
     assert bad.status_code == 400 and "modifier" in bad.json()["detail"]
     off = client.post("/api/settings", headers=H, json={"campaign_hotkey": ""})
     assert off.json()["campaign_hotkey"] == ""
+
+
+class WrongLeagueAccount(FakeAccount):
+    def __init__(self, ok: set[str]) -> None:
+        self.ok = ok
+        self.asked: list[str] = []
+
+    def list_stashes(self, league: str) -> list[dict[str, Any]]:
+        from poefire.api.session import LeagueError
+
+        self.asked.append(league)
+        if league not in self.ok:
+            raise LeagueError(league, "HTTP 403 from /character-window/get-stash-items")
+        return [{"id": "s", "name": f"{league} dump", "type": "PremiumStash"}]
+
+
+@pytest.mark.parametrize(
+    ("ok", "tabs_league"), [({"Keepers"}, "Keepers"), ({"Standard"}, "Standard"), (set(), None)]
+)
+def test_check_account_with_a_wrong_league(
+    env: tuple[TestClient, AppRuntime, Path], monkeypatch: pytest.MonkeyPatch,
+    ok: set[str], tabs_league: str | None,
+) -> None:  # fmt: skip
+    client, rt, _ = env
+    rt.set_league("Typo League")
+    monkeypatch.setattr(rt, "default_league", lambda: "Keepers")  # newest on poe.ninja
+    acc = WrongLeagueAccount(ok)
+    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg: acc)
+    r = client.post("/api/settings/check-account", headers=H).json()
+    assert r["ok"] and r["characters"][0]["name"] == "xyz_bow"  # the cookie works
+    assert r["tabs_league"] == tabs_league
+    assert "'Typo League'" in r["league_note"]
+    assert acc.asked[0] == "Typo League"
+    if tabs_league:
+        assert r["tabs"][0]["name"] == f"{tabs_league} dump"
+        assert r["league_note"].endswith(f"Showing the stash tabs of {tabs_league} instead.")
+    else:
+        assert r["tabs"] == [] and acc.asked == ["Typo League", "Keepers", "Standard"]
+
+
+def test_first_start_picks_the_newest_league(
+    env: tuple[TestClient, AppRuntime, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, rt, _ = env
+    monkeypatch.setattr(rt, "ninja_leagues", lambda: ["Keepers", "Hardcore Keepers", "Standard"])
+    rt._league_chosen = False  # as on a first start without a league in config.toml
+    rt._pick_default_league()
+    assert rt.league == "Keepers"
+    rt.set_league("Standard")  # the user's choice sticks
+    rt._pick_default_league()
+    assert rt.league == "Standard"
+    monkeypatch.setattr(rt, "ninja_leagues", lambda: [])  # poe.ninja unreachable
+    assert rt.default_league() == "Standard"

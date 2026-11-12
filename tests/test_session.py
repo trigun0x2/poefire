@@ -310,3 +310,23 @@ def test_auth_results_are_reported(response: httpx.Response, expired: bool | Non
         with pytest.raises(SessionError) as e2:
             api.list_characters()
         assert not isinstance(e2.value, SessionExpiredError) and reports == []
+
+
+def test_a_wrong_league_never_blames_the_cookie() -> None:
+    from poefire.api.session import LeagueError
+
+    def site(r: httpx.Request) -> httpx.Response:
+        q = parse_qs(r.url.query.decode())
+        if q.get("league") == ["Nope"]:
+            return httpx.Response(403, json={"error": {"code": 6, "message": "Forbidden"}})
+        if q.get("league") == ["Old"]:  # some errors come back as a 200
+            return httpx.Response(200, json={"error": {"code": 1, "message": "Resource not found"}})
+        return httpx.Response(200, json=[])
+
+    auth: list[bool] = []
+    api, _ = make(site, on_auth=auth.append)  # type: ignore[arg-type]
+    with pytest.raises(LeagueError, match=r"league 'Nope'.*HTTP 403"):
+        api.list_stashes("Nope")
+    with pytest.raises(LeagueError, match="Resource not found"):
+        api.list_stashes("Old")
+    assert False not in auth  # the cookie isn't marked as expired
