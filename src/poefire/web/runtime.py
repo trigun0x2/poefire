@@ -177,6 +177,7 @@ class AppRuntime:
         ok, why = can_self_update()
         self.update = UpdateState(can_install=ok, cannot_install_reason=why)
         self.request_exit: Callable[[], None] | None = None  # set by the UI host (window/server)
+        self.request_show: Callable[[], None] | None = None  # bring the app up (a 2nd launch)
         self._update_lock = threading.Lock()
 
         self.loot = LootStatus(enabled=False)

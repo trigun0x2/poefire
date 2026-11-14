@@ -153,6 +153,28 @@ jobs:
           if ($failed -or $exited) { Write-Error "native window did not start"; exit 1 }
           if ($marked) { Write-Error "Zone.Identifier was not removed"; exit 1 }
 
+      - name: Smoke test a second launch (windowed app, no console)
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $env:APPDATA = "$PWD\appdata-twice"
+          $first = Start-Process dist/poefire/poefire.exe -PassThru
+          Start-Sleep -Seconds 15
+          # the first one holds logs\console.log: the second used to crash setting up uvicorn's
+          # logging; now it hands over to the running app and exits
+          $second = Start-Process dist/poefire/poefire.exe -PassThru
+          if (-not $second.WaitForExit(60000)) { Write-Error "the second launch didn't exit"; exit 1 }
+          $logs = "$env:APPDATA\poefire\logs"
+          Get-ChildItem $logs
+          Get-Content "$logs\console.2.log" -ErrorAction SilentlyContinue
+          $firstAlive = -not $first.HasExited
+          Stop-Process -Id $first.Id -Force -ErrorAction SilentlyContinue
+          if ($second.ExitCode -ne 0) { Write-Error "second launch exited with $($second.ExitCode)"; exit 1 }
+          if (-not $firstAlive) { Write-Error "the first app didn't keep running"; exit 1 }
+          if (-not (Select-String -Path "$logs\console.2.log" -Pattern "already running" -Quiet)) {
+            Write-Error "the second launch didn't find the running app"; exit 1
+          }
+
       - name: Smoke test the self-update (packaged apply-update)
         shell: pwsh
         timeout-minutes: 5

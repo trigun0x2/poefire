@@ -103,3 +103,14 @@ class WindowControls:
 
     def close(self) -> None:
         self._w().destroy()
+
+    def _bring_to_front(self) -> None:
+        """Another launch of poefire found this one running: show the window (not exposed to
+        the page: underscore)."""
+        w: Any = self._w()
+        for step in ("restore", "show"):
+            if hasattr(w, step):
+                getattr(w, step)()
+        if hasattr(w, "on_top"):  # the usual way to raise a window above the others
+            w.on_top = True
+            w.on_top = False

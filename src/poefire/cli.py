@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import getpass
 import logging
+import os
 import re
 import signal
 import sys
@@ -353,6 +354,20 @@ def cmd_paths(args: argparse.Namespace) -> int:
     return 0
 
 
+def _show_running(url: str) -> bool:
+    """Whether poefire already answers at `url`; if so, asks it to bring its window up."""
+    import httpx
+
+    try:
+        r = httpx.get(url + "api/status", timeout=2)
+        if r.status_code != 200 or "loot" not in r.json():
+            return False
+        httpx.post(url + "api/window/show", headers={"X-Poefire": "1"}, timeout=2)
+    except (httpx.HTTPError, ValueError):
+        return False
+    return True
+
+
 def cmd_ui(args: argparse.Namespace) -> int:
     """Run the tracker with the web UI (in the browser, or a native window with --window)."""
     import uvicorn
@@ -360,13 +375,24 @@ def cmd_ui(args: argparse.Namespace) -> int:
     from poefire.web.app import create_app
     from poefire.web.runtime import AppRuntime
 
+    url = f"http://127.0.0.1:{args.port}/"
+    if _show_running(url):
+        # poefire already runs: it shows its window; a second copy would track everything
+        # twice into the same database (and couldn't take the port anyway)
+        if not args.window and not args.no_browser:
+            webbrowser.open(url)
+        print(f"poefire is already running at {url}")
+        return 0
     cfg = _config(args)
     rt = AppRuntime(cfg, config_path=args.config or default_config_path())
     if rt.log_path is None:
         print("Client.txt not found; run tracking is off (pass --log or set log_path)")
     elif rt.loot.reason:
         print(f"loot tracking off: {rt.loot.reason}")
-    url = f"http://127.0.0.1:{args.port}/"
+
+    def open_ui() -> None:
+        webbrowser.open(url)
+
     server = uvicorn.Server(
         uvicorn.Config(create_app(rt), host="127.0.0.1", port=args.port, log_level="warning")
     )
@@ -394,6 +420,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
                     )  # fmt: skip
                     controls._attach(window)
                     rt.request_exit = controls.close  # updater: close the window to install
+                    rt.request_show = controls._bring_to_front
                     _add_overlay(rt, window)
                     # the packaged exe carries the icon itself; this covers running from source
                     icon = Path(__file__).parent / "web" / "static" / "favicon.ico"
@@ -401,6 +428,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
                 except Exception as e:  # e.g. .NET/WebView2 can't load on this machine
                     print(f"native window failed ({e!r}); opening the browser instead")
                     rt.request_exit = lambda: setattr(server, "should_exit", True)
+                    rt.request_show = open_ui
                     webbrowser.open(url)
                     while thread.is_alive():  # keep serving; join in steps so Ctrl+C works
                         thread.join(0.5)
@@ -409,6 +437,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
                 thread.join(timeout=5)
                 return 0
         rt.request_exit = lambda: setattr(server, "should_exit", True)
+        rt.request_show = open_ui
         if not args.no_browser:
             threading.Timer(1.0, webbrowser.open, args=(url,)).start()
         print(f"poefire UI at {url} (Ctrl+C to stop)")
@@ -486,7 +515,16 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _ensure_streams() -> None:
+    """A windowed exe (or pythonw) has no stdout/stderr: sys.stdout is None, and anything
+    printing to it, or uvicorn setting up its log format, would crash. Send them nowhere."""
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _ensure_streams()
     if argv is None:
         argv = sys.argv[1:]
     if not argv:

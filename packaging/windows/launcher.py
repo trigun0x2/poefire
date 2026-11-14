@@ -27,11 +27,14 @@ if __name__ == "__main__":
         try:
             log_dir.mkdir(parents=True, exist_ok=True)
             current = log_dir / "console.log"
-            if current.exists():
-                current.replace(log_dir / "console.1.log")
-            out = open(current, "w", encoding="utf-8", buffering=1)  # noqa: SIM115
+            try:
+                if current.exists():
+                    current.replace(log_dir / "console.1.log")
+                out = open(current, "w", encoding="utf-8", buffering=1)  # noqa: SIM115
+            except OSError:  # another poefire.exe is running and holds the file
+                out = open(log_dir / "console.2.log", "w", encoding="utf-8", buffering=1)  # noqa: SIM115
             sys.stdout = sys.stderr = out
         except OSError:
-            pass  # e.g. another poefire.exe is running and holds the file
+            pass  # poefire.cli.main then writes to nowhere instead (never to a missing stdout)
         argv = argv or ["ui", "--window"]
     raise SystemExit(main(argv))

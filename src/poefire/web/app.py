@@ -487,6 +487,13 @@ def create_app(rt: AppRuntime) -> FastAPI:
         rt.kv_set(settings.ONBOARDED_KEY, True)
         return {"ok": True}
 
+    @app.post("/api/window/show")
+    def window_show() -> dict[str, Any]:
+        """Another launch of poefire found this one running: bring it up."""
+        if rt.request_show is not None:
+            rt.request_show()
+        return {"ok": rt.request_show is not None}
+
     @app.post("/api/settings/check-account")
     def check_account() -> dict[str, Any]:
         return settings.check_account(rt)
