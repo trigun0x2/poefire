@@ -247,3 +247,33 @@ def test_first_start_picks_the_newest_league(
     assert rt.league == "Standard"
     monkeypatch.setattr(rt, "ninja_leagues", lambda: [])  # poe.ninja unreachable
     assert rt.default_league() == "Standard"
+
+
+def test_trade_sales_is_off_by_default(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    from poefire.loot.recorder import LootRecorder
+
+    client, rt, _ = env
+    assert Config().trade_sales is False
+    assert client.get("/api/settings").json()["trade_sales"] is False
+
+    class Api:
+        def trade_history(self, league: str) -> Any:
+            return {"result": []}
+
+    class Snap:
+        api = Api()
+        league = "Keepers"
+
+        def set_league(self, league: str) -> None:
+            pass
+
+    def installed(enabled: bool) -> LootRecorder:
+        rt.cfg = Config(**{**rt.cfg.__dict__, "trade_sales": enabled})
+        rec = LootRecorder(Snap(), lambda: Store(rt.cfg.db_path))  # type: ignore[arg-type]
+        rt._install_recorder(rec)
+        return rec
+
+    assert installed(False).sales is None  # no trade history requests
+    assert installed(True).sales is not None
+    r = client.post("/api/settings", headers=H, json={"trade_sales": True})
+    assert r.status_code == 200 and r.json()["trade_sales"] is True

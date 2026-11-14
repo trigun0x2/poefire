@@ -100,6 +100,9 @@ class Config:
     update_channel: str = "stable"  # "stable": public releases; "beta": also pre-releases
     snapshot_on_run_start: bool = True
     build_snapshots: bool = True  # gear/gems/tree at levels 5, 10 and 15+ (needs loot setup)
+    # take trade sales' payments out of map loot (reads the website's trade history: more
+    # requests, and the trade site rate-limits hard), off by default
+    trade_sales: bool = False
     # --- campaign ---
     campaign_hotkey: str = "Ctrl+Alt+R"  # start / pause / resume the campaign timer; "" = off
     campaign_hotkey_sound: bool = True  # beep when the hotkey is pressed

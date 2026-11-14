@@ -355,6 +355,10 @@
         <input id="set-run-start" type="checkbox">
         <span>Also snapshot when a map starts <span class="muted">— keeps hideout trading and crafting out of a map's loot</span></span>
       </label>
+      <label class="check">
+        <input id="set-trade-sales" type="checkbox">
+        <span>Don't count trade sales as loot <span class="muted">— reads your trade history at each snapshot and takes sold items' payments out of the map they show up in. More requests: the trade site rate-limits hard.</span></span>
+      </label>
       <label class="field narrow">
         <span>Wait before the hideout snapshot (seconds)</span>
         <input id="set-delay" type="number" min="0" max="60" step="0.5">

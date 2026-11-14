@@ -92,7 +92,8 @@ There are two ways to read your inventory and stash:
   registered with GGG (`oauth@grindinggear.com`). Set `oauth_client_id` and `contact`, then
   run `poefire login`.
 
-**Trade sales aren't loot.** With the POESESSID connection, each snapshot also reads your
+**Trade sales aren't loot** (Settings → "Don't count trade sales as loot", off by default;
+`trade_sales = true` in config.toml). With the POESESSID connection, each snapshot also reads your
 trade history (`/api/trade/history/<league>`, the sales from your merchant tabs, at most once
 a minute). When a sale's payment shows up in a watched tab, at least the whole price in the
 currency it was paid in, that amount is taken back out of the map you were running (or the

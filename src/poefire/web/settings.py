@@ -41,6 +41,7 @@ class SettingsIn(BaseModel):
     update_channel: Literal["stable", "beta"] | None = None
     campaign_hotkey: str | None = None
     build_snapshots: bool | None = None
+    trade_sales: bool | None = None
     overlay_enabled: bool | None = None
     overlay_toggle_hotkey: str | None = None
     overlay_move_hotkey: str | None = None
@@ -117,6 +118,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "update_channel": cfg.update_channel,
         "campaign_hotkey": cfg.campaign_hotkey,
         "build_snapshots": cfg.build_snapshots,
+        "trade_sales": cfg.trade_sales,
         "overlay_enabled": cfg.overlay_enabled,
         "overlay_toggle_hotkey": cfg.overlay_toggle_hotkey,
         "overlay_move_hotkey": cfg.overlay_move_hotkey,
@@ -216,6 +218,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["debug_logging"] = body.debug_logging
     if body.build_snapshots is not None:
         changes["build_snapshots"] = body.build_snapshots
+    if body.trade_sales is not None:
+        changes["trade_sales"] = body.trade_sales
     if body.campaign_hotkey_sound is not None:
         changes["campaign_hotkey_sound"] = body.campaign_hotkey_sound
     if body.snapshot_delay is not None:

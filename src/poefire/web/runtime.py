@@ -240,7 +240,7 @@ class AppRuntime:
         rec.valuer = self.value_snapshot
         rec.snapshotter.set_league(self._league)
         api = getattr(rec.snapshotter, "api", None)
-        if api is not None and hasattr(api, "trade_history"):  # the POESESSID connection
+        if self.cfg.trade_sales and api is not None and hasattr(api, "trade_history"):
             snapshotter = rec.snapshotter
             rec.sales = lambda: sales.parse_history(api.trade_history(snapshotter.league))
         if self._started:

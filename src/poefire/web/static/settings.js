@@ -50,6 +50,7 @@ async function loadSettings() {
   $("set-price-options").innerHTML = s.ninja_leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
   renderLeagueHints();
   $("set-run-start").checked = s.snapshot_on_run_start;
+  $("set-trade-sales").checked = s.trade_sales;
   $("set-version").textContent = `v${s.version}`;
   $("set-check-updates").checked = s.check_updates;
   $("set-hotkey").value = s.campaign_hotkey || "";
@@ -234,6 +235,7 @@ function settingsBody() {
     characters: $("set-deaths").value.split(",").map((x) => x.trim()).filter(Boolean),
     stash_tabs: [...$("set-tabs").querySelectorAll("input:checked")].map((i) => i.value),
     snapshot_on_run_start: $("set-run-start").checked,
+    trade_sales: $("set-trade-sales").checked,
     snapshot_delay: Number($("set-delay").value || 0),
     check_updates: $("set-check-updates").checked,
     campaign_hotkey: $("set-hotkey").value,
@@ -256,6 +258,7 @@ const SETTING_FIELDS = {
   league: ["set-league", "League"], price_league: ["set-price-league", "Prices from"],
   character: ["set-character", "Character"], characters: ["set-deaths", "Deaths counted"],
   stash_tabs: ["set-tabs", "Stash tabs"], snapshot_on_run_start: ["set-run-start", "Map-start snapshot"],
+  trade_sales: ["set-trade-sales", "Trade sales"],
   snapshot_delay: ["set-delay", "Snapshot delay"], check_updates: ["set-check-updates", "Update checks"],
   campaign_hotkey: ["set-hotkey", "Campaign hotkey"], campaign_hotkey_sound: ["set-hotkey-sound", "Hotkey sound"],
   overlay_enabled: ["set-overlay", "Overlay"], overlay_toggle_hotkey: ["set-overlay-key", "Overlay hotkey"],
