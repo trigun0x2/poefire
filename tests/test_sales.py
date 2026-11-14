@@ -155,3 +155,36 @@ def test_session_api_trade_history_never_blames_the_cookie() -> None:
     with pytest.raises(SessionError, match="HTTP 403"):
         api.trade_history("Some League")
     assert auth == []  # a refused trade history doesn't mark the cookie as expired
+
+
+def test_a_rate_limited_trade_site_never_holds_up_loot_tracking() -> None:
+    """The trade site hands out long penalties. Waiting one out held the shared connection,
+    so loot snapshots stopped (for 10 minutes here, longer for bigger penalties)."""
+    import threading
+
+    import httpx
+    import pytest
+
+    from poefire.api.session import SessionApi, SessionError
+
+    def site(r: httpx.Request) -> httpx.Response:
+        if r.url.path.startswith("/api/trade/history"):
+            return httpx.Response(429, json={}, headers={
+                "X-Rate-Limit-Policy": "trade-history", "X-Rate-Limit-Rules": "Account",
+                "X-Rate-Limit-Account": "3:60:600", "X-Rate-Limit-Account-State": "4:60:600",
+                "Retry-After": "600"})  # fmt: skip
+        return httpx.Response(200, json=[])
+
+    http = httpx.Client(transport=httpx.MockTransport(site))
+    api = SessionApi("x", "Me#1234", "poefire/test", http=http, min_interval=0)
+    for _ in range(2):  # the second time, the penalty is already known
+        done = threading.Event()
+
+        def trade(done: threading.Event = done) -> None:
+            with pytest.raises(SessionError, match="rate limited"):
+                api.trade_history("L")
+            done.set()
+
+        threading.Thread(target=trade, daemon=True).start()
+        assert done.wait(3), "the trade history request waited out the penalty"
+        assert api.list_characters() == []  # the loot connection keeps working

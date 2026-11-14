@@ -215,11 +215,16 @@ class SessionApi:
     # --- transport ---
 
     def _get(self, bucket: str, path: str, params: dict[str, str | int] | None = None,
-             auth: bool = True) -> Any:  # fmt: skip
+             auth: bool = True, block: bool = True) -> Any:  # fmt: skip
         """`auth`: whether a refusal means the cookie is bad (False for endpoints that can
-        refuse for other reasons, like the trade site)."""
+        refuse for other reasons, like the trade site). `block`: whether to wait out this
+        bucket's rate limit; False raises at once instead. Waiting holds the connection, so
+        every other request waits too: only the loot and build requests may do that, never
+        an optional one (the trade site hands out penalties of many minutes)."""
         url = WEB_BASE + path + (f"?{urlencode(params)}" if params else "")
         with self._lock:
+            if not block and (left := self.limiter.wait_time(bucket)) > 0:
+                raise SessionError(f"rate limited; retry after {left:.0f}s")
             self.limiter.acquire(bucket)
             wait = self._last_request + self.min_interval - self.clock()
             if wait > 0:
@@ -327,7 +332,8 @@ class SessionApi:
     def trade_history(self, league: str) -> Any:
         """Your sales from merchant tabs in `league`: {"result": [{time, item_id, item,
         price: {amount, currency}}, ...]} (see poefire.loot.sales)."""
-        return self._get("trade", f"/api/trade/history/{quote(league, safe='')}", auth=False)
+        return self._get("trade", f"/api/trade/history/{quote(league, safe='')}", auth=False,
+                         block=False)  # fmt: skip
 
     def list_stashes(self, league: str) -> list[Json]:
         """The league's stash tabs. A refusal here is about the league (misspelled, or one
