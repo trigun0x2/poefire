@@ -133,7 +133,7 @@ function renderAccountPickers() {
     const saved = chosen.get(String(t.name).toLowerCase()) ?? chosen.get(String(t.id).toLowerCase());
     const on = saved != null;
     if (on) { known.add(String(t.name).toLowerCase()); known.add(String(t.id).toLowerCase()); }
-    return `<label><input type="checkbox" value="${esc(saved ?? t.name)}"${on ? " checked" : ""}>${esc(t.name)}<span class="type">${esc(String(t.type || "").replace(/Stash$/, ""))}</span></label>`;
+    return `<label><input type="checkbox" value="${esc(saved ?? t.name)}" data-type="${esc(t.type || "")}"${on ? " checked" : ""}>${esc(t.name)}<span class="type">${esc(String(t.type || "").replace(/Stash$/, ""))}</span></label>`;
   }).join("");
   // tabs saved earlier but not in the loaded list (or nothing loaded yet)
   html += s.stash_tabs.filter((t) => !known.has(t.toLowerCase())).map((t) =>
@@ -278,7 +278,28 @@ function changedSettings() {
   return Object.keys(SETTING_FIELDS).filter((k) => !sameSetting(body[k], settings[k] ?? (Array.isArray(body[k]) ? [] : "")));
 }
 
+/** What the watched tabs cost: GGG rate-limits these requests, one per tab per snapshot. */
+function renderTabsCost() {
+  const picked = [...$("set-tabs").querySelectorAll("input:checked")];
+  const sectioned = picked.filter((i) => /^(MapStash|UniqueStash)$/.test(i.dataset.type || "")).length;
+  const folders = picked.filter((i) => i.dataset.type === "Folder").length;
+  const perSnapshot = 1 + picked.length + ($("set-trade-sales").checked ? 1 : 0);
+  const perMap = $("set-run-start").checked ? 2 : 1;
+  const extra = [
+    sectioned ? `+1 per section of the ${sectioned === 1 ? "map/unique tab" : `${sectioned} map/unique tabs`}` : "",
+    folders ? `+1 per tab in the ${folders === 1 ? "folder" : `${folders} folders`}` : "",
+  ].filter(Boolean).join(", ");
+  const el = $("set-tabs-cost");
+  el.className = `hint ${perSnapshot * perMap > 16 || sectioned ? "warn" : ""}`;
+  const parts = ["inventory", `${picked.length} tab${picked.length === 1 ? "" : "s"}`]
+    .concat($("set-trade-sales").checked ? ["trade history"] : []).join(" + ");
+  el.textContent = `About ${perSnapshot} request${perSnapshot === 1 ? "" : "s"} per snapshot (${parts}${extra ? `; ${extra}` : ""}), ` +
+    `up to ${perMap === 2 ? "2 snapshots" : "1 snapshot"} per map. ` +
+    "pathofexile.com limits how many requests poefire may make: fewer tabs mean fewer waits.";
+}
+
 function renderDirty() {
+  renderTabsCost();
   const changed = changedSettings();
   for (const [key, [id]] of Object.entries(SETTING_FIELDS)) {
     const field = $(id)?.closest(".field, .check, .tabs-list") || $(id);
