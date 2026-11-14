@@ -126,9 +126,10 @@ any time.
 
 **Rate limits.** The website endpoints have tight per-IP limits. poefire waits at least 1.5s
 between requests, follows the rate-limit headers, and never retries a 429: it skips that
-snapshot and waits out `Retry-After` before the next one. poefire also identifies itself in
-its User-Agent instead of posing as a browser. If GGG's edge protection starts rejecting it,
-that's their call.
+snapshot and waits out `Retry-After` before the next one. While a rate limit is in force, the
+sidebar, a banner and the in-game overlay say so and when it ends; maps finished meanwhile are
+counted together when it does. poefire also identifies itself in its User-Agent instead of
+posing as a browser. If GGG's edge protection starts rejecting it, that's their call.
 
 **How it works.** Each snapshot holds your character's inventory plus the watched stash tabs.
 Equipped gear is not included. Snapshots form one chain, and each change is labelled by what
@@ -138,10 +139,15 @@ triggered the snapshot that closed it:
 | --- | --- |
 | you return to hideout/town from a map | that map's **loot** |
 | you enter a new map | hideout activity before it (trades, crafting, the map used) |
+| you've stayed in the hideout for 5 minutes (then every 5, for 30 minutes) | hideout activity, not attached to a run |
 | `poefire snapshot` | a manual change, not attached to a run |
 
-The snapshot on map entry keeps trading and crafting out of the loot figures. Several hideout
-trips during one map add up into that map's loot.
+The snapshot on map entry keeps trading and crafting out of the loot figures. To save
+requests, it's skipped when a snapshot was taken less than a minute before (usually the one
+back from the previous map; a quick hideout trip then counts towards the next map), unless
+there's been no hideout snapshot for 5 minutes. If the snapshot back from a map fails, the
+next one (when the following map starts) is counted as that map's loot. Several hideout trips
+during one map add up into that map's loot.
 
 Stackable items are compared by total quantity per item kind, so stack merges and splits don't
 count as changes. Other items are compared by their unique item id, so moving loot from your
