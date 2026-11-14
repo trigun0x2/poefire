@@ -82,4 +82,7 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
         "divine": summary.get("divine"),
         "since": summary.get("started_at"),
         "current": current,
+        "notice": f"Rate limited by the website until {until:%H:%M}"
+        if (until := rt.rate_limited_until())
+        else None,
     }

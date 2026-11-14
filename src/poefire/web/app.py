@@ -135,6 +135,9 @@ def create_app(rt: AppRuntime) -> FastAPI:
                 "enabled": rt.loot.enabled,
                 "reason": rt.loot.reason,
                 "session": rt.session_health(),
+                "rate_limited_until": (
+                    until.isoformat() if (until := rt.rate_limited_until()) else None
+                ),
                 "last": None
                 if last is None
                 else {

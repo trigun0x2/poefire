@@ -18,16 +18,25 @@ function renderStatus() {
 
   const l = s.loot;
   const expired = l.session?.expired;
+  const limited = l.enabled && !expired && l.rate_limited_until;
   const ld = $("loot-pill").querySelector(".dot");
-  ld.className = "dot " + (!l.enabled || expired ? "bad" : l.last && !l.last.complete ? "warn" : "ok");
+  ld.className = "dot " + (!l.enabled || expired ? "bad" : limited || (l.last && !l.last.complete) ? "warn" : "ok");
   $("loot-text").textContent = expired
     ? "POESESSID expired · update it"
     : !l.enabled
       ? "Loot tracking off"
-      : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
+      : limited
+        ? `Rate limited · resumes ${timeOf(l.rate_limited_until)}`
+        : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
   $("loot-pill").title = expired
     ? "The website rejected your POESESSID. Click to paste a new one in Settings."
-    : !l.enabled ? `${l.reason} (click to open Settings)` : l.last?.error || "Take a snapshot now";
+    : !l.enabled ? `${l.reason} (click to open Settings)`
+      : limited ? "pathofexile.com is limiting how often poefire may read your stash" : l.last?.error || "Take a snapshot now";
+  $("rate-banner").hidden = !limited;
+  if (limited) {
+    $("rate-banner").innerHTML = `<span><b>pathofexile.com is rate-limiting poefire</b> until ${esc(timeOf(l.rate_limited_until))}. ` +
+      "Loot snapshots wait until then: maps you finish meanwhile are counted together when it ends.</span>";
+  }
   renderSessionBanner(l.session);
   renderLeagueBanners(s);
   renderUpdate(s.update);

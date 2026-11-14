@@ -366,6 +366,16 @@ class AppRuntime:
         self.loot.last = result
         self.loot.last_at = self.now()
 
+    def rate_limited_until(self) -> datetime | None:
+        """When the website's rate limit on the loot connection ends, if it's in force."""
+        api = getattr(self.recorder.snapshotter, "api", None) if self.recorder else None
+        wait = getattr(api, "rate_limited_for", None)
+        try:
+            seconds = float(wait()) if wait is not None else 0.0
+        except Exception:
+            return None
+        return self.now() + timedelta(seconds=seconds) if seconds >= 5 else None
+
     def value_snapshot(self, items: list[ItemEntry]) -> tuple[str, float, float | None, int]:
         """Total value of a snapshot at current prices, for the Overview history."""
         book = self.prices.book(self.price_league)

@@ -84,3 +84,33 @@ def test_nothing_running(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cli._show_running("http://127.0.0.1:8471/") is False
     monkeypatch.setattr(httpx, "get", lambda url, **kw: httpx.Response(200, text="<html>"))
     assert cli._show_running("http://127.0.0.1:8471/") is False  # something else on the port
+
+
+def test_rate_limit_shows_in_the_status(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    db = tmp_path / "db"
+    now = datetime(2026, 11, 14, 7, 40)
+    rt = AppRuntime(Config(db_path=db, league="Keepers"),
+                    PriceService(OfflineNinja(), lambda: Store(db)), recorder=None,
+                    now=lambda: now)  # fmt: skip
+    client = TestClient(create_app(rt))
+    client.headers["host"] = "127.0.0.1:8460"
+    assert client.get("/api/status").json()["loot"]["rate_limited_until"] is None
+
+    class Api:
+        wait = 600.0
+
+        def rate_limited_for(self) -> float:
+            return self.wait
+
+    class Snapshotter:
+        api = Api()
+
+    class Rec:
+        snapshotter = Snapshotter()
+
+    rt.recorder = Rec()  # type: ignore[assignment]
+    assert client.get("/api/status").json()["loot"]["rate_limited_until"] == "2026-11-14T07:50:00"
+    Api.wait = 2  # a moment's wait isn't worth a notice
+    assert rt.rate_limited_until() is None

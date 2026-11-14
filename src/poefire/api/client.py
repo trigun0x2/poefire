@@ -51,6 +51,10 @@ class PoeApi:
         segs = [root, *([self.realm] if self.realm else []), *parts]
         return "/" + "/".join(quote(s, safe="") for s in segs)
 
+    def rate_limited_for(self) -> float:
+        """Seconds until loot snapshots may make requests again (0 when they can)."""
+        return max(self.limiter.wait_time(b) for b in ("character", "stash"))
+
     def _get(self, bucket: str, path: str) -> Json:
         refreshed = False
         for _attempt in range(self.max_retries + 1):

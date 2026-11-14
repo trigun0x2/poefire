@@ -517,3 +517,55 @@ def test_a_failed_return_snapshot_doesnt_lose_the_map(tmp_path: Path) -> None:
     assert {d.name: d.quantity for d in store.run_loot("map1")} == {c: 40}
     assert store.run_loot("map2", "between") == []
     assert {d.name: d.quantity for d in store.run_loot("map2")} == {c: 10}
+
+
+def test_hideout_snapshot_rules(tmp_path: Path) -> None:
+    """Map start within a minute of the last snapshot: skipped, unless there was no hideout
+    snapshot for 5 minutes. Staying in the hideout: one every 5 minutes, for 30 minutes."""
+    from poefire.loot import recorder as r
+    from poefire.loot.recorder import _Request
+
+    rec, _ = make_recorder(tmp_path, [])
+    clock = [1000.0]
+    rec.monotonic = lambda: clock[0]
+    start = _Request(Trigger.RUN_START, "m2", 0)
+    assert not rec._skip(start)  # nothing taken yet
+    rec._last_snap = rec._last_hideout = 1000.0  # back from map 1, and a hideout one
+    clock[0] += 40
+    assert rec._skip(start)  # 40 s after the last snapshot
+    clock[0] += 30
+    assert not rec._skip(start)  # 70 s: taken
+    rec._last_hideout = 1000.0 - r.HIDEOUT_EVERY  # no hideout snapshot for 5 min
+    clock[0] = 1010.0
+    assert not rec._skip(start)  # taken even right after the return snapshot
+    assert not rec._skip(_Request(Trigger.RUN_RETURN, "m1", 0))  # never skipped
+
+    rec._last_snap = rec._last_hideout = 1000.0
+    assert rec._hideout_due() is None  # in a map
+    rec._back_at = 1000.0  # back in the hideout
+    assert rec._hideout_due() == 1000.0 + r.HIDEOUT_EVERY
+    rec._last_hideout = 1000.0 + 4 * r.HIDEOUT_EVERY
+    assert rec._hideout_due() == 1000.0 + 5 * r.HIDEOUT_EVERY
+    rec._last_hideout = 1000.0 + r.HIDEOUT_IDLE
+    assert rec._hideout_due() is None  # 30 min in the hideout: stop (AFK)
+    rec.snapshot_on_run_start = False  # hideout snapshots turned off in Settings
+    rec._last_hideout = 1000.0
+    assert rec._hideout_due() is None
+
+
+def test_auto_hideout_snapshot_is_taken(tmp_path: Path) -> None:
+    from poefire.loot import recorder as r
+
+    rec, _ = make_recorder(tmp_path, [snap(0, [currency("Chaos Orb", 1, "c")]),
+                                          snap(6, [currency("Chaos Orb", 3, "c")])])  # fmt: skip
+    clock = [0.0]
+    rec.monotonic = lambda: clock[0]
+    rec.record(Trigger.MANUAL)
+    rec._last_snap = 0.0
+    rec._back_at = 0.0
+    clock[0] = r.HIDEOUT_EVERY
+    req = rec._next()
+    assert req is not None and req.trigger is Trigger.HIDEOUT and req.run_id is None
+    result = rec.record(req.trigger, req.run_id)
+    assert result.kind == "manual"  # hideout activity, counted in no map
+    assert {d.name: d.quantity for d in result.deltas} == {"Chaos Orb": 2}

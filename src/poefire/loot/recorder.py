@@ -41,13 +41,24 @@ class Trigger(StrEnum):
     RUN_START = "run_start"
     RUN_RETURN = "run_return"
     MANUAL = "manual"
+    HIDEOUT = "hideout"  # automatic, while you stay in the hideout (counted in no map)
 
 
 SALES_KEY = "trade_sales"
 SALES_EVERY = 60.0  # seconds between trade history fetches
 SALES_RETRY = 1800.0  # after a failure
 
-_KIND = {Trigger.RUN_RETURN: "run", Trigger.RUN_START: "between", Trigger.MANUAL: "manual"}
+_KIND = {Trigger.RUN_RETURN: "run", Trigger.RUN_START: "between", Trigger.MANUAL: "manual",
+         Trigger.HIDEOUT: "manual"}  # fmt: skip
+
+# Fewer requests (the website rate-limits them): the hideout snapshot when a map starts is
+# skipped when there was a snapshot less than HIDEOUT_SKIP ago (usually the one back from the
+# previous map; a quick hideout trip then counts towards the next map), unless no hideout
+# snapshot was taken for HIDEOUT_EVERY. Staying in the hideout, one is taken every
+# HIDEOUT_EVERY (so trading and crafting stay out of map loot), for HIDEOUT_IDLE after a map.
+HIDEOUT_SKIP = 60.0
+HIDEOUT_EVERY = 300.0
+HIDEOUT_IDLE = 1800.0
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,9 @@ class LootRecorder:
         # so their payments aren't counted as loot (see poefire.loot.sales).
         self.sales: Callable[[], list[Sale]] | None = None
         self._sales_next = float("-inf")  # monotonic time of the next allowed history fetch
+        self._last_snap = float("-inf")  # monotonic time of the last complete snapshot
+        self._last_hideout = float("-inf")  # ... of the last hideout one (map start or auto)
+        self._back_at: float | None = None  # back in the hideout from a map, since when
         self._store: Store | None = None
         self._pending: list[_Request] = []
         self._cond = threading.Condition()
@@ -113,9 +127,13 @@ class LootRecorder:
 
     def on_notice(self, n: Notice) -> None:
         if isinstance(n, RunNotice) and n.kind is NoticeKind.STARTED:
+            with self._cond:
+                self._back_at = None  # in a map: no hideout snapshots
             if self.snapshot_on_run_start and self._fresh(n.run.started_at):
                 self.request(Trigger.RUN_START, n.run.id)
         elif isinstance(n, SafeZoneEntered) and n.left_run and n.run_id and self._fresh(n.ts):
+            with self._cond:
+                self._back_at = self.monotonic()
             self.request(Trigger.RUN_RETURN, n.run_id, self.return_delay)
 
     def _fresh(self, ts: datetime) -> bool:
@@ -142,9 +160,30 @@ class LootRecorder:
             self._store.close()
             self._store = None
 
+    def _hideout_due(self) -> float | None:
+        """When the next automatic hideout snapshot is due (monotonic), or None."""
+        if self._back_at is None or not self.snapshot_on_run_start:
+            return None
+        due = max(self._last_snap, self._last_hideout, self._back_at) + HIDEOUT_EVERY
+        return due if due <= self._back_at + HIDEOUT_IDLE else None
+
+    def _skip(self, req: _Request) -> bool:
+        """A map-start snapshot right after another snapshot (see HIDEOUT_SKIP)."""
+        now = self.monotonic()
+        return (
+            req.trigger is Trigger.RUN_START
+            and now - self._last_snap < HIDEOUT_SKIP
+            and now - self._last_hideout < HIDEOUT_EVERY
+        )
+
     def _next(self) -> _Request | None:
         with self._cond:
             while not self._stop.is_set():
+                if not self._pending and (due := self._hideout_due()) is not None:
+                    if due <= self.monotonic():
+                        return _Request(Trigger.HIDEOUT, None, due)
+                    self._cond.wait(due - self.monotonic())
+                    continue
                 if self._pending:
                     req = self._pending[0]
                     wait = req.due - self.monotonic()
@@ -163,11 +202,23 @@ class LootRecorder:
 
     def _loop(self) -> None:
         while (req := self._next()) is not None:
+            if self._skip(req):
+                log.info("map %s: hideout snapshot skipped (one was taken moments ago)",
+                         req.run_id)  # fmt: skip
+                continue
+            if req.trigger is Trigger.HIDEOUT:  # tried: the next one in HIDEOUT_EVERY
+                with self._cond:
+                    self._last_hideout = self.monotonic()
             try:
                 result = self.record(req.trigger, req.run_id)
             except Exception:
                 log.exception("loot snapshot failed")
                 continue
+            if result.complete:
+                with self._cond:
+                    self._last_snap = self.monotonic()
+                    if req.trigger in (Trigger.RUN_START, Trigger.HIDEOUT):
+                        self._last_hideout = self._last_snap
             for h in self.handlers:
                 h(result)
 

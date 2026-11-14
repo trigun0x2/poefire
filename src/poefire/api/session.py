@@ -336,6 +336,10 @@ class SessionApi:
         )
         return {"source": "website", "items": items, "passives": passives}
 
+    def rate_limited_for(self) -> float:
+        """Seconds until loot snapshots may make requests again (0 when they can)."""
+        return max(self.limiter.wait_time(b) for b in ("character", "stash"))
+
     def trade_history(self, league: str) -> Any:
         """Your sales from merchant tabs in `league`: {"result": [{time, item_id, item,
         price: {amount, currency}}, ...]} (see poefire.loot.sales)."""

@@ -75,6 +75,7 @@ class Frame:
     maps: str = ""
     map_name: str = ""
     map_time: str = ""
+    notice: str = ""  # e.g. the website's rate limit
 
 
 def duration(sec: float | None) -> str:
@@ -152,7 +153,7 @@ def frame(data: Json | None, elapsed: float, moving: bool = False, hot: bool = F
         total_chaos="" if not maps else "—" if total is None else chaos(total),
         total_divine="" if not maps else divine(data.get("divine")),
         maps=f"{maps} map{'' if maps == 1 else 's'}" if maps else "No maps yet",
-        map_name=map_name, map_time=map_time,
+        map_name=map_name, map_time=map_time, notice=str(data.get("notice") or ""),
     )  # fmt: skip
 
 
@@ -323,6 +324,10 @@ def render(fr: Frame, scale: float = 1.0, opacity: int = 90) -> Rendered:
         c.put(left, base, c.fit(fr.map_name, kf, right - left - time_w), kf, "muted")
         c.put_right(right, base, [(fr.map_time, kf, "text")])
         y += 19
+        if fr.notice:
+            base = y + 14
+            c.put(left, base, c.fit(fr.notice, small, right - left), small, "bad")
+            y += 17
     else:
         c.put(left, y + 12, "poefire", c.font(11), "muted")
         y += 18
