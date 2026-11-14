@@ -398,6 +398,13 @@ class Store:
         ).fetchone()
         return int(row["id"]) if row else None
 
+    def last_complete_snapshot_trigger(self) -> tuple[str, str | None] | None:
+        """(trigger, run_id) of the newest complete snapshot."""
+        row = self.conn.execute(
+            "SELECT trigger, run_id FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return (str(row["trigger"]), row["run_id"]) if row else None
+
     def last_complete_snapshot(self) -> tuple[int, datetime, list[ItemEntry]] | None:
         row = self.conn.execute(
             "SELECT id, taken_at FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"

@@ -496,3 +496,24 @@ def test_is_tracked(raw: Json, tracked: bool) -> None:
     from poefire.loot.items import is_tracked
 
     assert is_tracked(raw) is tracked
+
+
+def test_a_failed_return_snapshot_doesnt_lose_the_map(tmp_path: Path) -> None:
+    """Back from map 1 the snapshot failed (rate limited): the next snapshot, when map 2
+    starts, holds map 1's loot. It goes to map 1, not to "before the run" of map 2."""
+    c = "Chaos Orb"
+    rec, store = make_recorder(tmp_path, [
+        snap(0, [currency(c, 10, "c")]),
+        snap(1, [currency(c, 10, "c")]),  # map 1 starts
+        snap(5, [], complete=False),  # back from map 1: rate limited
+        snap(6, [currency(c, 50, "c")]),  # map 2 starts
+        snap(10, [currency(c, 60, "c")]),  # back from map 2
+    ])  # fmt: skip
+    rec.record(Trigger.MANUAL)
+    rec.record(Trigger.RUN_START, "map1")
+    assert not rec.record(Trigger.RUN_RETURN, "map1").complete
+    rec.record(Trigger.RUN_START, "map2")
+    rec.record(Trigger.RUN_RETURN, "map2")
+    assert {d.name: d.quantity for d in store.run_loot("map1")} == {c: 40}
+    assert store.run_loot("map2", "between") == []
+    assert {d.name: d.quantity for d in store.run_loot("map2")} == {c: 10}

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import threading
 import time
@@ -36,6 +37,7 @@ import httpx
 
 from poefire.api.ratelimit import RateLimiter
 
+log = logging.getLogger(__name__)
 WEB_BASE = "https://www.pathofexile.com"
 
 type Json = dict[str, Any]
@@ -245,6 +247,11 @@ class SessionApi:
         # One request per throttle: a 429 is not retried here. The limiter now blocks this
         # bucket until Retry-After has passed, so the next snapshot waits on its own.
         if resp.status_code == 429:
+            log.warning("HTTP 429 from %s: policy %s, rules %s, retry after %ss", path,
+                        resp.headers.get("X-Rate-Limit-Policy"),
+                        {k: v for k, v in resp.headers.items()
+                         if k.lower().startswith("x-rate-limit-")},
+                        resp.headers.get("Retry-After"))  # fmt: skip
             raise SessionError(f"rate limited; retry after {resp.headers.get('Retry-After', '?')}s")
         try:
             data = self._check(resp, path)

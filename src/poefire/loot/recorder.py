@@ -208,6 +208,7 @@ class LootRecorder:
         sales = self._fetch_sales() if snap.complete else None
         with store.transaction():
             prev = store.last_complete_snapshot()
+            last = store.last_complete_snapshot_trigger()  # before this one is added
             sid = store.add_snapshot(snap, trigger.value, run_id)
             if not snap.complete:
                 return LootResult(trigger, run_id, sid, False, False, error=snap.error)
@@ -223,11 +224,25 @@ class LootRecorder:
                 return LootResult(trigger, run_id, sid, True, True)
             prev_id, _, prev_items = prev
             deltas = diff_items(prev_items, snap.items)
+            kind, owner = _KIND[trigger], None if trigger is Trigger.MANUAL else run_id
+            if (
+                trigger is Trigger.RUN_START
+                and last is not None
+                and last[0] == Trigger.RUN_START.value
+                and last[1] not in (None, run_id)
+            ):
+                # The previous map never got its back-in-the-hideout snapshot (it failed, e.g.
+                # rate limited): what changed since it started is mostly its loot, so it goes
+                # to that map, not to "before the run" of this one.
+                kind, owner = "run", last[1]
+                log.info("map %s had no return snapshot: its loot is counted from this one",
+                         owner)  # fmt: skip
             if book is not None and book.pending:
                 deltas += book.offsets(deltas, snap.taken_at)
                 store.set_json(SALES_KEY, book.to_json())
-            store.add_loot(
-                None if trigger is Trigger.MANUAL else run_id, _KIND[trigger], prev_id, sid, deltas
-            )
+            store.add_loot(owner, kind, prev_id, sid, deltas)
             store.prune_snapshot_items()
+        gains = sum(1 for d in deltas if d.quantity > 0)
+        log.info("loot snapshot (%s, run %s): %d item kinds gained, %d lost", trigger.value,
+                 run_id, gains, len(deltas) - gains)  # fmt: skip
         return LootResult(trigger, run_id, sid, True, False, deltas)

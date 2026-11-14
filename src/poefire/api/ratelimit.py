@@ -14,11 +14,15 @@ reports more hits than we know of (other tools sharing the account limit).
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+
+log = logging.getLogger(__name__)
+LOG_WAITS_FROM = 5.0  # seconds: longer waits for a rate limit are logged
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,8 @@ class RateLimiter:
                     if policy is not None:
                         self._policies[policy].history.append(now)
                     return
+            if wait >= LOG_WAITS_FROM:
+                log.info("waiting %.0fs for the website's rate limit (%s requests)", wait, bucket)
             self.sleep(wait)
 
     def update(self, bucket: str, headers: Mapping[str, str], status: int) -> RateLimitInfo | None:
