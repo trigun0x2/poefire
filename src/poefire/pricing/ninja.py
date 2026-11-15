@@ -35,6 +35,7 @@ PRICE_SOURCES: tuple[tuple[str, str], ...] = (
     ("exchange", "Currency"),
     ("currency", "Currency"),
     ("currency", "Fragment"),
+    ("exchange", "Fragment"),  # most fragments are only priced on the exchange now
     *(
         ("item", t)
         for t in (
@@ -146,7 +147,7 @@ class NinjaClient:
             ]
         if source == "item":
             data = self._get("/stash/current/item/overview", params)
-            if data is None:  # poe.ninja moved this type to its currency exchange
+            if not (data or {}).get("lines"):  # moved to poe.ninja's currency exchange
                 return self.fetch("exchange", league, type_)
             out = []
             for line in (data or {}).get("lines") or ():

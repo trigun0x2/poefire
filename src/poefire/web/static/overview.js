@@ -18,6 +18,15 @@ function money(chaosValue, divineValue, digits) {
   if (chaosValue == null) return "—";
   return `${(Math.abs(chaosValue) >= 100 ? nf0 : nf1).format(chaosValue)}c`;
 }
+/** An item's price: in divines like the rest, but under 0.1d in chaos (0.004d reads badly). */
+function eachPrice(chaosEach, cpd) {
+  const div = cpd ? chaosEach / cpd : null;
+  if (ovUnit === "divine" && div != null && Math.abs(div) < 0.1) {
+    return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: chaosEach >= 10 ? 0 : 1 }).format(chaosEach)}c`;
+  }
+  return money(chaosEach, div, 3);
+}
+
 function pointValue(p) { return ovUnit === "divine" ? p.divine : p.chaos; }
 
 async function loadOverview() {
@@ -174,7 +183,7 @@ function renderHoldings() {
     return `<tr>
       <td><div class="item">${icon}<div><div>${esc(i.name)}</div><div class="where">${esc(i.tabs.join(", "))}</div></div></div></td>
       <td class="num">${nf0.format(i.quantity)}</td>
-      <td class="num">${each == null ? '<span class="dim">no price</span>' : money(each, cpd ? each / cpd : null, 3)}</td>
+      <td class="num">${each == null ? '<span class="dim">no price</span>' : eachPrice(each, cpd)}</td>
       <td class="num">${i.chaos_total == null ? '<span class="dim">—</span>' : money(i.chaos_total, i.divine_total)}</td>
       <td class="num"><span class="share"><span class="bar"><i style="width:${Math.min(100, pct)}%"></i></span>${pct ? `${pct}%` : ""}</span></td>
     </tr>`;

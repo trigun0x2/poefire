@@ -29,6 +29,21 @@ RESPONSES: dict[tuple[str, str], Json] = {
         "items": [{"id": "the-apothecary", "name": "The Apothecary"}],
         "lines": [{"id": "the-apothecary", "primaryValue": 2900.0}],
     },
+    # fragments: the stash table keeps a few; the rest (Maven's, ...) only on the exchange
+    ("/stash/current/currency/overview", "Fragment"): {
+        "lines": [{"currencyTypeName": "Sacred Blossom", "chaosEquivalent": 3.0}],
+    },
+    ("/exchange/current/overview", "Fragment"): {
+        "core": {"primary": "chaos", "secondary": "divine"},
+        "items": [{"id": "reality-fragment", "name": "Reality Fragment"}],
+        "lines": [{"id": "reality-fragment", "primaryValue": 42.0}],
+    },
+    ("/stash/current/item/overview", "Vial"): {"lines": []},  # an empty table: moved
+    ("/exchange/current/overview", "Vial"): {
+        "core": {"primary": "chaos", "secondary": "divine"},
+        "items": [{"id": "vial-of-fate", "name": "Vial of Fate"}],
+        "lines": [{"id": "vial-of-fate", "primaryValue": 7.0}],
+    },
     ("/stash/current/currency/overview", "Currency"): {
         "lines": [{"currencyTypeName": "Divine Orb", "chaosEquivalent": 170.0},
                   {"currencyTypeName": "Orb of Alchemy", "chaosEquivalent": 0.3},
@@ -253,3 +268,18 @@ def test_price_lines_keep_zero_values(tmp_path: Path) -> None:
                            "VALUES ('L', 'item', 'Broken', 1.0, 'not json')")  # fmt: skip
     tables = store.load_prices("L")  # the unreadable table is skipped, not an error
     assert [(t[1], t[3]) for t in tables] == [("Card", [line])]
+
+
+def test_fragments_and_emptied_tables_come_from_the_exchange() -> None:
+    from poefire.pricing.ninja import PRICE_SOURCES
+
+    assert ("exchange", "Fragment") in PRICE_SOURCES
+    c = client(Ninja())
+    assert c.fetch("item", "L", "Vial") == [PriceLine("Vial of Fate", 7.0)]
+    b = PriceBook((src, t, c.fetch(src, "L", t))
+                  for src, t in [("currency", "Fragment"), ("exchange", "Fragment")])  # fmt: skip
+    reality = {"typeLine": "Reality Fragment", "baseType": "Reality Fragment", "frameType": 0}
+    quote = b.price(reality)
+    assert quote is not None and quote.chaos_each == 42.0
+    blossom = b.price({"typeLine": "Sacred Blossom", "frameType": 0})
+    assert blossom is not None and blossom.chaos_each == 3.0
