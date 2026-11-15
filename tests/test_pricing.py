@@ -283,3 +283,35 @@ def test_fragments_and_emptied_tables_come_from_the_exchange() -> None:
     assert quote is not None and quote.chaos_each == 42.0
     blossom = b.price({"typeLine": "Sacred Blossom", "frameType": 0})
     assert blossom is not None and blossom.chaos_each == 3.0
+
+
+def test_blighted_maps_are_priced_per_tier() -> None:
+    b = PriceBook([
+        ("item", "Map", [PriceLine("Strand Map", 4.0, base_type="Strand Map", map_tier=16)]),
+        ("item", "BlightedMap", [PriceLine("Blighted Map (Tier 16)", 9.0),
+                                 PriceLine("Blighted Map (Tier 16)", 7.0),  # variants: lowest
+                                 PriceLine("Blighted Map (Tier 3)", 2.0)]),
+        ("item", "BlightRavagedMap", [PriceLine("Blight-ravaged Map (Tier 16)", 30.0)]),
+    ])  # fmt: skip
+
+    def m(type_line: str, tier: int) -> float | None:
+        q = b.price({"typeLine": type_line, "baseType": "Strand Map", "frameType": 0,
+                     "properties": [{"name": "Map Tier", "values": [[str(tier), 0]]}]})  # fmt: skip
+        return q.chaos_each if q else None
+
+    assert m("Strand Map", 16) == 4.0
+    assert m("Blighted Strand Map", 16) == 7.0  # not the plain map's price
+    assert m("Blighted Strand Map", 3) == 2.0
+    assert m("Blight-ravaged Strand Map", 16) == 30.0
+    assert m("Blighted Strand Map", 10) is None  # no price for that tier
+
+
+def test_price_sources() -> None:
+    from poefire.pricing.ninja import PRICE_SOURCES
+
+    types = {t for _, t in PRICE_SOURCES}
+    assert "Scarab" not in types  # gone from the game
+    for t in ("AllflameEmber", "Runegraft", "Astrolabe", "Wombgift", "BlightedMap",
+              "BlightRavagedMap", "UniqueTincture", "UniqueRelic"):  # fmt: skip
+        assert t in types
+    assert ("exchange", "DivinationCard") in PRICE_SOURCES  # straight to where it's priced

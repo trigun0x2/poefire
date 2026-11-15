@@ -41,6 +41,8 @@ def _links(raw: Json) -> int:
     return max(groups.values(), default=0)
 
 
+_BLIGHTED_RE = re.compile(r"^(?P<kind>Blighted|Blight-ravaged) Map \(Tier (?P<tier>\d+)\)$")
+
 _versions = itertools.count(1)
 
 
@@ -54,6 +56,8 @@ class PriceBook:
         self.uniques: dict[str, list[tuple[PriceLine, str]]] = defaultdict(list)
         self.maps: dict[tuple[str, int | None], Quote] = {}
         self.gems: dict[str, list[PriceLine]] = defaultdict(list)
+        # blighted / blight-ravaged maps: one price per tier, whatever the map
+        self.blighted: dict[tuple[str, int], Quote] = {}
         exchange: dict[str, Quote] = {}
         for source, type_, lines in tables:
             for line in lines:
@@ -61,6 +65,12 @@ class PriceBook:
                     exchange[line.name] = Quote(line.chaos, f"exchange:{type_}")
                 elif type_.startswith("Unique"):
                     self.uniques[line.name].append((line, type_))
+                elif type_ in ("BlightedMap", "BlightRavagedMap"):
+                    if m := _BLIGHTED_RE.match(line.name):
+                        key = (m["kind"].lower(), int(m["tier"]))
+                        old = self.blighted.get(key)
+                        if old is None or line.chaos < old.chaos_each:  # err low
+                            self.blighted[key] = Quote(line.chaos, type_)
                 elif type_ == "Map":
                     self.maps.setdefault((line.name, line.map_tier), Quote(line.chaos, type_))
                 elif type_ == "SkillGem":
@@ -90,6 +100,9 @@ class PriceBook:
             return self._gem(type_line, raw)
         tier = _int_prop(raw, "Map Tier")
         if tier is not None:
+            for kind in ("blight-ravaged", "blighted"):
+                if kind in type_line.lower():
+                    return self.blighted.get((kind, tier))
             q = self.maps.get((base, tier)) or self.maps.get((type_line, tier))
             if q:
                 return q

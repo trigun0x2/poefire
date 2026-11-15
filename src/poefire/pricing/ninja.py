@@ -36,16 +36,27 @@ PRICE_SOURCES: tuple[tuple[str, str], ...] = (
     ("currency", "Currency"),
     ("currency", "Fragment"),
     ("exchange", "Fragment"),  # most fragments are only priced on the exchange now
+    # traded on the in-game currency exchange (poe.ninja's "exchange" view only)
+    *(
+        ("exchange", t)
+        for t in (
+            "DivinationCard", "Essence", "Fossil", "Resonator", "Oil", "DeliriumOrb", "Omen",
+            "Tattoo", "Artifact", "AllflameEmber", "Runegraft", "Astrolabe",
+        )
+    ),
+    # poe.ninja's stash listings (an empty one falls back to the exchange, see fetch)
     *(
         ("item", t)
         for t in (
-            "DivinationCard", "Scarab", "Essence", "Fossil", "Resonator", "Oil",
-            "DeliriumOrb", "Incubator", "Omen", "Tattoo", "Invitation", "Artifact", "Vial",
-            "Beast", "Map", "UniqueMap", "UniqueWeapon", "UniqueArmour", "UniqueAccessory",
-            "UniqueFlask", "UniqueJewel", "SkillGem",
+            "Incubator", "Invitation", "Vial", "Beast", "Wombgift", "Map", "BlightedMap",
+            "BlightRavagedMap", "UniqueMap", "UniqueWeapon", "UniqueArmour",
+            "UniqueAccessory", "UniqueFlask", "UniqueJewel", "UniqueTincture", "UniqueRelic",
+            "SkillGem",
         )
     ),
 )  # fmt: skip
+# Not read: Scarab (gone from the game), ClusterJewel and BaseType (gear, not counted as
+# loot), Memory and DjinnCoin (no prices on poe.ninja).
 
 type Json = dict[str, Any]
 

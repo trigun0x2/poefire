@@ -60,8 +60,8 @@ PRICES = {  # name -> chaos (fixed, so the pictures don't change with the market
     "Orb of Alchemy": 0.35,
     "Orb of Fusing": 0.6,
     "Gemcutter's Prism": 1.4,
-    "Ambush Scarab of Containment": 6.0,
-    "Breach Scarab of the Dreamer": 11.0,
+    "Allflame Ember of Flesh": 6.0,
+    "Allflame Ember of Propagation": 11.0,
     "Deafening Essence of Contempt": 3.5,
     "The Apothecary": 2900.0,
     "The Wrath": 24.0,
@@ -124,14 +124,14 @@ def load_icons() -> None:
             if icon and d.get("name"):
                 ICONS.setdefault(d["name"], icon)
         found[type_] = len(data.get("currencyDetails") or [])
-    for type_ in ("Currency", "DivinationCard", "Scarab", "Essence", "Fragment"):
+    for type_ in ("Currency", "DivinationCard", "AllflameEmber", "Essence", "Fragment"):
         data = get("/exchange/current/overview", league=league, type=type_)
         for d in data.get("items") or []:
             icon = absolute(d.get("image") or d.get("icon"))
             if icon and d.get("name"):
                 ICONS.setdefault(d["name"], icon)
         found[f"exchange {type_}"] = len(data.get("items") or [])
-    for type_ in ("DivinationCard", "Scarab", "Essence", "UniqueArmour", "UniqueWeapon",
+    for type_ in ("UniqueArmour", "UniqueWeapon",
                   "UniqueAccessory", "UniqueFlask", "UniqueJewel", "BaseType"):  # fmt: skip
         data = get("/stash/current/item/overview", league=league, type=type_)
         lines = data.get("lines") or []
@@ -177,8 +177,8 @@ def seed(folder: Path) -> None:
             lines = [PriceLine(n, c) for n, c in PRICES.items()] if type_ == "Currency" \
                 else [PriceLine(n, c) for n, c in PRICES.items() if n.startswith("The ")] \
                 if type_ == "DivinationCard" \
-                else [PriceLine(n, c) for n, c in PRICES.items() if "Scarab" in n] \
-                if type_ == "Scarab" \
+                else [PriceLine(n, c) for n, c in PRICES.items() if "Allflame" in n] \
+                if type_ == "AllflameEmber" \
                 else [PriceLine(n, c) for n, c in PRICES.items() if "Essence" in n] \
                 if type_ == "Essence" else []  # fmt: skip
             s.save_prices(LEAGUE, source, type_, time.time(), lines)
@@ -204,8 +204,8 @@ def seed(folder: Path) -> None:
                         delta("Orb of Alchemy", rnd.randint(6, 22)),
                         delta("Orb of Fusing", rnd.randint(3, 14))]  # fmt: skip
                 if rnd.random() < 0.55:
-                    loot.append(delta(rnd.choice(["Ambush Scarab of Containment",
-                                                  "Breach Scarab of the Dreamer"]), 1))  # fmt: skip
+                    ember = rnd.choice(["Allflame Ember of Flesh", "Allflame Ember of Propagation"])
+                    loot.append(delta(ember, 1))
                 if rnd.random() < 0.35:
                     loot.append(delta("Deafening Essence of Contempt", rnd.randint(1, 3)))
                 if rnd.random() < 0.25:
@@ -232,8 +232,8 @@ def seed(folder: Path) -> None:
                 ("Chaos Orb", 2410, "t-cur"), ("Orb of Annulment", 37, "t-cur"),
                 ("Gemcutter's Prism", 120, "t-cur"), ("Orb of Alchemy", 960, "t-cur"),
                 ("Vaal Orb", 210, "t-cur"), ("Simulacrum Splinter", 140, "t-frag"),
-                ("Breach Scarab of the Dreamer", 22, "t-frag"),
-                ("Ambush Scarab of Containment", 31, "t-frag"),
+                ("Allflame Ember of Propagation", 22, "t-frag"),
+                ("Allflame Ember of Flesh", 31, "t-frag"),
                 ("Deafening Essence of Contempt", 26, "t-dump"),
                 ("The Apothecary", 1, "t-dump"), ("The Wrath", 4, "t-dump")]  # fmt: skip
         items = [ItemEntry(None, f"5||{n}", n, 5, q, True, src, raw(n, q)) for n, q, src in held]
