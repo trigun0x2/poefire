@@ -18,10 +18,10 @@ function money(chaosValue, divineValue, digits) {
   if (chaosValue == null) return "—";
   return `${(Math.abs(chaosValue) >= 100 ? nf0 : nf1).format(chaosValue)}c`;
 }
-/** An item's price: in divines like the rest, but under 0.1d in chaos (0.004d reads badly). */
+/** An item's price: in divines like the rest, but under 1d in chaos (0.04d reads badly). */
 function eachPrice(chaosEach, cpd) {
   const div = cpd ? chaosEach / cpd : null;
-  if (ovUnit === "divine" && div != null && Math.abs(div) < 0.1) {
+  if (ovUnit === "divine" && div != null && Math.abs(div) < 1) {
     return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: chaosEach >= 10 ? 0 : 1 }).format(chaosEach)}c`;
   }
   return money(chaosEach, div, 3);
