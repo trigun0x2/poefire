@@ -530,6 +530,37 @@ class Store:
             deltas.sort(key=lambda d: (-d.quantity, d.name))
         return out
 
+    def loot_between(self, kind: str, start: datetime | None,
+                     end: datetime | None) -> tuple[list[ItemDelta], int]:  # fmt: skip
+        """Net change of `kind` loot (e.g. "interval") whose closing snapshot was taken in
+        [start, end), summed per item kind; and how many changes that is."""
+        cond, args = "l.kind = ?", [kind]
+        if start is not None:
+            cond, args = cond + " AND s.taken_at >= ?", [*args, start.isoformat()]
+        if end is not None:
+            cond, args = cond + " AND s.taken_at < ?", [*args, end.isoformat()]
+        rows = self.conn.execute(
+            f"SELECT l.key, l.name, l.frame_type, SUM(l.quantity) AS total, MAX(l.id) AS last "
+            f"FROM loot l JOIN snapshots s ON s.id = l.to_snapshot WHERE {cond} "
+            f"GROUP BY l.key HAVING total != 0",
+            args,
+        ).fetchall()
+        (changes,) = self.conn.execute(
+            f"SELECT COUNT(DISTINCT l.to_snapshot) FROM loot l "
+            f"JOIN snapshots s ON s.id = l.to_snapshot WHERE {cond}",
+            args,
+        ).fetchone()
+        out: list[ItemDelta] = []
+        for r in rows:
+            (sample_json,) = self.conn.execute(
+                "SELECT sample FROM loot WHERE id = ?", (r["last"],)
+            ).fetchone()
+            sample = json.loads(sample_json)
+            if is_tracked(sample):
+                out.append(ItemDelta(r["key"], r["name"], r["frame_type"], r["total"], sample))
+        out.sort(key=lambda d: (-d.quantity, d.name))
+        return out, int(changes)
+
     def runs_with_loot_data(self, run_ids: list[str]) -> set[str]:
         """Runs that have at least one complete return-to-hideout snapshot (so a loot value
         of 0 means "nothing dropped", not "not tracked")."""

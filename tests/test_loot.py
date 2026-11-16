@@ -569,3 +569,70 @@ def test_auto_hideout_snapshot_is_taken(tmp_path: Path) -> None:
     result = rec.record(req.trigger, req.run_id)
     assert result.kind == "manual"  # hideout activity, counted in no map
     assert {d.name: d.quantity for d in result.deltas} == {"Chaos Orb": 2}
+
+
+def test_interval_mode_snapshots(tmp_path: Path) -> None:
+    """Every 10 minutes while mapping (a map in the last 30 min), none around maps; one at
+    once when mapping starts again after a while."""
+    from poefire.loot import recorder as r
+
+    rec, _ = make_recorder(tmp_path, [])
+    rec.interval = r.INTERVAL
+    clock = [10_000.0]
+    rec.monotonic = lambda: clock[0]
+    assert rec._auto_due() is None  # not mapping
+    rec.on_notice(RunNotice(NoticeKind.STARTED, run("m1", T)))
+    assert [p.trigger for p in rec._pending] == [Trigger.INTERVAL]  # starting: one now
+    rec._pending.clear()
+    rec._last_snap = clock[0]
+    assert rec._auto_due() == (Trigger.INTERVAL, clock[0] + r.INTERVAL)
+    rec.on_notice(SafeZoneEntered(T, "Hideout", ZoneKind.HIDEOUT, "m1", True))
+    rec.on_notice(RunNotice(NoticeKind.STARTED, run("m2", T)))
+    assert rec._pending == []  # maps don't take snapshots in this mode
+    mapped = rec._mapping_at or 0.0
+    rec._last_snap = mapped + r.MAPPING_IDLE - 100  # the last one in the 30 minutes
+    assert rec._auto_due() is None  # the next would come after 30 min without a map: none
+    clock[0] = mapped + 2 * r.MAPPING_IDLE  # a break
+    rec.on_notice(RunNotice(NoticeKind.STARTED, run("m3", T)))
+    assert [p.trigger for p in rec._pending] == [Trigger.INTERVAL]  # back: one at once
+    rec._pending.clear()
+    rec._last_snap = clock[0]
+    rec.on_notice(RunNotice(NoticeKind.STARTED, run("m4", T)))
+    assert rec._pending == []  # one was just taken
+
+
+def test_interval_mode_records_session_totals(tmp_path: Path) -> None:
+    from poefire.pricing.book import PriceBook
+    from poefire.pricing.ninja import PriceLine
+    from poefire.web import sessions, views
+
+    c, d = "Chaos Orb", "Divine Orb"
+    rec, store = make_recorder(tmp_path, [
+        snap(0, [currency(c, 10, "c")]),
+        snap(10, [currency(c, 30, "c"), currency(d, 1, "d")]),
+        snap(20, [currency(c, 25, "c"), currency(d, 2, "d")]),
+    ])  # fmt: skip
+    for _ in range(3):
+        result = rec.record(Trigger.INTERVAL)
+    assert result.kind == "interval"
+    deltas, changes = store.loot_between("interval", None, None)
+    assert changes == 2 and {x.name: x.quantity for x in deltas} == {c: 15, d: 2}
+    book = PriceBook([("exchange", "Currency", [PriceLine(d, 100.0)])])
+    runs = [mkrun_finished(f"r{i}", T + timedelta(minutes=5 * i)) for i in range(4)]
+    for x in runs:
+        store.upsert_run(x)
+    span = sessions.find(store, None)
+    assert span is not None
+    rows = views.run_rows(store, book, sessions.runs_of(store, span), T, None)
+    totals = sessions.interval_totals(store, book, span, rows, 100.0)
+    assert totals["chaos"] == 215.0 and totals["maps"] == 4 and totals["avg_chaos"] == 53.8
+    assert totals["divine"] == 2.15 and totals["snapshots"] == 2
+    assert [i["name"] for i in totals["items"]] == [d, c]
+
+
+def mkrun_finished(rid: str, start: datetime) -> Run:
+    from poefire.tracker import RunStatus, Segment
+
+    end = start + timedelta(minutes=4)
+    return Run(rid, "MapWorldsStrand", "Strand", 83, 1, start, RunStatus.FINISHED,
+               segments=[Segment(start, end)], ended_at=end)  # fmt: skip

@@ -42,6 +42,7 @@ class Trigger(StrEnum):
     RUN_RETURN = "run_return"
     MANUAL = "manual"
     HIDEOUT = "hideout"  # automatic, while you stay in the hideout (counted in no map)
+    INTERVAL = "interval"  # the "every 10 minutes" mode: totals, not per map
 
 
 SALES_KEY = "trade_sales"
@@ -49,7 +50,7 @@ SALES_EVERY = 60.0  # seconds between trade history fetches
 SALES_RETRY = 1800.0  # after a failure
 
 _KIND = {Trigger.RUN_RETURN: "run", Trigger.RUN_START: "between", Trigger.MANUAL: "manual",
-         Trigger.HIDEOUT: "manual"}  # fmt: skip
+         Trigger.HIDEOUT: "manual", Trigger.INTERVAL: "interval"}  # fmt: skip
 
 # Fewer requests (the website rate-limits them): the hideout snapshot when a map starts is
 # skipped when there was a snapshot less than HIDEOUT_SKIP ago (usually the one back from the
@@ -59,6 +60,11 @@ _KIND = {Trigger.RUN_RETURN: "run", Trigger.RUN_START: "between", Trigger.MANUAL
 HIDEOUT_SKIP = 60.0
 HIDEOUT_EVERY = 300.0
 HIDEOUT_IDLE = 1800.0
+# The "every 10 minutes" mode (`interval` set): no snapshots around maps, one every `interval`
+# seconds while you've run a map in the last MAPPING_IDLE, and one when you start mapping
+# again after that long without one. What changes counts towards the session's total.
+INTERVAL = 600.0
+MAPPING_IDLE = 1800.0
 
 
 @dataclass(frozen=True)
@@ -117,6 +123,9 @@ class LootRecorder:
         self._last_snap = float("-inf")  # monotonic time of the last complete snapshot
         self._last_hideout = float("-inf")  # ... of the last hideout one (map start or auto)
         self._back_at: float | None = None  # back in the hideout from a map, since when
+        self.interval: float | None = None  # seconds: the "every 10 minutes" mode; None = per map
+        self._mapping_at: float | None = None  # last map started or left (interval mode)
+        self._last_auto = float("-inf")  # last interval snapshot tried
         self._store: Store | None = None
         self._pending: list[_Request] = []
         self._cond = threading.Condition()
@@ -126,6 +135,9 @@ class LootRecorder:
     # --- notice intake (called from the log thread) ---
 
     def on_notice(self, n: Notice) -> None:
+        if self.interval is not None:
+            self._interval_notice(n)
+            return
         if isinstance(n, RunNotice) and n.kind is NoticeKind.STARTED:
             with self._cond:
                 self._back_at = None  # in a map: no hideout snapshots
@@ -135,6 +147,23 @@ class LootRecorder:
             with self._cond:
                 self._back_at = self.monotonic()
             self.request(Trigger.RUN_RETURN, n.run_id, self.return_delay)
+
+    def _interval_notice(self, n: Notice) -> None:
+        """Interval mode: maps only tell that you're mapping; starting again after a while
+        (no snapshot for an interval) takes one right away."""
+        started = isinstance(n, RunNotice) and n.kind is NoticeKind.STARTED
+        if not (started or (isinstance(n, SafeZoneEntered) and n.left_run)):
+            return
+        ts = n.run.started_at if isinstance(n, RunNotice) else n.ts
+        if not self._fresh(ts):
+            return
+        with self._cond:
+            now = self.monotonic()
+            self._mapping_at = now
+            due = started and now - max(self._last_snap, self._last_auto) >= (self.interval or 0)
+            self._cond.notify()
+        if due:
+            self.request(Trigger.INTERVAL, None)
 
     def _fresh(self, ts: datetime) -> bool:
         return self.now() - ts <= self.max_notice_age
@@ -160,6 +189,16 @@ class LootRecorder:
             self._store.close()
             self._store = None
 
+    def _auto_due(self) -> tuple[Trigger, float] | None:
+        """The next automatic snapshot and when it's due (monotonic), or None."""
+        if self.interval is not None:
+            if self._mapping_at is None:
+                return None
+            due = max(self._last_snap, self._last_auto) + self.interval
+            return (Trigger.INTERVAL, due) if due <= self._mapping_at + MAPPING_IDLE else None
+        hideout = self._hideout_due()
+        return None if hideout is None else (Trigger.HIDEOUT, hideout)
+
     def _hideout_due(self) -> float | None:
         """When the next automatic hideout snapshot is due (monotonic), or None."""
         if self._back_at is None or not self.snapshot_on_run_start:
@@ -179,9 +218,10 @@ class LootRecorder:
     def _next(self) -> _Request | None:
         with self._cond:
             while not self._stop.is_set():
-                if not self._pending and (due := self._hideout_due()) is not None:
+                if not self._pending and (auto := self._auto_due()) is not None:
+                    trigger, due = auto
                     if due <= self.monotonic():
-                        return _Request(Trigger.HIDEOUT, None, due)
+                        return _Request(trigger, None, due)
                     self._cond.wait(due - self.monotonic())
                     continue
                 if self._pending:
@@ -209,6 +249,9 @@ class LootRecorder:
             if req.trigger is Trigger.HIDEOUT:  # tried: the next one in HIDEOUT_EVERY
                 with self._cond:
                     self._last_hideout = self.monotonic()
+            if req.trigger is Trigger.INTERVAL:  # tried: the next one in an interval
+                with self._cond:
+                    self._last_auto = self.monotonic()
             try:
                 result = self.record(req.trigger, req.run_id)
             except Exception:

@@ -27,7 +27,7 @@ from poefire.hotkey import GlobalHotkey, HotkeyError, beep
 from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.loot import sales
 from poefire.loot.items import ItemEntry
-from poefire.loot.recorder import LootRecorder, LootResult, Trigger
+from poefire.loot.recorder import INTERVAL, LootRecorder, LootResult, Trigger
 from poefire.pricing.ninja import NinjaClient
 from poefire.pricing.service import PriceService
 from poefire.pricing.valuation import value_holdings
@@ -238,6 +238,7 @@ class AppRuntime:
         self.loot = LootStatus(enabled=True)
         rec.handlers.append(self._on_loot)
         rec.valuer = self.value_snapshot
+        rec.interval = INTERVAL if self.interval_mode else None
         rec.snapshotter.set_league(self._league)
         api = getattr(rec.snapshotter, "api", None)
         if self.cfg.trade_sales and api is not None and hasattr(api, "trade_history"):
@@ -365,6 +366,11 @@ class AppRuntime:
     def _on_loot(self, result: LootResult) -> None:
         self.loot.last = result
         self.loot.last_at = self.now()
+
+    @property
+    def interval_mode(self) -> bool:
+        """The "every 10 minutes" mode: session totals only, no per-map loot."""
+        return self.cfg.loot_mode == "interval"
 
     def rate_limited_until(self) -> datetime | None:
         """When the website's rate limit on the loot connection ends, if it's in force."""

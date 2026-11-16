@@ -50,6 +50,8 @@ async function loadSettings() {
   $("set-price-options").innerHTML = s.ninja_leagues.map((l) => `<option value="${esc(l)}"></option>`).join("");
   renderLeagueHints();
   $("set-run-start").checked = s.snapshot_on_run_start;
+  $("set-loot-mode").value = s.loot_mode || "per_map";
+  renderLootModeHint();
   $("set-trade-sales").checked = s.trade_sales;
   $("set-version").textContent = `v${s.version}`;
   $("set-check-updates").checked = s.check_updates;
@@ -235,6 +237,7 @@ function settingsBody() {
     characters: $("set-deaths").value.split(",").map((x) => x.trim()).filter(Boolean),
     stash_tabs: [...$("set-tabs").querySelectorAll("input:checked")].map((i) => i.value),
     snapshot_on_run_start: $("set-run-start").checked,
+    loot_mode: $("set-loot-mode").value,
     trade_sales: $("set-trade-sales").checked,
     snapshot_delay: Number($("set-delay").value || 0),
     check_updates: $("set-check-updates").checked,
@@ -258,7 +261,7 @@ const SETTING_FIELDS = {
   league: ["set-league", "League"], price_league: ["set-price-league", "Prices from"],
   character: ["set-character", "Character"], characters: ["set-deaths", "Deaths counted"],
   stash_tabs: ["set-tabs", "Stash tabs"], snapshot_on_run_start: ["set-run-start", "Map-start snapshot"],
-  trade_sales: ["set-trade-sales", "Trade sales"],
+  trade_sales: ["set-trade-sales", "Trade sales"], loot_mode: ["set-loot-mode", "Tracking mode"],
   snapshot_delay: ["set-delay", "Snapshot delay"], check_updates: ["set-check-updates", "Update checks"],
   campaign_hotkey: ["set-hotkey", "Campaign hotkey"], campaign_hotkey_sound: ["set-hotkey-sound", "Hotkey sound"],
   overlay_enabled: ["set-overlay", "Overlay"], overlay_toggle_hotkey: ["set-overlay-key", "Overlay hotkey"],
@@ -278,12 +281,22 @@ function changedSettings() {
   return Object.keys(SETTING_FIELDS).filter((k) => !sameSetting(body[k], settings[k] ?? (Array.isArray(body[k]) ? [] : "")));
 }
 
+function renderLootModeHint() {
+  const interval = $("set-loot-mode").value === "interval";
+  $("set-loot-mode-hint").textContent = interval
+    ? "One snapshot every 10 minutes while you're mapping (and one when you start again), none around maps: far fewer requests, so rate limits are rare. The Session page shows the session's total loot, maps done and the average per map, not each map's loot."
+    : "A snapshot when you're back from each map (and one when a map starts, below): each map's own loot. More requests.";
+  $("set-run-start").disabled = interval;
+}
+$("set-loot-mode").addEventListener("change", renderLootModeHint);
+
 /** What the watched tabs cost: GGG rate-limits these requests, one per tab per snapshot. */
 function renderTabsCost() {
   const picked = [...$("set-tabs").querySelectorAll("input:checked")];
   const sectioned = picked.filter((i) => /^(MapStash|UniqueStash)$/.test(i.dataset.type || "")).length;
   const folders = picked.filter((i) => i.dataset.type === "Folder").length;
   const perSnapshot = 1 + picked.length + ($("set-trade-sales").checked ? 1 : 0);
+  const interval = $("set-loot-mode").value === "interval";
   const perMap = $("set-run-start").checked ? 2 : 1;
   const extra = [
     sectioned ? `+1 per section of the ${sectioned === 1 ? "map/unique tab" : `${sectioned} map/unique tabs`}` : "",
@@ -294,7 +307,7 @@ function renderTabsCost() {
   const parts = ["inventory", `${picked.length} tab${picked.length === 1 ? "" : "s"}`]
     .concat($("set-trade-sales").checked ? ["trade history"] : []).join(" + ");
   el.textContent = `About ${perSnapshot} request${perSnapshot === 1 ? "" : "s"} per snapshot (${parts}${extra ? `; ${extra}` : ""}), ` +
-    `up to ${perMap === 2 ? "2 snapshots" : "1 snapshot"} per map. ` +
+    (interval ? "every 10 minutes while mapping. " : `up to ${perMap === 2 ? "2 snapshots" : "1 snapshot"} per map. `) +
     "pathofexile.com limits how many requests poefire may make: fewer tabs mean fewer waits.";
 }
 

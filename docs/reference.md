@@ -132,6 +132,17 @@ sidebar, a banner and the in-game overlay say so and when it ends; maps finished
 counted together when it does. poefire also identifies itself in its User-Agent instead of
 posing as a browser. If GGG's edge protection starts rejecting it, that's their call.
 
+**Tracking mode** (Settings → Loot tracking, `loot_mode` in config.toml):
+
+- **Per map** (default, `per_map`): snapshots around each map, as below, so each map has its
+  own loot.
+- **Every 10 minutes** (`interval`): one snapshot every 10 minutes while you're mapping (a
+  map run in the last 30 minutes), plus one when you start mapping again after that, and none
+  around maps. Far fewer requests, so rate limits are rare. The Session page then shows the
+  session's total net loot, maps done, the average per map (total ÷ maps), loot per hour and
+  what changed, with the recent maps listed without loot; per-map loot, the Maps table and
+  the Sessions history are hidden. Hideout trading during the session counts in the total.
+
 **How it works.** Each snapshot holds your character's inventory plus the watched stash tabs.
 Equipped gear is not included. Snapshots form one chain, and each change is labelled by what
 triggered the snapshot that closed it:

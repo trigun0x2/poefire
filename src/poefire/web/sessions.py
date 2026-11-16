@@ -135,3 +135,34 @@ def history(store: Store, book: PriceBook, now: datetime,
             cache.put(book, key, result)
         out.append(result)
     return out
+
+
+def interval_totals(store: Store, book: PriceBook, span: Span, rows: list[RunRow],
+                    chaos_per_divine: float | None) -> Json:  # fmt: skip
+    """The "every 10 minutes" mode: the session's net loot (all its interval snapshots), the
+    maps done, and per map / per hour from those. `rows` newest first."""
+    from poefire.pricing.valuation import value_deltas
+
+    deltas, changes = store.loot_between("interval", span.start, span.end)
+    v = value_deltas(deltas, book)
+    done = [r for r in rows if r.run.status is RunStatus.FINISHED]
+    maps = len(done)
+    cpd = chaos_per_divine
+    first = min((r.run.started_at for r in rows), default=None)
+    last = max((r.run.last_activity for r in rows), default=None)
+    hours = (last - first).total_seconds() / 3600 if first and last else 0.0
+    shown = [i for i in v.items if i.chaos_total is not None and abs(i.chaos_total) >= 0.05]
+    return {
+        "snapshots": changes,  # changes counted (0: nothing tracked yet)
+        "chaos": round(v.chaos, 1),
+        "divine": _round(v.chaos / cpd) if cpd else None,
+        "maps": maps,
+        "avg_chaos": round(v.chaos / maps, 1) if maps and changes else None,
+        "avg_divine": _round(v.chaos / maps / cpd) if maps and changes and cpd else None,
+        "chaos_per_hour": round(v.chaos / hours) if hours >= 0.1 and changes else None,
+        "items": [
+            {"name": i.name, "quantity": i.quantity, "chaos_total": _round(i.chaos_total, 1),
+             "icon": i.icon}
+            for i in shown[:12]
+        ],
+    }  # fmt: skip

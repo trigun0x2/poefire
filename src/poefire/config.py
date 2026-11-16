@@ -103,6 +103,9 @@ class Config:
     # take trade sales' payments out of map loot (reads the website's trade history: more
     # requests, and the trade site rate-limits hard), off by default
     trade_sales: bool = False
+    # "per_map": snapshots around each map (loot per map); "interval": one every 10 minutes
+    # while mapping, far fewer requests, only the session's total
+    loot_mode: str = "per_map"
     # --- campaign ---
     campaign_hotkey: str = "Ctrl+Alt+R"  # start / pause / resume the campaign timer; "" = off
     campaign_hotkey_sound: bool = True  # beep when the hotkey is pressed

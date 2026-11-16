@@ -277,3 +277,29 @@ def test_trade_sales_is_off_by_default(env: tuple[TestClient, AppRuntime, Path])
     assert installed(True).sales is not None
     r = client.post("/api/settings", headers=H, json={"trade_sales": True})
     assert r.status_code == 200 and r.json()["trade_sales"] is True
+
+
+def test_interval_mode_setting(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    from poefire.loot.recorder import INTERVAL, LootRecorder
+
+    client, rt, _ = env
+    assert Config().loot_mode == "per_map"
+    assert client.get("/api/settings").json()["loot_mode"] == "per_map"
+    assert client.get("/api/runs").json()["interval"] is None  # per map: no session totals
+    r = client.post("/api/settings", headers=H, json={"loot_mode": "interval"})
+    assert r.status_code == 200 and r.json()["loot_mode"] == "interval"
+    assert client.get("/api/status").json()["loot"]["mode"] == "interval"
+    totals = client.get("/api/runs").json()["interval"]
+    assert totals["snapshots"] == 0 and totals["chaos"] == 0 and totals["avg_chaos"] is None
+
+    class Snap:
+        api = None
+        league = "Keepers"
+
+        def set_league(self, league: str) -> None:
+            pass
+
+    rec = LootRecorder(Snap(), lambda: Store(rt.cfg.db_path))  # type: ignore[arg-type]
+    rt._install_recorder(rec)
+    assert rec.interval == INTERVAL
+    assert client.post("/api/settings", headers=H, json={"loot_mode": "hourly"}).status_code == 422

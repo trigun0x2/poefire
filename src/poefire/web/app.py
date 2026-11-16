@@ -134,6 +134,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "loot": {
                 "enabled": rt.loot.enabled,
                 "reason": rt.loot.reason,
+                "mode": rt.cfg.loot_mode,
                 "session": rt.session_health(),
                 "rate_limited_until": (
                     until.isoformat() if (until := rt.rate_limited_until()) else None
@@ -160,6 +161,9 @@ def create_app(rt: AppRuntime) -> FastAPI:
             if span is None:
                 raise HTTPException(404, "no such session")
             rows = views.run_rows(s, book, sessions.runs_of(s, span), now, rt.values)
+            interval = (
+                sessions.interval_totals(s, book, span, rows, cpd) if rt.interval_mode else None
+            )
         return {
             "chaos_per_divine": cpd,
             "runs": [r.to_json(cpd) for r in rows[: min(limit, 2000)]],
@@ -172,6 +176,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
                 rows, cpd, n=views.RECENT_MAPS if span.current else max(len(rows), 1)
             ),
             "last_map": views.last_map(rows, cpd),
+            "interval": interval,  # the "every 10 minutes" mode's session totals
             "maps": views.map_stats(rows, cpd),
             "session_run_ids": [r.run.id for r in rows],
         }

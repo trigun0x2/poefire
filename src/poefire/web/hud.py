@@ -63,6 +63,10 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
         views.run_rows(store, book, sessions.runs_of(store, span), now, rt.values) if span else []
     )
     summary = sessions.summary(span, rows, cpd, now) if span else {}
+    if rt.interval_mode and span is not None:  # session totals, not per-map loot
+        totals = sessions.interval_totals(store, book, span, rows, cpd)
+        summary = {**summary, **{k: totals[k] for k in ("avg_chaos", "avg_divine", "chaos",
+                                                         "divine")}}  # fmt: skip
     live = rt.state().run
     current = None
     if live is not None and live.status is not RunStatus.FINISHED:

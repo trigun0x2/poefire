@@ -558,3 +558,9 @@ tbody tr.top.rank3 td:first-child { box-shadow: inset 3px 0 0 var(--bronze); }
 .wz-actions { display: flex; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .wz-spacer { flex: 1; }
 .best-rate { color: var(--good); font-weight: 600; }
+
+/* the "every 10 minutes" loot mode: session totals, no per-map loot */
+main.interval-mode { grid-template-areas: "session session session session session" "runs runs runs runs runs"; }
+main.interval-mode :is(.current, .detail, .maps-stats, .history, .per-map) { display: none; }
+@media (max-width: 1250px) { main.interval-mode { grid-template-areas: "session" "runs"; } }
+.interval-loot { margin-top: 14px; }

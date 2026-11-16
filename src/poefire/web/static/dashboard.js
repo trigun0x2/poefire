@@ -207,6 +207,16 @@ function renderSessionBanner(h) {
 function renderSidebarStats() {
   const d = currentRuns || runsData;
   const m = d.last_map, r = d.recent;
+  const iv = d.interval;
+  if (iv) { // every-10-minutes mode: the session's totals
+    $("side-last-title").textContent = "This session";
+    $("side-last-loot").innerHTML = iv.snapshots ? chaos(iv.chaos) : '<span class="dim">—</span>';
+    $("side-avg-label").textContent = "Avg / map";
+    $("side-avg").innerHTML = iv.avg_chaos == null ? '<span class="dim">—</span>' : chaos(iv.avg_chaos);
+    $("side-maps").textContent = iv.maps;
+    return;
+  }
+  $("side-avg-label").textContent = "Avg / map (10)";
   $("side-last-title").textContent = m ? `Last map · ${m.map_name}` : "Last map";
   $("side-last-loot").innerHTML = m && m.loot_tracked ? chaos(m.chaos) : '<span class="dim">—</span>';
   $("side-avg").innerHTML = r.maps ? chaos(r.avg_chaos) : '<span class="dim">—</span>';
@@ -247,6 +257,22 @@ function tile(label, value, sub = "", hero = false) {
     `<div class="value">${value}</div><div class="sub">${sub}</div></div>`;
 }
 
+/** The "every 10 minutes" mode: the session's net loot and maps, no per-map loot. */
+function renderIntervalSession(s, iv, past) {
+  const none = !iv.snapshots;
+  const note = none ? (past ? "no snapshots in this session" : "first snapshot when you start mapping") : "net, all watched tabs";
+  $("tiles").innerHTML = [
+    tile("Total loot", none ? "—" : `${nf0.format(iv.chaos)}c`, (iv.divine == null || none ? "" : `${nf2.format(iv.divine)}d · `) + note, true),
+    tile("Maps done", iv.maps, s.runs ? `avg ${duration(s.avg_run_seconds)}` : "No maps yet"),
+    tile("Avg / map", iv.avg_chaos == null ? "—" : `${nf1.format(iv.avg_chaos)}c`, iv.avg_divine == null ? "total ÷ maps" : `${nf2.format(iv.avg_divine)}d · total ÷ maps`),
+    tile("Loot / hour", iv.chaos_per_hour == null ? "—" : `${nf0.format(iv.chaos_per_hour)}c`, "from your first map to the last"),
+    tile("Map time", duration(s.active_seconds || 0), s.wall_seconds ? `${duration(s.wall_seconds)} played` : ""),
+    tile("Deaths", s.deaths ?? 0, s.runs ? `${nf1.format(s.deaths / s.runs)} per map` : ""),
+  ].join("");
+  $("interval-items").innerHTML = iv.items.length ? itemList(iv.items, 12)
+    : '<div class="empty">Nothing yet: the first snapshot is a starting point; changes show from the second.</div>';
+}
+
 function renderSession() {
   const s = runsData.session;
   const r = runsData.recent;
@@ -256,6 +282,13 @@ function renderSession() {
   $("session-back").hidden = !past;
   $("session-since").textContent = !s.started_at ? ""
     : past ? `· ${dateTimeOf(s.started_at)} – ${timeOf(s.ended_at)}` : `· since ${dateTimeOf(s.started_at)}`;
+  const iv = runsData.interval;
+  $("dashboard").classList.toggle("interval-mode", !!iv);
+  $("interval-loot").hidden = !iv;
+  if (iv) {
+    renderIntervalSession(s, iv, past);
+    return;
+  }
   if (!s.runs) {
     $("tiles").innerHTML = tile("Maps", "0", "No maps yet");
     return;
@@ -344,8 +377,8 @@ function renderRuns() {
       <td class="num">${r.area_level}</td>
       <td class="num">${duration(r.active_seconds)}</td>
       <td class="num">${r.deaths || '<span class="dim">0</span>'}</td>
-      <td class="num">${chaos(r.chaos)}</td>
-      <td class="num">${divine(r.divine)}</td>
+      <td class="num per-map">${chaos(r.chaos)}</td>
+      <td class="num per-map">${divine(r.divine)}</td>
     </tr>`;
   }).join("");
 }
