@@ -314,6 +314,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
         return {
             "characters": chars,
             "enabled": rt.cfg.build_snapshots,
+            "stale_hours": rt.cfg.build_stale_hours,
             "connected": rt._build_api() is not None,
             "reason": None if rt._build_api() is not None else rt.loot.reason,
             "pending": [{"character": c, "level": lv} for c, (lv, _) in rt.builds.pending.items()],
@@ -334,9 +335,11 @@ def create_app(rt: AppRuntime) -> FastAPI:
     def build_snapshot(snapshot_id: int) -> dict[str, Any]:
         with store() as s:
             snap = s.get_build_snapshot(snapshot_id)
+            prev = s.previous_build_snapshot(snap) if snap is not None else None
         if snap is None:
             raise HTTPException(404, "no such build snapshot")
-        return builds.summarize(snap)
+        # what changed since the snapshot before it (highlighted on the Builds tab)
+        return {**builds.summarize(snap), "changes": builds.changes(prev, snap) if prev else None}
 
     @app.get("/api/builds/snapshot/{snapshot_id}/pob")
     def build_pob(snapshot_id: int) -> dict[str, Any]:

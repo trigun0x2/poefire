@@ -257,10 +257,17 @@ level from 15. The website only sees gear and passive changes once the game save
 zone change, so a level is captured at your first zone change after reaching it (two levels in
 one zone make one snapshot, labelled with the higher one).
 
-From level 80, levels come slowly, so there's also a **daily snapshot**. On a day without a
-snapshot (from a level-up or an earlier daily one), the character you're playing is captured
-at a zone change once you've played for an hour that day. A failed try is repeated an hour
-later and isn't recorded as a missed level.
+From level 80, levels come slowly, so there are also **stale-level snapshots** (Settings →
+"When not levelling (level 80+), also snapshot": never, every 6 or 12 hours, every day (the
+default), every 2 days or every week; `build_stale_hours` in config.toml). When the character
+you're playing has had no snapshot for that long, it's captured at a zone change once you've
+played for an hour that day, and **kept only if its gear, gems or passives changed** since
+its last snapshot (gem levels don't count). A failed try is repeated an hour later and isn't
+recorded as a missed level.
+
+On the Builds tab, several snapshots at the same level show as dates to pick from, and each
+snapshot shows what changed since the one before it: the changed gear is outlined, new gems
+are ringed, and a line lists the slots, new gems and passive points.
 
 - Any character on your account is captured; a party member's level-up is ignored. Lines read
   while catching up on the log after a restart never trigger a snapshot (the website only has

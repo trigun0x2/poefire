@@ -821,6 +821,26 @@ class Store:
         )
         return [dict(r) for r in rows]
 
+    def latest_build_snapshot(self, character: str, ok_only: bool = False) -> BuildSnapshot | None:
+        """The character's newest snapshot (by when it was taken), with its data."""
+        row = self.conn.execute(
+            "SELECT id FROM build_snapshots WHERE character = ?"
+            + (" AND data IS NOT NULL" if ok_only else "")
+            + " ORDER BY taken_at DESC, id DESC LIMIT 1",
+            (character,),
+        ).fetchone()
+        return self.get_build_snapshot(int(row["id"])) if row else None
+
+    def previous_build_snapshot(self, snap: BuildSnapshot) -> BuildSnapshot | None:
+        """The successful snapshot before `snap` in the Builds tab's order (level, then when
+        it was taken), with its data."""
+        row = self.conn.execute(
+            "SELECT id FROM build_snapshots WHERE character = ? AND data IS NOT NULL "
+            "AND (level < ? OR (level = ? AND id < ?)) ORDER BY level DESC, id DESC LIMIT 1",
+            (snap.character, snap.level, snap.level, snap.id or 0),
+        ).fetchone()
+        return self.get_build_snapshot(int(row["id"])) if row else None
+
     def has_build_snapshot_on(self, character: str, day: date) -> bool:
         """Whether `character` has a (successful) snapshot taken on `day`, local time."""
         row = self.conn.execute(

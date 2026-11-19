@@ -143,6 +143,7 @@ class AppRuntime:
         self.campaign = CampaignTracker(self._store, now, self._patch_for_new_run)
         self.builds = BuildWatcher(self._build_api, lambda: Store(cfg.db_path), now)
         self.builds.enabled = cfg.build_snapshots
+        self.builds.stale_hours = cfg.build_stale_hours
         self.values = BookCache()  # loot values of settled maps, sessions, stash (per prices)
         self._session_health: tuple[Any, dict[str, Any]] | None = None
         self.hotkeys: dict[str, GlobalHotkey] = {}  # registered by start()
@@ -258,6 +259,7 @@ class AppRuntime:
         old = self.cfg
         self.cfg = cfg
         self.builds.enabled = cfg.build_snapshots
+        self.builds.stale_hours = cfg.build_stale_hours
         self._league_check_now.set()  # tabs, account or cookie may have changed
         if cfg.debug_logging != old.debug_logging:
             logs.set_verbose(cfg.debug_logging)

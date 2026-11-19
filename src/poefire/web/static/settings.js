@@ -64,6 +64,7 @@ async function loadSettings() {
   $("set-overlay-opacity").value = s.overlay_opacity ?? 90;
   $("set-overlay-opacity-value").textContent = `${$("set-overlay-opacity").value}%`;
   $("set-build-snapshots").checked = s.build_snapshots;
+  $("set-build-stale").value = String(s.build_stale_hours ?? 24);
   renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
   $("set-delay").value = s.snapshot_delay;
@@ -249,6 +250,7 @@ function settingsBody() {
     overlay_opacity: Number($("set-overlay-opacity").value),
     debug_logging: $("set-debug-logging").checked,
     build_snapshots: $("set-build-snapshots").checked,
+    build_stale_hours: Number($("set-build-stale").value),
     update_channel: $("set-update-channel").value,
   };
 }
@@ -266,7 +268,8 @@ const SETTING_FIELDS = {
   campaign_hotkey: ["set-hotkey", "Campaign hotkey"], campaign_hotkey_sound: ["set-hotkey-sound", "Hotkey sound"],
   overlay_enabled: ["set-overlay", "Overlay"], overlay_toggle_hotkey: ["set-overlay-key", "Overlay hotkey"],
   overlay_move_hotkey: ["set-overlay-move", "Overlay move hotkey"],
-  build_snapshots: ["set-build-snapshots", "Build snapshots"], update_channel: ["set-update-channel", "Update channel"],
+  build_snapshots: ["set-build-snapshots", "Build snapshots"],
+  build_stale_hours: ["set-build-stale", "Stale-level snapshots"], update_channel: ["set-update-channel", "Update channel"],
 };
 
 function sameSetting(a, b) {

@@ -5,10 +5,12 @@ gear and passive changes once the game saves them, which happens on zone changes
 is captured at the first zone change after reaching it (two levels in one zone make one
 snapshot, labelled with the higher one).
 
-From level 80 levels come slowly, so there's also a daily snapshot: on a day without one, the
-character you're playing (the website's "current" character) is captured at a zone change
-once you've played an hour that day (so a level-up early in the session makes it unneeded,
-and it shows the build as played, not as logged in).
+From level 80 levels come slowly, so there are also "stale level" snapshots: when the
+character you're playing (the website's "current" character) has had no snapshot for
+`stale_hours` (a setting; daily by default), it's captured at a zone change once you've
+played an hour that day, and kept only if its gear, gems or passives changed since its last
+snapshot (`fingerprint`). The Builds tab shows what changed from one snapshot to the next
+(`changes`).
 
 The raw website responses are kept (compressed), so later features (Path of Building codes)
 can be built from them. `summarize()` turns either source into what the Builds tab shows.
@@ -16,6 +18,8 @@ can be built from them. `summarize()` turns either source into what the Builds t
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import queue
 import threading
@@ -39,7 +43,8 @@ FRESH = timedelta(minutes=10)
 DAILY_FROM_LEVEL = 80
 DAILY_AFTER = timedelta(hours=1)  # of play that day, before the daily snapshot
 DAILY_RETRY = timedelta(hours=1)  # after a failed daily snapshot
-DAILY = -1  # the job "take today's snapshot if none yet" (in place of a level)
+DAILY = -1  # the job "take a stale-level snapshot if one is due" (in place of a level)
+STALE_HOURS = 24.0  # default for the setting; 0 = no stale-level snapshots
 
 
 def wants_snapshot(level: int) -> bool:
@@ -156,6 +161,7 @@ def summarize(snap: BuildSnapshot) -> Json:
                                                 i.get("x", 0))):  # fmt: skip
         slot = SLOTS[item["inventoryId"]]
         gear.append({
+            "key": _slot_key(item),
             "slot": slot,
             "name": clean(item.get("name") or ""),
             "base": clean(item.get("typeLine") or item.get("baseType") or ""),
@@ -179,6 +185,65 @@ def summarize(snap: BuildSnapshot) -> Json:
     }
 
 
+def _item_ident(item: Json) -> str:
+    return str(item.get("id") or f"{item.get('name')}|{item.get('typeLine')}")
+
+
+def _slot_key(item: Json) -> str:
+    return f"{item.get('inventoryId')}:{item.get('x', 0)}"
+
+
+def fingerprint(data: Json) -> str:
+    """What makes a build: the equipped items, the gems in them (not their levels, which
+    change as they gain experience), the passive tree and its jewels."""
+    _, equipped, passives, jewels = parts(data)
+    gear = sorted(
+        (_slot_key(i), _item_ident(i),
+         sorted(str(g.get("typeLine") or g.get("baseType") or "")
+                for g in i.get("socketedItems") or ()))
+        for i in equipped
+    )  # fmt: skip
+    tree = {
+        "hashes": sorted(passives.get("hashes") or []),
+        "hashes_ex": sorted(passives.get("hashes_ex") or []),
+        "masteries": passives.get("mastery_effects") or {},
+        "jewels": sorted(_item_ident(j) for j in jewels),
+        "bandit": passives.get("bandit_choice"),
+    }
+    blob = json.dumps({"gear": gear, "tree": tree}, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def changes(prev: BuildSnapshot, cur: BuildSnapshot) -> Json:
+    """What changed from `prev` to `cur`: the gear slots with another item (or new), the
+    gems that weren't socketed before, and the passive points."""
+    if prev.data is None or cur.data is None:
+        return {}
+    _, prev_eq, prev_tree, prev_jewels = parts(prev.data)
+    _, cur_eq, cur_tree, cur_jewels = parts(cur.data)
+    before = {_slot_key(i): _item_ident(i) for i in prev_eq}
+    slots = [_slot_key(i) for i in cur_eq if before.get(_slot_key(i)) != _item_ident(i)]
+    after = {_slot_key(i) for i in cur_eq}
+    removed = [SLOTS.get(k.split(":")[0], k) for k in before if k not in after]
+    old_gems = {str(g.get("typeLine") or "") for i in prev_eq for g in i.get("socketedItems") or ()}
+    new_gems = sorted({str(g.get("typeLine") or "") for i in cur_eq
+                       for g in i.get("socketedItems") or ()} - old_gems - {""})  # fmt: skip
+
+    def points(tree: Json) -> int:
+        return len(tree.get("hashes") or []) + len(tree.get("hashes_ex") or [])
+
+    return {
+        "previous": {"id": prev.id, "level": prev.level, "taken_at": prev.taken_at.isoformat()},
+        "slots": slots,  # keys, as in summarize()'s gear "key"
+        "removed": removed,
+        "gems": new_gems,
+        "passives": points(cur_tree) - points(prev_tree),
+        "tree_changed": sorted(prev_tree.get("hashes") or [])
+        != sorted(cur_tree.get("hashes") or [])
+        or len(prev_jewels) != len(cur_jewels),
+    }
+
+
 # --- capture ---
 
 
@@ -199,7 +264,9 @@ class BuildWatcher:
         self.retry_after = retry_after
         self.sleep = sleep
         self.enabled = True
-        self.daily = True  # the daily snapshot from DAILY_FROM_LEVEL
+        self.daily = True  # stale-level snapshots from DAILY_FROM_LEVEL
+        self.stale_hours = STALE_HOURS  # their interval (the setting); 0 = none
+        self._stale_checked: dict[str, datetime] = {}  # character -> last check, unchanged
         self._day: tuple[date, datetime] | None = None  # today, and when play started today
         self._daily_done: date | None = None
         self._daily_tried: datetime | None = None
@@ -237,16 +304,16 @@ class BuildWatcher:
             self._ensure_worker()
 
     def _daily_due(self, ts: datetime) -> bool:
-        if not self.daily or self._day is None or self._daily_done == ts.date():
+        if not self.daily or self.stale_hours <= 0 or self._day is None:
             return False
         if ts - self._day[1] < DAILY_AFTER:
             return False
         return self._daily_tried is None or ts - self._daily_tried >= DAILY_RETRY
 
     def daily_snapshot(self) -> BuildSnapshot | None:
-        """Today's snapshot of the character being played, from level 80, unless it already
-        has one today (a level-up or an earlier daily one). Runs on the worker."""
-        today = self.now().date()
+        """A stale-level snapshot of the character being played (from level 80) when it has
+        had none for `stale_hours`; kept only if the build changed. Runs on the worker."""
+        now = self.now()
         api = self.api_getter()
         if api is None:
             return None
@@ -255,16 +322,21 @@ class BuildWatcher:
         cur = next((c for c in chars if c.get("current")), None)
         level = int(cur.get("level") or 0) if cur else 0
         if cur is None or level < DAILY_FROM_LEVEL:
-            self._daily_done = today  # nothing to do today
             return None
         name = str(cur.get("name", ""))
         with self.store_factory() as store:
-            if store.has_build_snapshot_on(name, today):
-                self._daily_done = today
-                return None
-        snap = self.capture(name, level, str(cur.get("class") or ""), final=False)
-        self._daily_done = today
-        log.info("daily build snapshot of %s (level %d)", name, level)
+            last = store.latest_build_snapshot(name)
+        since = max(
+            [t for t in (last.taken_at if last else None, self._stale_checked.get(name)) if t],
+            default=None,
+        )
+        if since is not None and now - since < timedelta(hours=self.stale_hours):
+            return None
+        snap = self.capture(name, level, str(cur.get("class") or ""), final=False,
+                            only_if_changed=True)  # fmt: skip
+        self._stale_checked[name] = now
+        if snap is not None:
+            log.info("stale-level build snapshot of %s (level %d)", name, level)
         return snap
 
     def request(self, character: str, level: int = 0, char_class: str = "") -> None:
@@ -310,10 +382,16 @@ class BuildWatcher:
         return True, None
 
     def capture(
-        self, name: str, level: int, cls: str = "", final: bool = True
+        self,
+        name: str,
+        level: int,
+        cls: str = "",
+        final: bool = True,
+        only_if_changed: bool = False,
     ) -> BuildSnapshot | None:
         """Fetch and store one snapshot. Raises _Retry for a first failure when not `final`;
-        a final failure is stored as a missed level."""
+        a final failure is stored as a missed level. `only_if_changed`: not stored (None)
+        when the build is the same as in the character's latest snapshot."""
         api = self.api_getter()
         snap = BuildSnapshot(name, level, self.now(), char_class=cls or None)
         if api is None:
@@ -338,6 +416,16 @@ class BuildWatcher:
                     raise _Retry from e
         self.last_error = snap.error
         with self.store_factory() as store:
+            if only_if_changed and snap.data is not None:
+                last = store.latest_build_snapshot(name, ok_only=True)
+                if (
+                    last is not None
+                    and last.data is not None
+                    and (fingerprint(last.data) == fingerprint(snap.data))
+                ):
+                    log.info("build of %s unchanged since %s: no snapshot", name,
+                             last.taken_at.isoformat(timespec="minutes"))  # fmt: skip
+                    return None
             snap.id = store.add_build_snapshot(snap)
         if self.on_snapshot is not None:
             self.on_snapshot(snap)

@@ -41,6 +41,7 @@ class SettingsIn(BaseModel):
     update_channel: Literal["stable", "beta"] | None = None
     campaign_hotkey: str | None = None
     build_snapshots: bool | None = None
+    build_stale_hours: float | None = Field(default=None, ge=0, le=24 * 30)
     trade_sales: bool | None = None
     loot_mode: Literal["per_map", "interval"] | None = None
     overlay_enabled: bool | None = None
@@ -119,6 +120,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "update_channel": cfg.update_channel,
         "campaign_hotkey": cfg.campaign_hotkey,
         "build_snapshots": cfg.build_snapshots,
+        "build_stale_hours": cfg.build_stale_hours,
         "trade_sales": cfg.trade_sales,
         "loot_mode": cfg.loot_mode,
         "overlay_enabled": cfg.overlay_enabled,
@@ -220,6 +222,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["debug_logging"] = body.debug_logging
     if body.build_snapshots is not None:
         changes["build_snapshots"] = body.build_snapshots
+    if body.build_stale_hours is not None:
+        changes["build_stale_hours"] = body.build_stale_hours
     if body.trade_sales is not None:
         changes["trade_sales"] = body.trade_sales
     if body.loot_mode is not None:

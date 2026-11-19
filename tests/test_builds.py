@@ -49,7 +49,7 @@ WEBSITE_PASSIVES: dict[str, Any] = {
     "hashes": [1, 2, 3, 4], "hashes_ex": [70000], "mastery_effects": {"5": "6"},
     "items": [{"typeLine": "Cobalt Jewel", "x": 3}], "jewel_data": {}, "bandit_choice": "Alira",
 }  # fmt: skip
-BUILD = {"source": "website", "items": WEBSITE_ITEMS, "passives": WEBSITE_PASSIVES}
+BUILD: dict[str, Any] = {"source": "website", "items": WEBSITE_ITEMS, "passives": WEBSITE_PASSIVES}
 
 
 class FakeApi:
@@ -249,43 +249,70 @@ class HighLevelApi(FakeApi):
                  "current": True}, {"name": "Alt", "league": "Standard", "level": 95}]  # fmt: skip
 
 
-def test_daily_snapshot_from_level_80(tmp_path: Path) -> None:
-    api = HighLevelApi()
+class ChangingApi(HighLevelApi):
+    """The build changes when `gear` does."""
+
+    def __init__(self, level: int = 92) -> None:
+        super().__init__(level)
+        self.gear = "helm-1"
+
+    def get_build(self, name: str) -> dict[str, Any]:
+        self.calls.append(name)
+        if self.fail:
+            self.fail -= 1
+            raise RuntimeError("rate limited")
+        items = [{**WEBSITE_ITEMS["items"][0], "id": self.gear}]
+        return {**BUILD, "items": {**BUILD["items"], "items": items}}
+
+
+def test_stale_level_snapshots(tmp_path: Path) -> None:
+    """From level 80: after `stale_hours` without a snapshot, one is taken at a zone change
+    (an hour into the day's play), and kept only if the build changed."""
+    api = ChangingApi()
     clock = [NOW]
     w = BuildWatcher(lambda: api, lambda: Store(tmp_path / "db"), lambda: clock[0])
-    jobs: list[Any] = []
+    w.stale_hours = 6
     w._ensure_worker = lambda: None  # type: ignore[method-assign]  # jobs run here instead
 
     def zone(minutes: int) -> None:
         clock[0] = NOW + timedelta(minutes=minutes)
         w.handle(ZoneEntered(clock[0], "Strand"), "")
         while not w._queue.empty():
-            jobs.append(job := w._queue.get())
+            job = w._queue.get()
             if job is not None and job[1] == -1:
                 w.daily_snapshot()
 
+    def stored() -> list[BuildSnapshot]:
+        with Store(tmp_path / "db") as s:
+            return s.list_build_snapshots("Speedy")
+
     zone(0)
     zone(30)
-    assert jobs == []  # not an hour of play yet
+    assert api.calls == []  # not an hour of play yet
     zone(61)
-    with Store(tmp_path / "db") as s:
-        (snap,) = s.list_build_snapshots("Speedy")
-        assert snap.level == 92 and snap.ok and snap.char_class == "Deadeye"
-    zone(90)
-    zone(200)
-    assert len(jobs) == 1 and api.calls == ["Speedy"]  # once a day
-    zone(24 * 60 + 5)  # the next day: the clock starts again
-    zone(24 * 60 + 70)
-    assert api.calls == ["Speedy", "Speedy"]
+    (snap,) = stored()
+    assert snap.level == 92 and snap.ok and snap.char_class == "Deadeye"
+    zone(130)
+    zone(300)
+    assert api.calls == ["Speedy"]  # 6 hours not up yet
+    zone(61 + 6 * 60)
+    assert api.calls == ["Speedy", "Speedy"] and len(stored()) == 1  # same build: not kept
+    zone(61 + 7 * 60)
+    assert len(api.calls) == 2  # checked an hour ago: the next check in 6 hours
+    api.gear = "helm-2"  # a new helmet
+    zone(61 + 12 * 60 + 5)
+    assert len(stored()) == 2  # changed: kept
+    w.stale_hours = 0  # off
+    zone(61 + 30 * 60)
+    assert len(api.calls) == 3
 
 
-def test_no_daily_snapshot_after_a_level_one_or_below_80(tmp_path: Path) -> None:
+def test_no_stale_snapshot_below_80_or_too_soon(tmp_path: Path) -> None:
     api = HighLevelApi()
     with Store(tmp_path / "db") as s:
         s.add_build_snapshot(BuildSnapshot("Speedy", 91, NOW - timedelta(hours=2), data=BUILD))
     w = BuildWatcher(lambda: api, lambda: Store(tmp_path / "db"), lambda: NOW)
-    assert w.daily_snapshot() is None and api.calls == []  # a level-up snapshot today
-    assert w._daily_done == NOW.date()
+    assert w.daily_snapshot() is None and api.calls == []  # a level-up snapshot 2 hours ago
     low = HighLevelApi(level=79)
     w2 = BuildWatcher(lambda: low, lambda: Store(tmp_path / "other"), lambda: NOW)
     assert w2.daily_snapshot() is None and low.calls == []
@@ -294,6 +321,33 @@ def test_no_daily_snapshot_after_a_level_one_or_below_80(tmp_path: Path) -> None
     w3 = BuildWatcher(lambda: failing, lambda: Store(tmp_path / "third"), lambda: NOW)
     with pytest.raises(Exception):  # noqa: B017 (retried at a zone change an hour later)
         w3.daily_snapshot()
-    assert w3._daily_done is None
     with Store(tmp_path / "third") as s:
-        assert s.build_characters() == []  # a failed daily try isn't stored as a missed level
+        assert s.build_characters() == []  # a failed try isn't stored as a missed level
+
+
+def test_changes_between_snapshots(tmp_path: Path) -> None:
+    from poefire import builds
+
+    def build(helm: str, gems: list[str], hashes: list[int]) -> dict[str, Any]:
+        item = {**WEBSITE_ITEMS["items"][0], "id": helm,
+                "socketedItems": [{"typeLine": g, "socket": 0} for g in gems]}  # fmt: skip
+        passives = {**BUILD["passives"], "hashes": hashes}
+        return {**BUILD, "items": {**BUILD["items"], "items": [item]}, "passives": passives}
+
+    a = BuildSnapshot("Speedy", 90, NOW, data=build("h1", ["Fireball"], [1, 2]), id=1)
+    b = BuildSnapshot("Speedy", 90, NOW, data=build("h1", ["Fireball"], [1, 2]), id=2)
+    c = BuildSnapshot("Speedy", 91, NOW, data=build("h2", ["Fireball", "Added Fire Damage Support"],
+                                                    [1, 2, 3]), id=3)  # fmt: skip
+    assert builds.fingerprint(a.data or {}) == builds.fingerprint(b.data or {})
+    assert builds.fingerprint(a.data or {}) != builds.fingerprint(c.data or {})
+    d = builds.changes(a, c)
+    key = builds.summarize(c)["gear"][0]["key"]
+    assert d["slots"] == [key] and d["gems"] == ["Added Fire Damage Support"]
+    assert d["passives"] == 1 and d["tree_changed"] and d["previous"]["id"] == 1
+    assert builds.changes(a, b)["slots"] == []
+    with Store(tmp_path / "db") as s:
+        for snap in (a, c):
+            snap.id = s.add_build_snapshot(snap)
+        prev = s.previous_build_snapshot(c)
+        assert prev is not None and prev.id == a.id
+        assert s.previous_build_snapshot(a) is None
