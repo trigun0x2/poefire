@@ -41,7 +41,7 @@ PRICE_SOURCES: tuple[tuple[str, str], ...] = (
         ("exchange", t)
         for t in (
             "DivinationCard", "Essence", "Fossil", "Resonator", "Oil", "DeliriumOrb", "Omen",
-            "Tattoo", "Artifact", "AllflameEmber", "Runegraft", "Astrolabe",
+            "Tattoo", "Artifact", "AllflameEmber", "Runegraft", "Astrolabe", "Thread",
         )
     ),
     # poe.ninja's stash listings (an empty one falls back to the exchange, see fetch)

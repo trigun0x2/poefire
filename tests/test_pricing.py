@@ -311,7 +311,7 @@ def test_price_sources() -> None:
 
     types = {t for _, t in PRICE_SOURCES}
     assert "Scarab" not in types  # gone from the game
-    for t in ("AllflameEmber", "Runegraft", "Astrolabe", "Wombgift", "BlightedMap",
+    for t in ("AllflameEmber", "Runegraft", "Astrolabe", "Thread", "Wombgift", "BlightedMap",
               "BlightRavagedMap", "UniqueTincture", "UniqueRelic"):  # fmt: skip
         assert t in types
     assert ("exchange", "DivinationCard") in PRICE_SOURCES  # straight to where it's priced
