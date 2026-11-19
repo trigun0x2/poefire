@@ -102,7 +102,7 @@ class Config:
     build_snapshots: bool = True  # gear/gems/tree at levels 5, 10 and 15+ (needs loot setup)
     # from level 80: a snapshot after this many hours without one, kept only if the build
     # changed (0 = off)
-    build_stale_hours: float = 24.0
+    build_stale_hours: int = 24
     # take trade sales' payments out of map loot (reads the website's trade history: more
     # requests, and the trade site rate-limits hard), off by default
     trade_sales: bool = False

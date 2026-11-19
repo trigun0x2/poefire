@@ -250,7 +250,7 @@ function settingsBody() {
     overlay_opacity: Number($("set-overlay-opacity").value),
     debug_logging: $("set-debug-logging").checked,
     build_snapshots: $("set-build-snapshots").checked,
-    build_stale_hours: Number($("set-build-stale").value),
+    build_stale_hours: Math.max(0, Math.round(Number($("set-build-stale").value) || 0)),
     update_channel: $("set-update-channel").value,
   };
 }

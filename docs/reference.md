@@ -258,8 +258,8 @@ zone change, so a level is captured at your first zone change after reaching it 
 one zone make one snapshot, labelled with the higher one).
 
 From level 80, levels come slowly, so there are also **stale-level snapshots** (Settings →
-"When not levelling (level 80+), also snapshot": never, every 6 or 12 hours, every day (the
-default), every 2 days or every week; `build_stale_hours` in config.toml). When the character
+Builds → "When not levelling (level 80+), also snapshot every (hours)": a whole number of
+hours, 24 by default, 0 for never; `build_stale_hours` in config.toml). When the character
 you're playing has had no snapshot for that long, it's captured at a zone change once you've
 played for an hour that day, and **kept only if its gear, gems or passives changed** since
 its last snapshot (gem levels don't count). A failed try is repeated an hour later and isn't
@@ -285,7 +285,7 @@ are ringed, and a line lists the slots, new gems and passive points.
   new league adds a tree version.
 - A failed fetch is retried once after 3 minutes; then the level is marked as missed, with the
   reason. Uses the account connection set up for loot (same rate limits). Turn it off under
-  Settings → Campaign.
+  Settings → Builds.
 
 ## Settings
 

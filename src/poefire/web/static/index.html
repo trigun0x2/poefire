@@ -396,21 +396,19 @@
         <span>Beep when the hotkey is pressed <span class="muted">— high: started or resumed, low: paused</span></span>
       </label>
       <div class="hint">Works while the game has focus. poefire only listens for the key; it never sends input to the game.</div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Builds</div>
       <label class="check">
         <input id="set-build-snapshots" type="checkbox">
         <span>Take build snapshots <span class="muted">— gear, gems and passive tree at levels 5 and 10, then every level from 15 (uses the account connection set up for loot)</span></span>
       </label>
-      <label class="field narrow">
-        <span>When not levelling (level 80+), also snapshot <span class="muted">— kept only if your gear, gems or passives changed</span></span>
-        <select id="set-build-stale">
-          <option value="0">Never</option>
-          <option value="6">Every 6 hours</option>
-          <option value="12">Every 12 hours</option>
-          <option value="24">Every day</option>
-          <option value="48">Every 2 days</option>
-          <option value="168">Every week</option>
-        </select>
+      <label class="field">
+        <span>When not levelling (level 80+), also snapshot every (hours)</span>
+        <input id="set-build-stale" class="hours-input" type="number" min="0" max="720" step="1" inputmode="numeric">
       </label>
+      <div class="hint">A snapshot is kept only if your gear, gems or passives changed since the last one. 0 = never; 24 = once a day.</div>
     </section>
 
     <section class="card">

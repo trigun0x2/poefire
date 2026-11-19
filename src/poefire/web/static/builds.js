@@ -10,14 +10,14 @@ let bdIndex = 0;
 const bdCache = new Map(); // snapshot id -> detail
 
 function staleText(hours) {
-  return { 6: "every 6 hours", 12: "every 12 hours", 24: "once a day", 48: "every 2 days", 168: "once a week" }[hours] || `every ${hours} hours`;
+  return hours === 24 ? "once a day" : hours === 1 ? "every hour" : `every ${hours} hours`;
 }
 
 function bdStatus() {
   const d = bdData;
   const el = $("bd-status");
   let text = "", cls = "hint";
-  if (!d.enabled) { text = "Build snapshots are off (Settings → Campaign)."; cls += " warn"; }
+  if (!d.enabled) { text = "Build snapshots are off (Settings → Builds)."; cls += " warn"; }
   else if (!d.connected) { text = `Not connected to your account${d.reason ? `: ${d.reason}` : ""}. Snapshots use the connection set up for loot in Settings.`; cls += " warn"; }
   else if (d.pending.length) text = `Waiting for a zone change to capture: ${d.pending.map((p) => `${p.character} level ${p.level}`).join(", ")}.`;
   else if (d.last_error) { text = `Last snapshot failed: ${d.last_error}`; cls += " bad"; }

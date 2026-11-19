@@ -44,7 +44,7 @@ DAILY_FROM_LEVEL = 80
 DAILY_AFTER = timedelta(hours=1)  # of play that day, before the daily snapshot
 DAILY_RETRY = timedelta(hours=1)  # after a failed daily snapshot
 DAILY = -1  # the job "take a stale-level snapshot if one is due" (in place of a level)
-STALE_HOURS = 24.0  # default for the setting; 0 = no stale-level snapshots
+STALE_HOURS = 24  # default for the setting; 0 = no stale-level snapshots
 
 
 def wants_snapshot(level: int) -> bool:
@@ -265,7 +265,7 @@ class BuildWatcher:
         self.sleep = sleep
         self.enabled = True
         self.daily = True  # stale-level snapshots from DAILY_FROM_LEVEL
-        self.stale_hours = STALE_HOURS  # their interval (the setting); 0 = none
+        self.stale_hours: float = STALE_HOURS  # their interval (the setting); 0 = none
         self._stale_checked: dict[str, datetime] = {}  # character -> last check, unchanged
         self._day: tuple[date, datetime] | None = None  # today, and when play started today
         self._daily_done: date | None = None

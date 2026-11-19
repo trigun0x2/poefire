@@ -41,7 +41,7 @@ class SettingsIn(BaseModel):
     update_channel: Literal["stable", "beta"] | None = None
     campaign_hotkey: str | None = None
     build_snapshots: bool | None = None
-    build_stale_hours: float | None = Field(default=None, ge=0, le=24 * 30)
+    build_stale_hours: int | None = Field(default=None, ge=0, le=24 * 30)
     trade_sales: bool | None = None
     loot_mode: Literal["per_map", "interval"] | None = None
     overlay_enabled: bool | None = None
