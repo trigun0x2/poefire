@@ -104,6 +104,22 @@ def divine(v: float | None) -> str:
     return "" if v is None else f"{v:,.2f}d"
 
 
+DIVINE_FROM = 200.0  # chaos: amounts from here show in divines (as in the app)
+
+
+def money(chaos_value: float | None, divine_value: float | None) -> tuple[str, str]:
+    """(main, other unit): chaos below DIVINE_FROM, else divines with the chaos after."""
+    if chaos_value is None:
+        return "—", ""
+    if abs(chaos_value) >= DIVINE_FROM and divine_value is not None:
+        return divine(divine_value), f"{chaos_value:,.0f}c"
+    return chaos(chaos_value), divine(divine_value)
+
+
+def _tone(text: str) -> Tone:
+    return "divine" if text.endswith("d") else "chaos" if text.endswith("c") else "muted"
+
+
 def frame(data: Json | None, elapsed: float, moving: bool = False, hot: bool = False) -> Frame:
     """`elapsed`: seconds since `data` was fetched (timers tick between fetches)."""
     if not data:
@@ -146,12 +162,14 @@ def frame(data: Json | None, elapsed: float, moving: bool = False, hot: bool = F
         map_time = duration(t) + ("" if active else " (hideout)")
     avg = data.get("avg_chaos")
     total = data.get("chaos")
+    avg_main, avg_sub = money(avg, data.get("avg_divine"))
+    total_main, total_sub = money(total, data.get("divine"))
     return Frame(
         "mapping", moving, hot,
-        avg_chaos="—" if avg is None else chaos(avg),
-        avg_divine="" if avg is None else divine(data.get("avg_divine")),
-        total_chaos="" if not maps else "—" if total is None else chaos(total),
-        total_divine="" if not maps else divine(data.get("divine")),
+        avg_chaos=avg_main,
+        avg_divine="" if avg is None else avg_sub,
+        total_chaos="" if not maps else total_main,
+        total_divine="" if not maps else total_sub,
         maps=f"{maps} map{'' if maps == 1 else 's'}" if maps else "No maps yet",
         map_name=map_name, map_time=map_time, notice=str(data.get("notice") or ""),
     )  # fmt: skip
@@ -304,18 +322,18 @@ def render(fr: Frame, scale: float = 1.0, opacity: int = 90) -> Rendered:
         kf, big, small = c.font(13), c.font(22, "bold"), c.font(12)
         base = y + 22
         c.put(left, base, "Avg / map", kf, "muted")
-        parts = [(fr.avg_chaos, big, "chaos" if fr.avg_chaos != "—" else "muted")]
+        parts = [(fr.avg_chaos, big, _tone(fr.avg_chaos))]
         if fr.avg_divine:
-            parts.append(("  " + fr.avg_divine, small, "divine"))
-        c.put_right(right - reserve, base, parts)  # type: ignore[arg-type]
+            parts.append(("  " + fr.avg_divine, small, _tone(fr.avg_divine)))
+        c.put_right(right - reserve, base, parts)
         y = base + 7
         base = y + 14
         c.put(left, base, "Session", kf, "muted")
         sparts: list[tuple[str, Font, Tone]] = []
         if fr.total_chaos:
-            sparts.append((fr.total_chaos, kf, "chaos" if fr.total_chaos != "—" else "muted"))
+            sparts.append((fr.total_chaos, kf, _tone(fr.total_chaos)))
         if fr.total_divine:
-            sparts.append(("  " + fr.total_divine, small, "divine"))
+            sparts.append(("  " + fr.total_divine, small, _tone(fr.total_divine)))
         sparts.append(((" · " if sparts else "") + fr.maps, kf, "text"))
         c.put_right(right, base, sparts)
         y += 19

@@ -232,14 +232,14 @@ function renderLastMap() {
   $("last-meta").textContent = `Level ${m.area_level} · ` +
     (m.status === "finished" ? `finished ${timeOf(m.ended_at)}` : "just now · back in hideout");
   $("last-value").innerHTML = m.loot_tracked
-    ? `<span class="big">${chaos(m.chaos)}</span><span class="sub">${divine(m.divine)}</span>`
+    ? `<span class="big">${chaos(m.chaos)}</span><span class="sub ${inDivines(m.chaos) ? "chaos" : "divine"}">${otherUnit(m.chaos)}</span>`
     : '<span class="dim">No loot data for this map</span>';
   $("last-time").textContent = duration(m.active_seconds);
   $("last-deaths").innerHTML = m.deaths || '<span class="dim">0</span>';
   const r = runsData.recent;
   if (m.loot_tracked && r.maps) {
     const d = m.chaos - r.avg_chaos;
-    $("last-vs").innerHTML = `<span class="${d >= 0 ? "good" : "neg"}">${d >= 0 ? "+" : "−"}${nf1.format(Math.abs(d))}c</span>`;
+    $("last-vs").innerHTML = `<span class="${d >= 0 ? "good" : "neg"}">${d >= 0 ? "+" : "−"}${money0(Math.abs(d))}</span>`;
   } else {
     $("last-vs").innerHTML = '<span class="dim">—</span>';
   }
@@ -262,10 +262,10 @@ function renderIntervalSession(s, iv, past) {
   const none = !iv.snapshots;
   const note = none ? (past ? "no snapshots in this session" : "first snapshot when you start mapping") : "net, all watched tabs";
   $("tiles").innerHTML = [
-    tile("Total loot", none ? "—" : `${nf0.format(iv.chaos)}c`, (iv.divine == null || none ? "" : `${nf2.format(iv.divine)}d · `) + note, true),
+    tile("Total loot", none ? "—" : money0(iv.chaos), (none || !otherUnit(iv.chaos) ? "" : `${otherUnit(iv.chaos)} · `) + note, true),
     tile("Maps done", iv.maps, s.runs ? `avg ${duration(s.avg_run_seconds)}` : "No maps yet"),
-    tile("Avg / map", iv.avg_chaos == null ? "—" : `${nf1.format(iv.avg_chaos)}c`, iv.avg_divine == null ? "total ÷ maps" : `${nf2.format(iv.avg_divine)}d · total ÷ maps`),
-    tile("Loot / hour", iv.chaos_per_hour == null ? "—" : `${nf0.format(iv.chaos_per_hour)}c`, "from your first map to the last"),
+    tile("Avg / map", money0(iv.avg_chaos), iv.avg_chaos == null || !otherUnit(iv.avg_chaos) ? "total ÷ maps" : `${otherUnit(iv.avg_chaos)} · total ÷ maps`),
+    tile("Loot / hour", money0(iv.chaos_per_hour), "from your first map to the last"),
     tile("Map time", duration(s.active_seconds || 0), s.wall_seconds ? `${duration(s.wall_seconds)} played` : ""),
     tile("Deaths", s.deaths ?? 0, s.runs ? `${nf1.format(s.deaths / s.runs)} per map` : ""),
   ].join("");
@@ -294,21 +294,21 @@ function renderSession() {
     return;
   }
   const tracked = s.loot_tracked_runs;
-  const lootSub = tracked < s.runs ? `${tracked} of ${s.runs} runs with loot data` : "net loot value";
+  const lootSub = tracked < s.runs ? `${tracked} of ${s.runs} runs with loot data` : "loot value";
   const recentSub = !r.maps ? "no finished maps yet"
-    : (r.avg_divine == null ? "" : `${nf2.format(r.avg_divine)}d · `) +
+    : (otherUnit(r.avg_chaos) ? `${otherUnit(r.avg_chaos)} · ` : "") +
       (r.maps < r.of || past ? `over ${r.maps} map${r.maps === 1 ? "" : "s"}` : `last ${r.of} maps`);
   $("tiles").innerHTML = [
-    tile("Avg chaos / map", r.maps ? `${nf1.format(r.avg_chaos)}c` : "—", recentSub, true),
+    tile("Avg loot / map", r.maps ? money0(r.avg_chaos) : "—", recentSub, true),
     tile("Avg map time", r.maps ? duration(r.avg_seconds) : "—", r.maps ? `${nf1.format(r.avg_deaths)} deaths / map` : ""),
-    tile("Total loot", s.chaos == null ? "—" : `${nf0.format(s.chaos)}c`,
-      s.divine == null ? lootSub : `${nf2.format(s.divine)}d · ${lootSub}`),
-    tile("Best run", s.best_run ? `${nf0.format(s.best_run.chaos)}c` : "—", s.best_run ? esc(s.best_run.map_name) : ""),
+    tile("Total loot", money0(s.chaos),
+      s.chaos == null || !otherUnit(s.chaos) ? lootSub : `${otherUnit(s.chaos)} · ${lootSub}`),
+    tile("Best run", s.best_run ? money0(s.best_run.chaos) : "—", s.best_run ? esc(s.best_run.map_name) : ""),
     tile("Runs", s.runs, `avg ${duration(s.avg_run_seconds)}`),
     tile("Map time", duration(s.active_seconds), `${duration(s.wall_seconds)} played`),
     tile("Deaths", s.deaths, s.runs ? `${nf1.format(s.deaths / s.runs)} per run` : ""),
-    tile("Loot / hour", s.chaos_per_hour == null ? "—" : `${nf0.format(s.chaos_per_hour)}c`,
-      (s.divine_per_hour == null ? "" : `${nf2.format(s.divine_per_hour)}d · `) + "with hideout time"),
+    tile("Loot / hour", money0(s.chaos_per_hour),
+      (otherUnit(s.chaos_per_hour) ? `${otherUnit(s.chaos_per_hour)} · ` : "") + "with hideout time"),
   ].join("");
 }
 
@@ -378,7 +378,7 @@ function renderRuns() {
       <td class="num">${duration(r.active_seconds)}</td>
       <td class="num">${r.deaths || '<span class="dim">0</span>'}</td>
       <td class="num per-map">${chaos(r.chaos)}</td>
-      <td class="num per-map">${divine(r.divine)}</td>
+      <td class="num per-map dim">${r.chaos == null ? "—" : otherUnit(r.chaos) || "—"}</td>
     </tr>`;
   }).join("");
 }
@@ -415,7 +415,7 @@ async function renderDetail() {
     : "";
   $("detail").innerHTML = `
     <div class="detail-head">
-      <div class="big">${chaos(d.loot.chaos)} <span class="muted">·</span> ${divine(d.loot.divine)}</div>
+      <div class="big">${chaos(d.loot.chaos)} <span class="muted">·</span> <span class="${inDivines(d.loot.chaos) ? "chaos" : "divine"}">${otherUnit(d.loot.chaos) || "—"}</span></div>
       <div class="muted">${duration(d.active_seconds)} · ${d.deaths} death${d.deaths === 1 ? "" : "s"}${d.loot.spent ? ` · ${chaos(d.loot.spent)} used, not counted` : ""}</div>
     </div>
     ${itemList(d.loot.items)}
@@ -476,9 +476,9 @@ function renderSessions() {
   $("sessions-body").innerHTML = rows.map((s) => {
     const live = s.current ? '<span class="live-dot" title="current session"></span>' : "";
     const avg = s.avg_chaos == null ? '<span class="dim">—</span>'
-      : `${chaos(s.avg_chaos)}${s.avg_divine == null ? "" : ` <span class="dim">· ${nf2.format(s.avg_divine)}d</span>`}`;
+      : `${chaos(s.avg_chaos)}${otherUnit(s.avg_chaos) ? ` <span class="dim">· ${otherUnit(s.avg_chaos)}</span>` : ""}`;
     const total = s.chaos == null ? '<span class="dim">—</span>'
-      : `${chaos(s.chaos)}${s.divine == null ? "" : ` <span class="dim">· ${nf2.format(s.divine)}d</span>`}`;
+      : `${chaos(s.chaos)}${otherUnit(s.chaos) ? ` <span class="dim">· ${otherUnit(s.chaos)}</span>` : ""}`;
     const del = s.current ? "" : `<button type="button" class="del" data-del="${s.id}" title="Delete this session and its maps">✕</button>`;
     return `<tr data-session="${s.id}" class="${s.id === shown ? "selected" : ""}">
       <td>${live}${s.current ? "Current · " : ""}${s.started_at ? dateTimeOf(s.started_at) : "—"}</td>

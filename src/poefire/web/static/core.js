@@ -21,11 +21,35 @@ function duration(sec) {
   const mm = String(m).padStart(2, "0"), ss = String(s).padStart(2, "0");
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
+// Amounts of 200 chaos or more show in divines (at poe.ninja's rate), throughout the app.
+const DIVINE_FROM = 200;
+function chaosPerDivine() {
+  return status?.prices?.chaos_per_divine || runsData?.chaos_per_divine || null;
+}
+/** Whether a chaos amount shows in divines. */
+function inDivines(v) {
+  return v != null && Math.abs(v) >= DIVINE_FROM && !!chaosPerDivine();
+}
+/** A chaos amount as plain text: "45.5c", or "3.21d" from 200c. */
+function money0(v) {
+  if (v == null) return "—";
+  if (inDivines(v)) {
+    const d = v / chaosPerDivine();
+    return `${(Math.abs(d) >= 100 ? nf0 : nf2).format(d)}d`;
+  }
+  return `${(Math.abs(v) >= 100 ? nf0 : nf1).format(v)}c`;
+}
+/** The same amount in the other unit, for a subtitle: divines below 200c, else chaos. */
+function otherUnit(v) {
+  if (v == null) return "";
+  if (inDivines(v)) return `${nf0.format(v)}c`;
+  const cpd = chaosPerDivine();
+  return cpd ? `${nf2.format(v / cpd)}d` : "";
+}
 function chaos(v) {
   if (v == null) return '<span class="dim">—</span>';
-  const cls = v < 0 ? "neg" : "chaos";
-  const txt = Math.abs(v) >= 100 ? nf0.format(v) : nf1.format(v);
-  return `<span class="${cls}">${txt}c</span>`;
+  const cls = v < 0 ? "neg" : inDivines(v) ? "divine" : "chaos";
+  return `<span class="${cls}" title="${inDivines(v) ? `${nf0.format(v)}c` : ""}">${money0(v)}</span>`;
 }
 function divine(v) {
   return v == null ? '<span class="dim">—</span>' : `<span class="divine">${nf2.format(v)}d</span>`;

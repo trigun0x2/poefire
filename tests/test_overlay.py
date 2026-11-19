@@ -264,3 +264,15 @@ def test_hotkeys_report_why_they_are_off(tmp_path: Path) -> None:
     assert rt.overlay_json()["toggle"] == {"key": "Ctrl+Alt+O", "active": False,
                                            "error": rt.hotkey_errors["overlay"]}  # fmt: skip
     rt.stop()
+
+
+def test_amounts_from_200_chaos_show_in_divines() -> None:
+    from poefire.web.overlay_render import frame
+
+    f = frame({"mode": "mapping", "maps": 5, "avg_chaos": 150.0, "avg_divine": 0.82,
+               "chaos": 1800.0, "divine": 9.89}, 0)  # fmt: skip
+    assert (f.avg_chaos, f.avg_divine) == ("150c", "0.82d")  # under 200c: chaos
+    assert (f.total_chaos, f.total_divine) == ("9.89d", "1,800c")  # from 200c: divines
+    no_rate = frame({"mode": "mapping", "maps": 1, "avg_chaos": 450.0, "avg_divine": None,
+                     "chaos": 450.0, "divine": None}, 0)  # fmt: skip
+    assert no_rate.avg_chaos == "450c"  # no divine price yet: stays in chaos
