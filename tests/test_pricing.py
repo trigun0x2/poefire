@@ -169,9 +169,9 @@ def test_value_deltas() -> None:
         ItemDelta("c", "Hubris Circlet", 2, 1, {"typeLine": "Hubris Circlet", "frameType": 2}),
     ]  # fmt: skip
     v = value_deltas(deltas, book())
-    assert v.chaos == 2 * 180 - 4
+    assert v.chaos == 2 * 180 and v.spent == 4  # the map used isn't taken off the loot
     assert v.unpriced == 1
-    assert v.divine(180.0) == pytest.approx(356 / 180)
+    assert v.divine(180.0) == pytest.approx(360 / 180)
     assert v.items[0].name == "Divine Orb"
 
 
@@ -315,3 +315,16 @@ def test_price_sources() -> None:
               "BlightRavagedMap", "UniqueTincture", "UniqueRelic"):  # fmt: skip
         assert t in types
     assert ("exchange", "DivinationCard") in PRICE_SOURCES  # straight to where it's priced
+
+
+def test_spending_is_not_counted_but_sales_are_taken_out() -> None:
+    div = {"typeLine": "Divine Orb", "frameType": 5}
+    v = value_deltas([
+        ItemDelta("a", "Divine Orb", 5, 3, div),
+        ItemDelta("sold|x", "Sold on trade · Ring", 5, -1, div),  # a sale's payment: out
+        ItemDelta("b", "Strand Map", 0, -2, {"typeLine": "Strand Map", "frameType": 0,
+                  "properties": [{"name": "Map Tier", "values": [["16", 0]]}]}),
+    ], book())  # fmt: skip
+    assert v.chaos == 2 * 180 and v.spent == 8
+    only_spent = value_deltas([ItemDelta("a", "Divine Orb", 5, -1, div)], book())
+    assert only_spent.chaos == 0 and only_spent.spent == 180  # never negative

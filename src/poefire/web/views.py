@@ -233,6 +233,7 @@ def valuation_json(v: Valuation, chaos_per_divine: float | None) -> Json:
     shown = [i for i in v.items if is_worth_showing(i.chaos_total)]
     return {
         "chaos": round(v.chaos, 1),
+        "spent": round(v.spent, 1),  # used up meanwhile, not counted
         "divine": _round(v.divine(chaos_per_divine)),
         "unpriced": v.unpriced,
         "hidden": len(v.items) - len(shown),  # no price, or worth ~0c

@@ -388,7 +388,7 @@ function itemList(items, limit = 40) {
   const shown = items.slice(0, limit);
   const more = items.length - shown.length;
   return `<ul class="items">${shown.map((i) => `
-    <li>
+    <li class="${i.quantity < 0 && !i.sold ? "spent" : ""}" title="${i.quantity < 0 && !i.sold ? "Used up: not counted against the loot" : ""}">
       ${i.icon ? `<img src="${esc(i.icon)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noicon'}))">` : '<span class="noicon"></span>'}
       <span class="name" title="${esc(i.sold ? `${i.name}: its payment isn't counted as loot` : i.name)}">${esc(i.name)}${i.sold ? ' <span class="chip">trade</span>' : ""}</span>
       <span class="qty">${i.quantity > 0 ? "+" : ""}${i.quantity}</span>
@@ -416,7 +416,7 @@ async function renderDetail() {
   $("detail").innerHTML = `
     <div class="detail-head">
       <div class="big">${chaos(d.loot.chaos)} <span class="muted">·</span> ${divine(d.loot.divine)}</div>
-      <div class="muted">${duration(d.active_seconds)} · ${d.deaths} death${d.deaths === 1 ? "" : "s"}</div>
+      <div class="muted">${duration(d.active_seconds)} · ${d.deaths} death${d.deaths === 1 ? "" : "s"}${d.loot.spent ? ` · ${chaos(d.loot.spent)} used, not counted` : ""}</div>
     </div>
     ${itemList(d.loot.items)}
     ${d.loot.hidden ? `<div class="note">${d.loot.hidden} item kind${d.loot.hidden === 1 ? "" : "s"} with no price or worth under 0.05c hidden.</div>` : ""}

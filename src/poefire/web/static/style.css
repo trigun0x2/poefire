@@ -576,3 +576,4 @@ main.interval-mode :is(.current, .detail, .maps-stats, .history, .per-map) { dis
 .bd-item .new-tag { font-size: 10.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.6px; margin-left: 6px; font-weight: 600; }
 .gem.new { outline: 1px solid var(--accent); }
 .hours-input { max-width: 120px; }
+.items li.spent { opacity: 0.5; }

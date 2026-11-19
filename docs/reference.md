@@ -161,6 +161,11 @@ there's been no hideout snapshot for 5 minutes. If the snapshot back from a map 
 next one (when the following map starts) is counted as that map's loot. Several hideout trips
 during one map add up into that map's loot.
 
+**Loot counts what you gained, not what you spent.** A map's (or a session's) loot is the value
+of the items that went up. Items that went down (the map and threads you used, currency spent
+crafting) are listed, dimmed, but not taken off, so loot is never negative. Trade sales'
+payments are the exception: when that setting is on, they're taken back out.
+
 Stackable items are compared by total quantity per item kind, so stack merges and splits don't
 count as changes. Other items are compared by their unique item id, so moving loot from your
 inventory into a watched tab nets to zero.

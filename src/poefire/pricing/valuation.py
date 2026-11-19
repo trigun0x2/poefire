@@ -24,11 +24,18 @@ class ValuedItem:
         return None if self.chaos_each is None else self.chaos_each * self.quantity
 
 
+# loot lines that take a trade sale's payment back out (poefire.loot.sales.SOLD_PREFIX)
+_SOLD_PREFIX = "sold|"
+
+
 @dataclass
 class Valuation:
-    chaos: float = 0.0  # net value of priced items (gains minus losses)
+    # what you gained: priced items that went up, less trade sales' payments; what went down
+    # (maps, threads and currency used, crafting) is `spent`, not taken off
+    chaos: float = 0.0
     items: list[ValuedItem] = field(default_factory=list)
     unpriced: int = 0  # item kinds poe.ninja has no price for
+    spent: float = 0.0  # value of what was used up (positive)
 
     def divine(self, chaos_per_divine: float | None) -> float | None:
         return self.chaos / chaos_per_divine if chaos_per_divine else None
@@ -53,8 +60,11 @@ def value_deltas(deltas: Iterable[ItemDelta], book: PriceBook,
         v.items.append(item)
         if item.chaos_total is None:
             v.unpriced += 1
+        elif item.chaos_total < 0 and not item.key.startswith(_SOLD_PREFIX):
+            v.spent -= item.chaos_total  # used up: not counted against the loot
         else:
             v.chaos += item.chaos_total
+    v.chaos = max(v.chaos, 0.0)
     v.items.sort(key=lambda i: (-(i.chaos_total or 0), -i.quantity, i.name))
     return v
 
