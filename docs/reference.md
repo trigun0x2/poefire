@@ -280,6 +280,28 @@ and from the campaign and overlay hotkeys; a letter or digit needs a modifier. I
 config.toml: `chat_commands = ["F5|/hideout", ...]` (hotkey | command) and
 `search_strings = ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text).
 
+## Price check
+
+Hover an item in the game and press **Ctrl+D** (Settings → In-game shortcuts → Price check;
+changeable). poefire sends one Ctrl+C (the game copies the item's text), puts your clipboard
+back, and opens the **price-check popup** beside the cursor (the app window's companion; in
+the browser version a one-line result shows on the overlay instead).
+
+- **Bulk items** (currency, fragments, scarabs, divination cards, essences, anything with a
+  stack size): poe.ninja's price. These are bought and sold on the in-game Currency Exchange.
+- **Everything else** (uniques, rares, gems, maps, bases): a search on the official trade
+  site, online sellers only. The popup lists the item's mods as filters: explicit, crafted
+  and fractured mods ticked at least 90% of your roll, implicits, enchants and item level
+  unticked; tick, untick or change min/max and press **Search** (or Enter). It shows the
+  **5 cheapest** listings and the **average of the 20 cheapest** without the cheapest and
+  dearest two, and links to the same search on the trade site. Esc closes it.
+- Mod lines are matched with GGG's trade data (`/api/trade/data/stats`, `items`, `static`),
+  downloaded on first use and kept for a day in `trade-data.json`. Lines it can't match are
+  listed as "Not searchable".
+- One search costs 1 search and up to 2 fetch requests, only when the popup opens or you press
+  Search. The trade site's rate limits are never waited out: the popup says how long to wait.
+  Your POESESSID, when saved, is sent with trade requests (logged-in limits are higher).
+
 ## Build snapshots
 
 The **Builds** tab keeps each character's build as it levels: at levels 5 and 10, then at every

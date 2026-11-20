@@ -199,10 +199,11 @@ def test_price_check_api(tmp_path: Any) -> None:
     client = TestClient(create_app(rt))
     client.headers["host"] = "127.0.0.1:8460"
     h = {"X-Poefire": "1"}
-    assert client.get("/api/pricecheck/last").json() == {"result": None}
-    r = client.post("/api/pricecheck", headers=h, json={"text": REALITY}).json()["result"]
-    assert r["name"] == "Reality Fragment" and r["chaos_each"] == 65.0
-    assert client.get("/api/pricecheck/last").json()["result"]["name"] == "Reality Fragment"
+    assert client.get("/api/pricecheck/current").json() == {"check": None}
+    r = client.post("/api/pricecheck", headers=h, json={"text": REALITY}).json()["check"]
+    assert r["kind"] == "bulk" and r["ninja"]["chaos_each"] == 65.0  # poe.ninja for bulk items
+    assert client.get("/api/pricecheck/current").json()["check"]["item"]["name"] == (
+        "Reality Fragment")  # fmt: skip
     assert client.post("/api/pricecheck", headers=h, json={"text": "hi"}).status_code == 400
     assert client.get("/api/settings").json()["price_check_hotkey"] == "Ctrl+D"
     clash = {"price_check_hotkey": "F5"}  # F5 is /hideout

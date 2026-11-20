@@ -92,6 +92,18 @@ class PriceCheckIn(BaseModel):
     text: str = Field(min_length=1, max_length=20_000)
 
 
+class FilterIn(BaseModel):
+    key: str = Field(max_length=200)
+    enabled: bool
+    min: float | None = None
+    max: float | None = None
+
+
+class PriceSearchIn(BaseModel):
+    id: int
+    filters: list[FilterIn] = Field(default_factory=list, max_length=100)
+
+
 def create_app(rt: AppRuntime) -> FastAPI:
     app = FastAPI(title="poefire", version=__version__, docs_url=None, redoc_url=None)
     app.add_middleware(LocalOnly)
@@ -512,17 +524,30 @@ def create_app(rt: AppRuntime) -> FastAPI:
         rt.kv_set(settings.ONBOARDED_KEY, True)
         return {"ok": True}
 
-    @app.get("/api/pricecheck/last")
-    def price_check_last() -> dict[str, Any]:
-        return {"result": rt.last_price_check}
+    @app.get("/api/pricecheck/current")
+    def price_check_current() -> dict[str, Any]:
+        """The newest price check (the popup shows it)."""
+        return {"check": rt.price_check}
 
     @app.post("/api/pricecheck")
     def price_check(body: PriceCheckIn) -> dict[str, Any]:
-        """Price item text (as Ctrl+C copies it in the game)."""
+        """Start a price check from item text (as Ctrl+C copies it in the game)."""
         try:
-            return {"result": rt.price_check_text(body.text)}
+            return {"check": rt.open_price_check(body.text)}
         except pricecheck.NotAnItem as e:
             raise HTTPException(400, str(e)) from e
+
+    @app.post("/api/pricecheck/search")
+    def price_check_search(body: PriceSearchIn) -> dict[str, Any]:
+        """Search the trade site with the popup's filters (one search + up to 2 fetches)."""
+        try:
+            return {"check": rt.price_check_search(body.id, [f.model_dump() for f in body.filters])}
+        except KeyError as e:
+            raise HTTPException(409, "a newer price check replaced this one") from e
+
+    @app.get("/price-check")
+    def price_check_page() -> FileResponse:
+        return FileResponse(STATIC / "price-check.html")
 
     @app.post("/api/window/show")
     def window_show() -> dict[str, Any]:
