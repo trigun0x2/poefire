@@ -125,7 +125,7 @@ class Config:
     # saved regexes ("name|text") and the one the regex hotkey pastes (by name; "" = none)
     regexes: list[str] = field(default_factory=list)
     regex_active: str = ""
-    regex_hotkey: str = "Ctrl+Alt+F"  # pastes the active regex into the search box; "" = off
+    regex_hotkey: str = "Ctrl+B"  # pastes the active regex into the search box; "" = off
     # --- troubleshooting ---
     debug_logging: bool = False  # verbose log file (Settings > Diagnostics)
 

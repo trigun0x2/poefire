@@ -219,7 +219,7 @@ def test_settings_save_regexes_and_bind_the_active_one(tmp_path: Path) -> None:
     client = TestClient(create_app(rt))
     client.headers["host"] = "127.0.0.1:8460"
     s = client.get("/api/settings").json()
-    assert s["regexes"] == [] and s["regex_active"] == "" and s["regex_hotkey"] == "Ctrl+Alt+F"
+    assert s["regexes"] == [] and s["regex_active"] == "" and s["regex_hotkey"] == "Ctrl+B"
 
     def post(**body: Any) -> Any:
         return client.post("/api/settings", headers={"X-Poefire": "1"}, json=body)

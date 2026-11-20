@@ -273,7 +273,7 @@ game gets focus and lets them go when it loses it.
   search box (Ctrl+F) and pastes the saved text, e.g. a map-mod regex like `"!ele|!reg"`. Give
   each a name, a hotkey and up to 250 characters.
 - **Regexes:** save as many named regexes as you like and pick one with its radio button; the
-  regex hotkey (Ctrl+Alt+F by default) pastes the picked one into the open stash or vendor
+  regex hotkey (Ctrl+B by default) pastes the picked one into the open stash or vendor
   search box, the same way. Switch regexes by picking another and saving, no new hotkey needed.
 
 The text goes in by pasting (the clipboard is put back afterwards), never by typing letters:
@@ -283,7 +283,7 @@ and from the campaign and overlay hotkeys; a letter or digit needs a modifier. I
 config.toml: `chat_commands = ["F5|/hideout", ...]` (hotkey | command) and
 `search_strings = ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text);
 `regexes = ["Bad maps|!ele|!reg"]` (name | text), `regex_active = "Bad maps"` and
-`regex_hotkey = "Ctrl+Alt+F"`.
+`regex_hotkey = "Ctrl+B"`.
 
 ## Build snapshots
 
