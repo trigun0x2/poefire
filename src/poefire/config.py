@@ -117,6 +117,11 @@ class Config:
     overlay_toggle_hotkey: str = "Ctrl+Alt+O"  # show / hide the overlay
     overlay_move_hotkey: str = "Ctrl+Alt+L"  # unlock to drag it, press again to lock
     overlay_opacity: int = 90  # percent, 20-100
+    # --- in-game shortcuts (poefire.gameinput): one key press = one action, only in the game ---
+    chat_commands: list[str] = field(  # "hotkey|command"; an empty hotkey = off
+        default_factory=lambda: ["F5|/hideout", "F9|/exit", "|/kingsmarch", "|/menagerie",
+                                 "|/delve"])  # fmt: skip
+    search_strings: list[str] = field(default_factory=list)  # "hotkey|name|text"
     # --- troubleshooting ---
     debug_logging: bool = False  # verbose log file (Settings > Diagnostics)
 

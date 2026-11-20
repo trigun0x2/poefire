@@ -65,6 +65,7 @@ async function loadSettings() {
   $("set-overlay-opacity-value").textContent = `${$("set-overlay-opacity").value}%`;
   $("set-build-snapshots").checked = s.build_snapshots;
   $("set-build-stale").value = String(s.build_stale_hours ?? 24);
+  renderShortcuts(s.chat_commands || [], s.search_strings || []);
   renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
   $("set-delay").value = s.snapshot_delay;
@@ -230,6 +231,12 @@ $("set-deaths-seen").addEventListener("click", (e) => {
 
 function settingsBody() {
   return {
+    chat_commands: [...$("set-chat-rows").querySelectorAll(".shortcut-row")].map((r) => ({
+      key: r.querySelector(".hk").value, text: r.querySelector(".text").value.trim(),
+    })).filter((c) => c.text),
+    search_strings: [...$("set-search-rows").querySelectorAll(".shortcut-row")].map((r) => ({
+      key: r.querySelector(".hk").value, name: r.querySelector(".name").value.trim(), text: r.querySelector(".text").value,
+    })).filter((x) => x.text.trim()),
     log_path: $("set-log").value,
     account_name: $("set-account").value,
     league: $("set-league").value.trim(),
@@ -269,11 +276,13 @@ const SETTING_FIELDS = {
   overlay_enabled: ["set-overlay", "Overlay"], overlay_toggle_hotkey: ["set-overlay-key", "Overlay hotkey"],
   overlay_move_hotkey: ["set-overlay-move", "Overlay move hotkey"],
   build_snapshots: ["set-build-snapshots", "Build snapshots"],
-  build_stale_hours: ["set-build-stale", "Stale-level snapshots"], update_channel: ["set-update-channel", "Update channel"],
+  build_stale_hours: ["set-build-stale", "Stale-level snapshots"],
+  chat_commands: ["set-chat-rows", "Chat commands"], search_strings: ["set-search-rows", "Searches"], update_channel: ["set-update-channel", "Update channel"],
 };
 
 function sameSetting(a, b) {
-  const norm = (v) => Array.isArray(v) ? JSON.stringify(v.map((x) => String(x).trim()).sort())
+  const item = (x) => typeof x === "object" && x !== null ? JSON.stringify(x) : String(x).trim();
+  const norm = (v) => Array.isArray(v) ? JSON.stringify(v.map(item).sort())
     : typeof v === "string" ? v.trim() : v ?? "";
   return norm(a) === norm(b);
 }
@@ -464,4 +473,54 @@ for (const id of Object.keys(HOTKEY_FIELDS)) {
     renderHotkeyStatus();
   });
   $(`${id}-clear`).addEventListener("click", () => { input.value = ""; renderHotkeyStatus(); });
+}
+
+// --- in-game shortcuts: chat commands and stash/vendor searches, each on its own hotkey ---
+
+function shortcutRow(kind, x) {
+  const row = document.createElement("div");
+  row.className = `shortcut-row ${kind}`;
+  const err = settings?.game_hotkeys?.errors?.[kind === "chat" ? `${x.key}|${x.text}` : `${x.key}|${x.name}|${x.text}`];
+  row.innerHTML = `<input class="hk" type="text" readonly placeholder="No hotkey" value="${esc(x.key || "")}" title="Click, then press keys (Esc to cancel, Delete to clear)">` +
+    (kind === "search" ? `<input class="name" type="text" placeholder="Name" value="${esc(x.name || "")}" maxlength="60">` : "") +
+    `<input class="text" type="text" spellcheck="false" placeholder="${kind === "chat" ? "/hideout" : "search text or regex"}" value="${esc(x.text || "")}" maxlength="${kind === "chat" ? 256 : 250}">` +
+    '<button type="button" class="btn link danger remove">Remove</button>' +
+    (err ? `<div class="hint bad err">✗ ${esc(err)}</div>` : "");
+  return row;
+}
+
+function renderShortcuts(chat, searches) {
+  $("set-chat-rows").replaceChildren(...chat.map((c) => shortcutRow("chat", c)));
+  $("set-search-rows").replaceChildren(...searches.map((x) => shortcutRow("search", x)));
+  const gh = settings?.game_hotkeys;
+  $("set-shortcuts-status").className = `hint ${gh && !gh.available ? "warn" : ""}`;
+  $("set-shortcuts-status").textContent = gh && !gh.available
+    ? "In-game shortcuts need the Windows app."
+    : gh?.last ? `Last sent: ${gh.last}` : "";
+}
+
+for (const [id, kind] of [["set-chat-rows", "chat"], ["set-search-rows", "search"]]) {
+  const box = $(id);
+  box.addEventListener("click", (e) => {
+    if (e.target.closest(".remove")) { e.target.closest(".shortcut-row").remove(); renderDirty(); }
+  });
+  box.addEventListener("focusin", (e) => e.target.classList.contains("hk") && e.target.classList.add("capturing"));
+  box.addEventListener("focusout", (e) => e.target.classList.remove("capturing"));
+  box.addEventListener("keydown", (e) => {
+    const input = e.target;
+    if (!input.classList.contains("hk") || e.key === "Tab") return;
+    e.preventDefault();
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
+    if (e.key === "Escape") { input.blur(); return; }
+    if (e.key === "Backspace" || e.key === "Delete") { input.value = ""; renderDirty(); return; }
+    const key = keyName(e);
+    if (!key) return;
+    const mods = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Win"].filter(Boolean);
+    input.value = [...mods, key].join("+");
+    renderDirty();
+  });
+  $(kind === "chat" ? "set-chat-add" : "set-search-add").addEventListener("click", () => {
+    box.append(shortcutRow(kind, { key: "", name: "", text: "" }));
+    box.lastElementChild.querySelector(kind === "chat" ? ".text" : ".name").focus();
+  });
 }

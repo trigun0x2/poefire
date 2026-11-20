@@ -412,6 +412,18 @@
     </section>
 
     <section class="card">
+      <div class="card-title">In-game shortcuts</div>
+      <div class="hint">Hotkeys that work while Path of Exile has focus (elsewhere, F5 and the rest do what they normally do). Each key press sends one action: open chat, paste the command, Enter; or paste a search into the stash/vendor search box. Click a hotkey box, then press the keys.</div>
+      <div class="section-label">Chat commands</div>
+      <div class="shortcut-rows" id="set-chat-rows"></div>
+      <button type="button" class="btn small" id="set-chat-add">Add command</button>
+      <div class="section-label">Stash and vendor searches <span class="muted">— e.g. a map-mod regex; the stash or vendor window must be open</span></div>
+      <div class="shortcut-rows" id="set-search-rows"></div>
+      <button type="button" class="btn small" id="set-search-add">Add search</button>
+      <div class="hint" id="set-shortcuts-status"></div>
+    </section>
+
+    <section class="card">
       <div class="card-title">In-game overlay</div>
       <label class="check" style="margin-top:0">
         <input id="set-overlay" type="checkbox">

@@ -23,7 +23,8 @@ from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
-from poefire.hotkey import GlobalHotkey, HotkeyError, beep
+from poefire.gameinput import GameHotkeys, GameInput, chat_commands, search_strings
+from poefire.hotkey import GlobalHotkey, HotkeyError, beep, normalize
 from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.loot import sales
 from poefire.loot.items import ItemEntry
@@ -149,6 +150,10 @@ class AppRuntime:
         self.hotkeys: dict[str, GlobalHotkey] = {}  # registered by start()
         self.hotkey_errors: dict[str, str] = {}
         self.hotkey_last: tuple[str, datetime] | None = None
+        # in-game shortcuts: chat commands and search strings (registered while in the game)
+        self.game_input = GameInput()
+        self.game_hotkeys: GameHotkeys | None = None
+        self.game_hotkey_errors: dict[str, str] = {}  # config entry -> why it's off
         self._bests_cache: dict[tuple[str, tuple[int, ...]], campaign.Bests] = {}
         self.layouts = layouts.LayoutGuide(
             self._kv_get, self._kv_set, f"poefire/{__version__} (+{wiring.PROJECT_URL})"
@@ -282,6 +287,12 @@ class AppRuntime:
             getattr(cfg, f) != getattr(old, f) for f in HOTKEY_FIELDS.values()
         ):
             self._build_hotkeys()
+        if self._started and (
+            cfg.chat_commands != old.chat_commands
+            or cfg.search_strings != old.search_strings
+            or any(getattr(cfg, f) != getattr(old, f) for f in HOTKEY_FIELDS.values())
+        ):
+            self._build_game_hotkeys()
         if self.overlay is not None:
             self.overlay.set_enabled(cfg.overlay_enabled)
             self.overlay.set_opacity(cfg.overlay_opacity)
@@ -578,6 +589,63 @@ class AppRuntime:
             log.info("hotkeys: %s", ", ".join(f"{hk.spec} ({HOTKEY_LABELS[n]})"
                                              for n, hk in self.hotkeys.items()))  # fmt: skip
 
+    def _build_game_hotkeys(self) -> None:
+        """(Re)register the chat command and search string hotkeys. They're only registered
+        while Path of Exile has focus (GameHotkeys), so F5 still works in your browser."""
+        if self.game_hotkeys is not None:
+            self.game_hotkeys.stop()
+            self.game_hotkeys = None
+        self.game_hotkey_errors = {}
+        taken: dict[str, str] = {}  # hotkey -> what uses it (the app's global hotkeys first)
+        for name, field in HOTKEY_FIELDS.items():
+            with contextlib.suppress(HotkeyError):
+                if spec := str(getattr(self.cfg, field)).strip():
+                    taken[normalize(spec)] = HOTKEY_LABELS[name]
+        bindings: dict[str, Callable[[], object]] = {}
+        actions: list[tuple[str, str, Callable[[], object]]] = [
+            *((c.format(), c.key, self._chat_action(c.text))
+              for c in chat_commands(self.cfg.chat_commands)),
+            *((s.format(), s.key, self._search_action(s.text))
+              for s in search_strings(self.cfg.search_strings)),
+        ]  # fmt: skip
+        for entry, key, action in actions:
+            if not key:
+                continue
+            try:
+                spec = normalize(key)
+            except HotkeyError as e:
+                self.game_hotkey_errors[entry] = str(e)
+                continue
+            if spec in taken:
+                self.game_hotkey_errors[entry] = f"{spec} is already used by {taken[spec]}"
+                continue
+            taken[spec] = entry
+            bindings[spec] = action
+        if self.game_input.backend is None:  # Settings says so once, not on every row
+            return
+        backend = self.game_input.backend
+        self.game_hotkeys = GameHotkeys(bindings, backend.game_focused)
+        self.game_hotkeys.start()
+        if bindings:
+            log.info("in-game shortcuts (while the game has focus): %s", ", ".join(bindings))
+
+    def _chat_action(self, text: str) -> Callable[[], object]:
+        return lambda: self.game_input.chat(text)
+
+    def _search_action(self, text: str) -> Callable[[], object]:
+        return lambda: self.game_input.search(text)
+
+    def game_hotkeys_json(self) -> dict[str, Any]:
+        """For Settings: per config entry, why it's off (if it is)."""
+        gh = self.game_hotkeys
+        return {
+            "available": self.game_input.backend is not None,
+            "errors": dict(self.game_hotkey_errors) | (
+                {} if gh is None else {k: v for k, v in gh.errors.items()}),
+            "in_game": bool(gh and gh.registered),
+            "last": self.game_input.last,
+        }  # fmt: skip
+
     def hotkey_status(self, name: str) -> dict[str, Any]:
         hk = self.hotkeys.get(name)
         return {
@@ -858,6 +926,7 @@ class AppRuntime:
         if sys.platform == "win32":
             self._spawn("game-log", self._game_log_loop)
         self._build_hotkeys()
+        self._build_game_hotkeys()
 
     def _spawn(self, name: str, target: Callable[[], None]) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)
@@ -882,6 +951,8 @@ class AppRuntime:
         self.builds.stop()
         for hk in self.hotkeys.values():
             hk.stop()
+        if self.game_hotkeys is not None:
+            self.game_hotkeys.stop()
         if self.recorder is not None:
             self.recorder.stop()
         for t in self._threads:

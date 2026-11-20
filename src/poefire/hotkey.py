@@ -1,7 +1,7 @@
 """A system-wide hotkey (Windows `RegisterHotKey`).
 
-The app only *listens* for the key, the way LiveSplit's global hotkeys work: nothing is sent
-to the game, so it stays clear of the ToS rule against input automation.
+The app only *listens* for the key, the way LiveSplit's global hotkeys work. (Shortcuts that
+do send one action to the game on a key press are in poefire.gameinput.)
 """
 
 from __future__ import annotations

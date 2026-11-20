@@ -577,3 +577,10 @@ main.interval-mode :is(.current, .detail, .maps-stats, .history, .per-map) { dis
 .gem.new { outline: 1px solid var(--accent); }
 .hours-input { max-width: 120px; }
 .items li.spent { opacity: 0.5; }
+
+/* in-game shortcuts: hotkey | command (| search text) | remove */
+.shortcut-rows { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 8px; }
+.shortcut-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: center; }
+.shortcut-row.search { grid-template-columns: 150px 160px 1fr auto; }
+.shortcut-row input { min-width: 0; }
+.shortcut-row .err { grid-column: 1 / -1; }

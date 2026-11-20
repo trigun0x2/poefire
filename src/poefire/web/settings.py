@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from poefire import hotkey
+from poefire import gameinput, hotkey
 from poefire.api.session import LeagueError, SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config, newest_existing
 from poefire.leagues import is_private
@@ -25,8 +25,22 @@ POESESSID_RE = re.compile(r"[0-9a-fA-F]{32}")
 ONBOARDED_KEY = "onboarded"
 
 
+class ChatCommandIn(BaseModel):
+    key: str = ""  # hotkey; "" = off
+    text: str = Field(min_length=1, max_length=256)
+
+
+class SearchStringIn(BaseModel):
+    key: str = ""
+    name: str = Field(default="", max_length=60)
+    text: str = Field(min_length=1, max_length=250)  # the game's search box takes 250
+
+
 class SettingsIn(BaseModel):
     """Partial update: fields left out keep their current value."""
+
+    chat_commands: list[ChatCommandIn] | None = None
+    search_strings: list[SearchStringIn] | None = None
 
     log_path: str | None = None  # "" = detect automatically
     account_name: str | None = None
@@ -121,6 +135,14 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "campaign_hotkey": cfg.campaign_hotkey,
         "build_snapshots": cfg.build_snapshots,
         "build_stale_hours": cfg.build_stale_hours,
+        "chat_commands": [
+            {"key": c.key, "text": c.text} for c in gameinput.chat_commands(cfg.chat_commands)
+        ],
+        "search_strings": [
+            {"key": s.key, "name": s.name, "text": s.text}
+            for s in gameinput.search_strings(cfg.search_strings)
+        ],
+        "game_hotkeys": rt.game_hotkeys_json(),
         "trade_sales": cfg.trade_sales,
         "loot_mode": cfg.loot_mode,
         "overlay_enabled": cfg.overlay_enabled,
@@ -133,6 +155,53 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "campaign_hotkey_sound": cfg.campaign_hotkey_sound,
         "version": rt.update.current,
     }
+
+
+def _in_game_shortcuts(rt: AppRuntime, body: SettingsIn, changes: dict[str, Any],
+                       used: set[str]) -> None:  # fmt: skip
+    """Chat commands and search strings: one line each, hotkeys valid and all different (from
+    each other and from the app's other hotkeys)."""
+
+    def key(spec: str, what: str) -> str:
+        spec = spec.strip()
+        if not spec:
+            return ""
+        try:
+            spec = hotkey.normalize(spec)
+        except hotkey.HotkeyError as e:
+            raise SettingsError(f"{what}: {e}") from e
+        if spec in used:
+            raise SettingsError(f"{what}: {spec} is already used by another hotkey")
+        used.add(spec)
+        return spec
+
+    def one_line(text: str, what: str) -> str:
+        if "\n" in text or "\r" in text:
+            raise SettingsError(f"{what}: must be one line")
+        return text.strip()
+
+    cmds = body.chat_commands
+    if cmds is None:
+        cmds = [ChatCommandIn(key=c.key, text=c.text)
+                for c in gameinput.chat_commands(rt.cfg.chat_commands)]  # fmt: skip
+    else:
+        changes["chat_commands"] = []
+    out = []
+    for c in cmds:
+        text = one_line(c.text, f"chat command {c.text!r}")
+        out.append(gameinput.ChatCommand(key(c.key, f"chat command {text}"), text).format())
+    if body.chat_commands is not None:
+        changes["chat_commands"] = out
+    if body.search_strings is not None:
+        changes["search_strings"] = [
+            gameinput.SearchString(key(s.key, f"search {s.name or s.text!r}"),
+                                   one_line(s.name, "search name"),
+                                   one_line(s.text, f"search {s.name!r}")).format()
+            for s in body.search_strings
+        ]  # fmt: skip
+    else:
+        for s in gameinput.search_strings(rt.cfg.search_strings):
+            key(s.key, f"search {s.name or s.text!r}")
 
 
 def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
@@ -214,6 +283,7 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
     used = [k for k in keys if k]
     if len(set(used)) != len(used):
         raise SettingsError("the campaign and overlay hotkeys must all be different")
+    _in_game_shortcuts(rt, body, changes, set(used))
     if body.overlay_enabled is not None:
         changes["overlay_enabled"] = body.overlay_enabled
     if body.overlay_opacity is not None:

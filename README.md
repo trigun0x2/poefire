@@ -49,7 +49,9 @@ Regardless, thanks for taking a view and feel free to check out the AI summary o
 
 **Safe to use.** poefire reads the game's log file (`Client.txt`) and your account's stash
 through the Path of Exile website, the same data you see in your browser. It never reads the
-game's memory, never touches network traffic and never sends input to the game.
+game's memory and never touches network traffic. The only input it ever sends to the game is
+from a shortcut you press (a chat command like /hideout, or a saved stash search): one key
+press, one action, as GGG's rules allow.
 
 ## Getting started
 
@@ -125,8 +127,9 @@ your chaos per map while mapping. Set the game to **Windowed** or **Windowed Ful
 ## FAQ
 
 **Is this allowed?** poefire only reads files and website data that are yours: the game's log
-and your own stash and characters. It doesn't read game memory, inspect network traffic, or
-press keys for you.
+and your own stash and characters. It doesn't read game memory or inspect network traffic.
+Its in-game shortcuts follow GGG's rule for macros: one key press does one action (open chat,
+paste /hideout, Enter), never more, never on its own.
 
 **Is it safe to run?** Every release is built in public on GitHub from this source code and
 signed, and the app checks that signature before installing an update. You can check your

@@ -255,6 +255,27 @@ can be drawn over exclusive fullscreen.
 The overlay only reads which window is in front (by its title) and draws over the game; it
 never sends input to the game.
 
+## In-game shortcuts
+
+Settings → In-game shortcuts: hotkeys that send **one action** to the game per key press
+(GGG's rule for macros), only while Path of Exile is the window in front. Elsewhere the keys
+do what they normally do (F5 still refreshes your browser): poefire registers them when the
+game gets focus and lets them go when it loses it.
+
+- **Chat commands:** open chat, paste the command, press Enter. Built in: F5 /hideout and
+  F9 /exit, plus /kingsmarch, /menagerie and /delve without a key. Change any hotkey or
+  command, remove them, or add your own (any one line of chat).
+- **Stash and vendor searches:** with the stash or a vendor open, the hotkey focuses its
+  search box (Ctrl+F) and pastes the saved text, e.g. a map-mod regex like `"!ele|!reg"`. Give
+  each a name, a hotkey and up to 250 characters.
+
+The text goes in by pasting (the clipboard is put back afterwards), never by typing letters:
+if chat didn't open, typed letters would land in the game as skill and panel keys. Hotkeys are
+sent after you let go of the hotkey's own modifiers. All hotkeys must differ from each other
+and from the campaign and overlay hotkeys; a letter or digit needs a modifier. In
+config.toml: `chat_commands = ["F5|/hideout", ...]` (hotkey | command) and
+`search_strings = ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text).
+
 ## Build snapshots
 
 The **Builds** tab keeps each character's build as it levels: at levels 5 and 10, then at every

@@ -33,7 +33,11 @@ come from that workflow.
   place the overlay;
 - your own settings and database in `%APPDATA%\poefire`.
 
-It doesn't read game memory, look at network traffic, or send keys or clicks to the game.
+It doesn't read game memory or look at network traffic. It sends keys to the game only for an
+in-game shortcut you press (Settings → In-game shortcuts): one key press, one action (open
+chat, paste the command, Enter; or paste a saved search), only while the game has focus,
+never repeated or on a timer. While it does, it uses the clipboard and puts back what was
+there.
 
 **On the internet** (HTTPS only):
 
