@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import __version__, campaign, gamepath, layouts, logs, patches, pricecheck, wiring
+from poefire import __version__, campaign, gamepath, layouts, logs, patches, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -102,21 +102,6 @@ class LootStatus:
     last_at: datetime | None = None
 
 
-def price_line(r: dict[str, Any], chaos_per_divine: float | None) -> str:
-    """One line for the overlay: "Reality Fragment x4: 259c (65c each)"."""
-    name = r["name"] + (f" x{r['stack']}" if r["stack"] > 1 else "")
-    if r["chaos_total"] is None:
-        return f"{name}: {r['note']}"
-
-    def amount(chaos: float) -> str:
-        if chaos >= 200 and chaos_per_divine:
-            return f"{chaos / chaos_per_divine:,.2f}d"
-        return f"{chaos:,.0f}c" if chaos >= 100 else f"{chaos:,.2f}".rstrip("0").rstrip(".") + "c"
-
-    each = f" ({amount(r['chaos_each'])} each)" if r["stack"] > 1 else ""
-    return f"{name}: {amount(r['chaos_total'])}{each}"
-
-
 class AppRuntime:
     def __init__(
         self,
@@ -169,8 +154,6 @@ class AppRuntime:
         self.game_input = GameInput()
         self.game_hotkeys: GameHotkeys | None = None
         self.game_hotkey_errors: dict[str, str] = {}  # config entry -> why it's off
-        self.last_price_check: dict[str, Any] | None = None  # the newest result, for the UI
-        self._flash: tuple[str, float] | None = None  # overlay message, until (monotonic)
         self._bests_cache: dict[tuple[str, tuple[int, ...]], campaign.Bests] = {}
         self.layouts = layouts.LayoutGuide(
             self._kv_get, self._kv_set, f"poefire/{__version__} (+{wiring.PROJECT_URL})"
@@ -620,7 +603,6 @@ class AppRuntime:
                     taken[normalize(spec)] = HOTKEY_LABELS[name]
         bindings: dict[str, Callable[[], object]] = {}
         actions: list[tuple[str, str, Callable[[], object]]] = [
-            ("price_check", self.cfg.price_check_hotkey, self.price_check_hotkey),
             *((c.format(), c.key, self._chat_action(c.text))
               for c in chat_commands(self.cfg.chat_commands)),
             *((s.format(), s.key, self._search_action(s.text))
@@ -647,43 +629,6 @@ class AppRuntime:
         if bindings:
             log.info("in-game shortcuts (while the game has focus): %s", ", ".join(bindings))
 
-    # --- price check (docs/scope/price-check.md) ---
-
-    def price_check_text(self, text: str) -> dict[str, Any]:
-        """Parse and price item text (from Ctrl+D, or pasted). Raises pricecheck.NotAnItem."""
-        item = pricecheck.parse(text)
-        book = self.prices.book(self.price_league)
-        result = pricecheck.price(item, book).to_json(book.chaos_per_divine)
-        result["at"] = self.now().isoformat()
-        result["league"] = self.price_league
-        self.last_price_check = result
-        found = result["chaos_each"] if result["chaos_each"] is not None else result["note"]
-        log.info("price check: %s -> %s", result["name"], found)
-        return result
-
-    def price_check_hotkey(self) -> None:
-        """Ctrl+D: copy the item under the cursor (the one action sent), price it, show it."""
-        text = self.game_input.copy_item()
-        if text is None:
-            self.flash("Price check: nothing copied (hover an item, then press the key)")
-            return
-        try:
-            r = self.price_check_text(text)
-        except pricecheck.NotAnItem:
-            self.flash("Price check: that isn't an item")
-            return
-        self.flash(price_line(r, self.prices.book(self.price_league).chaos_per_divine))
-
-    def flash(self, text: str, seconds: float = 8.0) -> None:
-        """A message on the overlay for a few seconds."""
-        self._flash = (text, time.monotonic() + seconds)
-        if self.overlay is not None and hasattr(self.overlay, "refresh"):
-            self.overlay.refresh()
-
-    def flash_text(self) -> str | None:
-        f = self._flash
-        return f[0] if f and time.monotonic() < f[1] else None
-
     def _chat_action(self, text: str) -> Callable[[], object]:
         return lambda: self.game_input.chat(text)
 
@@ -699,13 +644,6 @@ class AppRuntime:
                 {} if gh is None else {k: v for k, v in gh.errors.items()}),
             "in_game": bool(gh and gh.registered),
             "last": self.game_input.last,
-            "price_check": {  # the price check hotkey's status line in Settings
-                "key": self.cfg.price_check_hotkey.strip() or None,
-                "active": self.game_input.backend is not None
-                and "price_check" not in self.game_hotkey_errors,
-                "error": self.game_hotkey_errors.get("price_check")
-                or (None if self.game_input.backend else "price checks need the Windows app"),
-            },
         }  # fmt: skip
 
     def hotkey_status(self, name: str) -> dict[str, Any]:

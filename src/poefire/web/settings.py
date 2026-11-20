@@ -42,7 +42,6 @@ class SettingsIn(BaseModel):
     """Partial update: fields left out keep their current value."""
 
     chat_commands: list[ChatCommandIn] | None = None
-    price_check_hotkey: str | None = None
     search_strings: list[SearchStringIn] | None = None
 
     log_path: str | None = None  # "" = detect automatically
@@ -173,7 +172,6 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
             for s in gameinput.search_strings(cfg.search_strings)
         ],
         "game_hotkeys": rt.game_hotkeys_json(),
-        "price_check_hotkey": cfg.price_check_hotkey,
         "trade_sales": cfg.trade_sales,
         "loot_mode": cfg.loot_mode,
         "overlay_enabled": cfg.overlay_enabled,
@@ -211,11 +209,6 @@ def _in_game_shortcuts(rt: AppRuntime, body: SettingsIn, changes: dict[str, Any]
             raise SettingsError(f"{what}: must be one line")
         return text.strip()
 
-    pc = body.price_check_hotkey
-    if pc is not None:
-        changes["price_check_hotkey"] = key(pc, "price check hotkey")
-    else:
-        key(rt.cfg.price_check_hotkey, "price check hotkey")
     cmds = body.chat_commands
     if cmds is None:
         cmds = [ChatCommandIn(key=c.key, text=c.text)
