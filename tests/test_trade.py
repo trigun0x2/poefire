@@ -158,6 +158,74 @@ Level: 70
 Experience: 1/1
 """
 
+PSEUDO = {"label": "Pseudo", "entries": [
+    {"id": trade.PSEUDO_ELE_RES, "text": "+#% total Elemental Resistance", "type": "pseudo"},
+    {"id": trade.PSEUDO_RES, "text": "+#% total Resistance", "type": "pseudo"},
+    {"id": trade.PSEUDO_LIFE, "text": "+# total maximum Life", "type": "pseudo"},
+]}  # fmt: skip
+INFLUENCED = """Item Class: Rings
+Rarity: Rare
+Doom Band
+Two-Stone Ring
+--------
+Item Level: 84
+--------
++12% to Fire and Cold Resistances (implicit)
+--------
++45 to maximum Life
++40% to Lightning Resistance
++30 to Strength
+--------
+Shaper Item
+Hunter Item
+"""
+
+
+def with_pseudo() -> trade.TradeData:
+    return trade.TradeData({"result": [*STATS["result"], PSEUDO]}, ITEMS, STATIC)
+
+
+def test_pseudo_totals_stand_in_for_the_mods_they_sum() -> None:
+    check = trade.build_check(pricecheck.parse(INFLUENCED), with_pseudo())
+    rows = {f.label: f for f in check.filters}
+    ele = rows["+64% total Elemental Resistance"]  # 12 fire + 12 cold (implicit) + 40 lightning
+    assert (ele.group, ele.enabled, ele.min) == ("pseudo", True, 57)
+    life = rows["+60 total maximum Life"]  # 45 + 30 strength / 2
+    assert (life.enabled, life.min) == (True, 54)
+    assert not any("total Resistance" in k for k in rows)  # no chaos resistance: not offered
+    # the totals are searched instead of the mods they sum
+    assert not rows["+45 to maximum Life"].enabled
+    assert not rows["+40% to Lightning Resistance"].enabled
+    # trade data without pseudo stats offers no totals, and the mods stay ticked
+    plain = trade.build_check(pricecheck.parse(INFLUENCED), data())
+    assert not [f for f in plain.filters if f.group == "pseudo"]
+    assert {f.label: f for f in plain.filters}["+45 to maximum Life"].enabled
+
+
+def test_chaos_resistance_makes_one_total_for_all_four() -> None:
+    text = INFLUENCED.replace("+30 to Strength", "+20% to Chaos Resistance")
+    check = trade.build_check(pricecheck.parse(text), with_pseudo())
+    rows = {f.label: f for f in check.filters}
+    assert rows["+84% total Resistance"].enabled
+    assert not rows["+64% total Elemental Resistance"].enabled
+    # a mod the trade data has no stat for still counts toward the total
+    assert check.unmatched == ["+20% to Chaos Resistance"]
+    assert not rows["+40% to Lightning Resistance"].enabled
+
+
+def test_influence_filters() -> None:
+    item = pricecheck.parse(INFLUENCED)
+    assert item.influences == ["shaper", "hunter"]
+    check = trade.build_check(item, with_pseudo())
+    inf = [f for f in check.filters if f.key.startswith("influence:")]
+    assert [(f.label, f.enabled) for f in inf] == [("Shaper influence", True),
+                                                   ("Hunter influence", True)]  # fmt: skip
+    misc = trade.query(check)["query"]["filters"]["misc_filters"]["filters"]
+    assert misc["shaper_item"] == misc["hunter_item"] == {"option": "true"}
+    trade.apply_choices(check, [{"key": "influence:hunter", "enabled": False}])
+    misc = trade.query(check)["query"]["filters"]["misc_filters"]["filters"]
+    assert "hunter_item" not in misc and "Shaper Item" not in check.unmatched
+
 
 def test_trimmed_average() -> None:
     assert trade.trimmed_average([]) is None

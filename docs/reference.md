@@ -295,6 +295,11 @@ the browser version a one-line result shows on the overlay instead).
   unticked; tick, untick or change min/max and press **Search** (or Enter). It shows the
   **5 cheapest** listings and the **average of the 20 cheapest** without the cheapest and
   dearest two, and links to the same search on the trade site. Esc closes it.
+- **Totals** (rares and magic items): total elemental resistance, total resistance (when the
+  item has chaos resistance) and total life (1 per 2 strength included), summed over all its
+  mods, implicits too. They start ticked at 90%, and the single resistance and life mods they
+  sum start unticked, so items with the same totals from other mods are found too.
+- **Influence** (Shaper, Elder, Crusader, Redeemer, Hunter, Warlord): one filter each, ticked.
 - Mod lines are matched with GGG's trade data (`/api/trade/data/stats`, `items`, `static`),
   downloaded on first use and kept for a day in `trade-data.json`. Lines it can't match are
   listed as "Not searchable".

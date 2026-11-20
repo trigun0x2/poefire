@@ -167,9 +167,9 @@ def load_trade_data(path: Path, fetch: Callable[[str], Json], now: float | None 
 @dataclass
 class Filter:
     key: str  # "stat:<id>" or an item filter: ilvl, corrupted, links, gem_level, quality,
-    # map_tier
+    # map_tier, influence:<name>
     label: str
-    group: str  # "item", "implicit", "explicit", "crafted", "fractured", "enchant"
+    group: str  # "item", "pseudo", "implicit", "explicit", "crafted", "fractured", "enchant"
     enabled: bool
     value: float | None = None  # the item's own value
     min: float | None = None
@@ -207,6 +207,62 @@ def _default_bound(value: float | None) -> tuple[float | None, float | None]:
     return v, None
 
 
+# --- pseudo totals: the trade site's sums over all of an item's mods ---
+
+PSEUDO_ELE_RES = "pseudo.pseudo_total_elemental_resistance"
+PSEUDO_RES = "pseudo.pseudo_total_resistance"
+PSEUDO_LIFE = "pseudo.pseudo_total_life"
+
+_ELEMENTS = frozenset({"fire", "cold", "lightning"})
+_RES_LINE = re.compile(r"^([+-]\d+)% to (all Elemental|(?:Fire|Cold|Lightning|Chaos)"
+                       r"(?: and (?:Fire|Cold|Lightning|Chaos))?) Resistances?$")  # fmt: skip
+_LIFE_LINE = re.compile(r"^([+-]\d+) to maximum Life$")
+_STR_LINE = re.compile(
+    r"^\+(\d+) to (?:Strength|all Attributes|Strength and (?:Dexterity|Intelligence))$"
+)
+
+
+def contributions(text: str) -> tuple[dict[str, float], bool]:
+    """What one mod line adds to the totals ({"fire": 12, "cold": 12}, {"life": 45}), and
+    whether that's all the mod does, so a total can stand in for it in the search."""
+    if m := _RES_LINE.match(text):
+        names = m[2].lower()
+        found = _ELEMENTS if names == "all elemental" else frozenset(names.split(" and "))
+        return dict.fromkeys(found, float(m[1])), True
+    if m := _LIFE_LINE.match(text):
+        return {"life": float(m[1])}, True
+    if m := _STR_LINE.match(text):
+        return {"life": float(m[1]) / 2}, False  # 1 life per 2 strength; it's still Strength
+    return {}, False
+
+
+def _pseudo_filters(totals: dict[str, float], has_life: bool, data: TradeData,
+                    ) -> tuple[list[Filter], frozenset[str]]:  # fmt: skip
+    """The pseudo total filters, and what the ticked ones cover ("fire", ..., "life").
+    Only totals GGG's trade data lists are offered."""
+    known = set((data.stats.get("pseudo") or {}).values())
+    ele = sum(totals.get(e, 0.0) for e in _ELEMENTS)
+    chaos, life = totals.get("chaos", 0.0), totals.get("life", 0.0)
+    all_res = chaos > 0 and PSEUDO_RES in known  # with chaos: one total for all four
+    out: list[Filter] = []
+    covered: set[str] = set()
+
+    def add(sid: str, label: str, value: float, enabled: bool, covers: frozenset[str]) -> None:
+        lo, hi = _default_bound(value)
+        out.append(Filter(f"stat:{sid}", label, "pseudo", enabled, value, lo, hi, sid))
+        if enabled:
+            covered.update(covers)
+
+    if ele > 0 and PSEUDO_ELE_RES in known:
+        add(PSEUDO_ELE_RES, f"+{ele:g}% total Elemental Resistance", ele, not all_res, _ELEMENTS)
+    if all_res and ele + chaos > 0:
+        add(PSEUDO_RES, f"+{ele + chaos:g}% total Resistance", ele + chaos, True,
+            _ELEMENTS | {"chaos"})  # fmt: skip
+    if has_life and life > 0 and PSEUDO_LIFE in known:
+        add(PSEUDO_LIFE, f"+{life:g} total maximum Life", life, True, frozenset({"life"}))
+    return out, frozenset(covered)
+
+
 def build_check(item: ParsedItem, data: TradeData) -> Check:
     unique = item.rarity == "Unique"
     check = Check(item.name if unique and item.name else None, data.base_of(item), item.rarity)
@@ -227,13 +283,22 @@ def build_check(item: ParsedItem, data: TradeData) -> Check:
                         item.item_level, item.item_level))  # fmt: skip
     f.append(Filter("corrupted", "Corrupted" if item.corrupted else "Not corrupted", "item",
                     True, 1.0 if item.corrupted else 0.0))  # fmt: skip
+    for name in item.influences:
+        f.append(Filter(f"influence:{name}", f"{name.title()} influence", "item", True, 1.0))
     local = item.item_class in _LOCAL_CLASSES
+    totals: dict[str, float] = {}
+    has_life = False
+    replaceable: list[tuple[Filter, frozenset[str]]] = []  # mods a ticked total stands in for
     for line in item.lines:
         if _PROPERTY_LINE.match(line):  # "Str: 100", "Attacks per Second: 1.50"
             continue
         m = _KIND_SUFFIX.search(line)
         kind = m.group(1) if m else "explicit"
         text = line[: m.start()] if m else line
+        adds, only_totals = contributions(text)
+        for k, v in adds.items():
+            totals[k] = totals.get(k, 0.0) + v
+        has_life = has_life or bool(_LIFE_LINE.match(text))
         match = data.match(text, kind, local)
         if match is None:
             if m or _NUM.search(text):  # looks like a mod: say it can't be searched
@@ -243,6 +308,14 @@ def build_check(item: ParsedItem, data: TradeData) -> Check:
         f.append(Filter(f"stat:{match.stat_id}", text, kind,
                         kind in ("explicit", "crafted", "fractured"), match.value, lo, hi,
                         match.stat_id))  # fmt: skip
+        if only_totals:
+            replaceable.append((f[-1], frozenset(adds)))
+    if item.rarity in ("Rare", "Magic"):
+        pseudo, covered = _pseudo_filters(totals, has_life, data)
+        f.extend(pseudo)
+        for flt, parts in replaceable:  # the ticked totals are searched instead
+            if parts <= covered:
+                flt.enabled = False
     return check
 
 
@@ -274,6 +347,8 @@ def query(check: Check) -> Json:
             stats.append({"id": f.stat_id, "value": rng, "disabled": False})
         elif f.key == "corrupted":
             misc["corrupted"] = {"option": "true" if f.value else "false"}
+        elif f.key.startswith("influence:"):
+            misc[f"{f.key.removeprefix('influence:')}_item"] = {"option": "true"}
         elif f.key in ("ilvl", "gem_level", "quality"):
             misc[f.key] = rng
         elif f.key == "links":

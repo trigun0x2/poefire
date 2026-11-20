@@ -6,7 +6,7 @@ let pc = null; // the current check, as /api/pricecheck/current returns it
 let pcShown = 0; // id of the check on screen
 const pcSearched = new Set(); // checks searched with their default filters already
 
-const GROUPS = [["item", "Item"], ["enchant", "Enchant"], ["implicit", "Implicit"],
+const GROUPS = [["item", "Item"], ["pseudo", "Totals"], ["enchant", "Enchant"], ["implicit", "Implicit"],
   ["fractured", "Fractured"], ["explicit", "Explicit"], ["crafted", "Crafted"]];
 
 function priceText(chaosValue) {
@@ -48,7 +48,7 @@ function filterRow(f) {
   const num = (bound) => `<input type="number" step="any" data-bound="${bound}" placeholder="${bound}" value="${f[bound] ?? ""}" aria-label="${bound}">`;
   return `<div class="pc-filter${f.enabled ? "" : " off"}" data-key="${esc(f.key)}">
     <label><input type="checkbox"${f.enabled ? " checked" : ""}><span class="text">${esc(f.label)}</span></label>
-    ${f.key === "corrupted" ? "<span></span><span></span>" : num("min") + num("max")}
+    ${f.key === "corrupted" || f.key.startsWith("influence:") ? "<span></span><span></span>" : num("min") + num("max")}
   </div>`;
 }
 

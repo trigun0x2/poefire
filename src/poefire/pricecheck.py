@@ -60,6 +60,7 @@ class ParsedItem:
     unidentified: bool = False
     mirrored: bool = False
     stackable: bool = False  # has a "Stack Size"
+    influences: list[str] = field(default_factory=list)  # "shaper", "crusader"...
     lines: list[str] = field(default_factory=list)  # every other line (mods, flavour...)
 
     @property
@@ -138,6 +139,8 @@ def parse(text: str) -> ParsedItem:
                 item.unidentified = True
             elif ln == "Mirrored":
                 item.mirrored = True
+            elif ln.endswith(" Item") and ln[:-5].lower() in INFLUENCES:  # "Shaper Item"
+                item.influences.append(ln[:-5].lower())
             elif (m := _PROPERTY_RE.match(ln)) and m["name"] in _KNOWN_PROPERTIES:
                 key, value = m["name"], m["value"].strip()
                 if key == "Stack Size":
@@ -153,6 +156,9 @@ def parse(text: str) -> ParsedItem:
                 item.lines.append(ln)
     return item
 
+
+# The influences the trade site filters on (misc filter "<name>_item").
+INFLUENCES = ("shaper", "elder", "crusader", "redeemer", "hunter", "warlord")
 
 _KNOWN_PROPERTIES = {"Stack Size", "Item Level", "Sockets", "Map Tier", "Level", "Quality",
                      "Area Level", "Experience"}  # fmt: skip
