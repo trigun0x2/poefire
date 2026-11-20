@@ -4,8 +4,10 @@ The POESESSID is write-only here: the API reports whether one is saved, never it
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
@@ -79,6 +81,32 @@ def _session_store(rt: AppRuntime) -> SessionStore:
     return SessionStore(rt.cfg.session_path)
 
 
+def _account_cache_path(rt: AppRuntime) -> Path:
+    return rt.cfg.session_path.with_name("account-cache.json")
+
+
+def account_cache(rt: AppRuntime) -> dict[str, Any] | None:
+    """The last connection check's characters and stash tabs, so Settings shows the tabs without
+    asking pathofexile.com again (Refresh tabs does). None if missing or for another league."""
+    try:
+        data = json.loads(_account_cache_path(rt).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("league") != rt.league:
+        return None
+    return data
+
+
+def _save_account_cache(rt: AppRuntime, result: dict[str, Any]) -> None:
+    try:
+        path = _account_cache_path(rt)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {**result, "league": rt.league, "fetched_at": time.time()}
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass  # only a cache
+
+
 def log_characters(rt: AppRuntime) -> list[dict[str, Any]]:
     """Character names seen in the log recently (deaths and level-ups), with their deaths and
     whether the current "count deaths for" setting counts them."""
@@ -128,6 +156,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "characters": cfg.characters,
         "log_characters": log_characters(rt),
         "stash_tabs": cfg.stash_tabs,
+        "account_cache": account_cache(rt),
         "snapshot_on_run_start": cfg.snapshot_on_run_start,
         "snapshot_delay": cfg.snapshot_delay,
         "loot": {"enabled": rt.loot.enabled, "reason": rt.loot.reason},
@@ -333,6 +362,7 @@ def save_session(rt: AppRuntime, poesessid: str) -> list[str]:
 
 def clear_session(rt: AppRuntime) -> None:
     _session_store(rt).clear()
+    _account_cache_path(rt).unlink(missing_ok=True)
     rt.reconfigure(rt.cfg)
 
 
@@ -367,7 +397,7 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
         note = None
     elif tabs_league is not None:
         note = f"{note} Showing the stash tabs of {tabs_league} instead."
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "tabs_league": tabs_league,
         "league_note": note,
@@ -379,3 +409,7 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
         "tabs": [{"id": t.get("id"), "name": t.get("name"), "type": t.get("type")}
                  for t in tabs],
     }  # fmt: skip
+    if tabs_league is not None:
+        _save_account_cache(rt, result)
+        result["fetched_at"] = time.time()
+    return result

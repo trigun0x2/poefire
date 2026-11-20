@@ -150,6 +150,11 @@ def test_check_account(
     r = client.post("/api/settings/check-account", headers=H).json()
     assert r["ok"] and r["characters"][0]["name"] == "xyz_bow"
     assert r["tabs"] == [{"id": "a", "name": "Dump", "type": "PremiumStash"}]
+    # cached: Settings shows the tabs next time without asking pathofexile.com
+    cache = client.get("/api/settings").json()["account_cache"]
+    assert cache["tabs"] == r["tabs"] and cache["fetched_at"] > 0
+    client.post("/api/settings/session/clear", headers=H)
+    assert client.get("/api/settings").json()["account_cache"] is None
 
 
 def test_config_toml_roundtrip(tmp_path: Path) -> None:

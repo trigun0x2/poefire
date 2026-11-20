@@ -15,6 +15,8 @@ function setStatus(id, text, cls = "") {
 async function loadSettings() {
   settings = await api("/api/settings");
   const s = settings;
+  // the last check's tabs (saved on this PC), so the list shows without asking pathofexile.com
+  if (!account && s.account_cache) account = s.account_cache;
   $("set-log").value = s.log_path;
   $("set-log").placeholder = s.log_path_detected || s.log_path_candidates[0];
   if (s.log_path_exists) setStatus("set-log-status", `✓ Reading ${s.log_path_effective}`, "ok");
@@ -143,13 +145,16 @@ function renderAccountPickers() {
   // tabs saved earlier but not in the loaded list (or nothing loaded yet)
   html += s.stash_tabs.filter((t) => !known.has(t.toLowerCase())).map((t) =>
     `<label><input type="checkbox" value="${esc(t)}" checked>${esc(t)}</label>`).join("");
-  $("set-tabs").innerHTML = html || '<span class="hint">Check the connection above to load your stash tabs.</span>';
+  $("set-tabs").innerHTML = html || '<span class="hint">Press Refresh tabs to load your stash tabs.</span>';
+  $("set-tabs-age").textContent = account?.fetched_at
+    ? `Tab list from ${ago(account.fetched_at)}${account.tabs_league ? ` (${account.tabs_league})` : ""}. Refresh after adding or renaming tabs.`
+    : "";
   renderDirty();
 }
 
 async function checkAccount() {
   setStatus("set-check-result", "Checking…");
-  $("set-check").disabled = true;
+  $("set-check").disabled = $("set-tabs-refresh").disabled = true;
   try {
     const r = await api("/api/settings/check-account", { method: "POST" });
     if (!r.ok) { setStatus("set-check-result", `✗ ${r.error}`, "bad"); return; }
@@ -165,7 +170,7 @@ async function checkAccount() {
   } catch (e) {
     setStatus("set-check-result", `✗ ${e.message}`, "bad");
   } finally {
-    $("set-check").disabled = false;
+    $("set-check").disabled = $("set-tabs-refresh").disabled = false;
   }
 }
 
@@ -207,6 +212,7 @@ $("set-session-clear").addEventListener("click", async () => {
 });
 
 $("set-check").addEventListener("click", checkAccount);
+$("set-tabs-refresh").addEventListener("click", checkAccount);
 $("set-update-check").addEventListener("click", async () => {
   setStatus("set-update-result", "Checking…");
   try {

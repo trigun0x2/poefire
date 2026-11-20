@@ -89,6 +89,9 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
            { id: "c", name: "Dump", type: "QuadStash" }],
   } }));
   await go("settings");
+  await page.click("#set-tabs-refresh");
+  await page.waitForTimeout(600);
+  check(await count("#set-tabs label") >= 3, "settings: Refresh tabs loads the stash tabs");
   await page.click("#set-wizard");
   await page.waitForTimeout(500);
   check(await page.$eval("#wizard", (d) => d.open), "wizard: opens from Settings");
