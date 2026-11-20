@@ -30,16 +30,6 @@ from poefire.pricing.book import PriceBook, Quote
 SEPARATOR = "--------"
 FRAME = {"Normal": 0, "Magic": 1, "Rare": 2, "Unique": 3, "Gem": 4, "Currency": 5,
          "Divination Card": 6, "Quest": 7}  # fmt: skip
-BULK_CLASSES = frozenset(
-    {
-        "Stackable Currency",
-        "Map Fragments",
-        "Divination Cards",
-        "Delve Stackable Socketable Currency",
-        "Incubators",
-        "Omens",
-    }
-)
 _PROPERTY_RE = re.compile(r"^(?P<name>[A-Za-z' ]+): (?P<value>.+)$")
 _INT_RE = re.compile(r"-?\d[\d,]*")
 
@@ -59,7 +49,6 @@ class ParsedItem:
     corrupted: bool = False
     unidentified: bool = False
     mirrored: bool = False
-    stackable: bool = False  # has a "Stack Size"
     lines: list[str] = field(default_factory=list)  # every other line (mods, flavour...)
 
     @property
@@ -69,12 +58,6 @@ class ParsedItem:
     @property
     def display_name(self) -> str:
         return f"{self.name} {self.base}".strip() if self.name else self.base
-
-    @property
-    def is_bulk(self) -> bool:
-        """Currency-like: priced from poe.ninja (bought and sold on the Currency Exchange)."""
-        return (self.stackable or self.rarity in ("Currency", "Divination Card")
-                or self.item_class in BULK_CLASSES)  # fmt: skip
 
     @property
     def links(self) -> int:
@@ -141,14 +124,13 @@ def parse(text: str) -> ParsedItem:
             elif (m := _PROPERTY_RE.match(ln)) and m["name"] in _KNOWN_PROPERTIES:
                 key, value = m["name"], m["value"].strip()
                 if key == "Stack Size":
-                    item.stackable = True
                     item.stack = int(value.split("/")[0].replace(",", "").replace(".", "") or 1)
                 elif key == "Item Level":
                     item.item_level = int(value)
                 elif key == "Sockets":
                     item.sockets = value
-                else:  # the first wins: a gem's "Level: 20", not its required "Level: 70"
-                    item.properties.setdefault(key, value)
+                else:
+                    item.properties[key] = value
             else:
                 item.lines.append(ln)
     return item

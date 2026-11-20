@@ -1,7 +1,6 @@
 # Scope: price checking in poefire (an Awakened PoE Trade replacement)
 
-Status: **building**. Done: in-game shortcuts (step 1), Ctrl+D copy + parser (step 2), the
-popup (step 3) and the trade search (step 4, first version).
+Status: **scoping** (branch `price-check`). Nothing here is built yet.
 
 ## Decided (Nov 2026)
 
@@ -16,19 +15,6 @@ popup (step 3) and the trade search (step 4, first version).
   the other zone commands the game has), each on its own hotkey, changeable or off.
 - **"Search":** saved stash/vendor search strings (e.g. map-mod regex): a hotkey types one
   into the in-game search box you have open.
-
-### Decided (Nov 20)
-
-- **Every item except bulk ones is priced on the trade site**, in a popup beside the cursor:
-  the item's mods as filters (explicit, crafted and fractured ticked at ≥90% of the roll;
-  implicits, enchants and item level unticked; min/max editable), searched when the popup
-  opens and again with **Search**. Shows the **5 cheapest** listings and the **average of the
-  20 cheapest without the cheapest and dearest two**, plus a link to the search on the site.
-- **Bulk items** (currency, fragments, scarabs, cards, essences, anything with a stack size):
-  poe.ninja's price, and a note that they're traded on the in-game Currency Exchange.
-- Mod wording → trade stat ids from GGG's `/api/trade/data/stats` (`/items`, `/static` for
-  bases and currency names), fetched on first use and kept for a day (`trade-data.json`).
-- Trade requests never wait out a rate limit: the popup says how long to wait instead.
 
 ## What Awakened PoE Trade does
 

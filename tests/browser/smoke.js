@@ -114,41 +114,6 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
   await page.waitForTimeout(500);
   check(!(await page.$eval("#wizard", (d) => d.open)), "wizard: closes");
 
-  // Price-check popup, with the price check and the trade search answered by fake data
-  const check0 = {
-    id: 7, kind: "trade", league: "Keepers", chaos_per_divine: 180, result: null, error: null,
-    item: { name: "Storm Loop Two-Stone Ring", class: "Rings", rarity: "Rare", stack: 1, corrupted: false, links: 0 },
-    check: { name: null, base: "Two-Stone Ring", rarity: "Rare", unmatched: ["Grants Level 20 Mystery Skill"], filters: [
-      { key: "corrupted", label: "Not corrupted", group: "item", enabled: true, value: 0, min: null, max: null, stat_id: null },
-      { key: "stat:implicit.stat_fc", label: "+12% to Fire and Cold Resistances", group: "implicit", enabled: false, value: 12, min: 10, max: null, stat_id: "implicit.stat_fc" },
-      { key: "stat:explicit.stat_life", label: "+45 to maximum Life", group: "explicit", enabled: true, value: 45, min: 40, max: null, stat_id: "explicit.stat_life" },
-      { key: "stat:explicit.stat_light", label: "+40% to Lightning Resistance", group: "explicit", enabled: true, value: 40, min: 36, max: null, stat_id: "explicit.stat_light" },
-    ] },
-  };
-  let searchedWith = null;
-  const listing = (c) => ({ amount: c, currency: "Chaos Orb", chaos: c, indexed: new Date().toISOString() });
-  await page.route("**/api/pricecheck/current", (r) => r.fulfill({ json: { check: check0 } }));
-  await page.route("**/api/pricecheck/search", (r) => {
-    searchedWith = JSON.parse(r.request().postData());
-    r.fulfill({ json: { check: { ...check0, result: {
-      total: 34, averaged: 20, average_chaos: 412.5, url: "https://www.pathofexile.com/trade/search/Keepers/Q1",
-      cheapest: [12, 14, 15, 20, 31].map(listing) } } } });
-  });
-  await page.goto(`${base}/price-check`);
-  await page.waitForTimeout(1200);
-  check(await count(".pc-filter") === 4, "price check: the item's mods as filters");
-  check(searchedWith && searchedWith.id === 7, "price check: searches when it opens");
-  check(await count("#pc-rows tr") === 5, "price check: the 5 cheapest listings");
-  check(/2\.29d/.test(await text("#pc-avg")), "price check: the average (in divines from 200c)");
-  check(/Mystery Skill/.test(await text("#pc-unmatched")), "price check: unsearchable mods listed");
-  await page.click('.pc-filter[data-key="stat:explicit.stat_light"] input[type=checkbox]');
-  await page.fill('.pc-filter[data-key="stat:explicit.stat_life"] input[data-bound="min"]', "50");
-  await page.click("#pc-search");
-  await page.waitForTimeout(600);
-  const sent = Object.fromEntries((searchedWith?.filters || []).map((f) => [f.key, f]));
-  check(sent["stat:explicit.stat_light"]?.enabled === false && sent["stat:explicit.stat_life"]?.min === 50,
-    "price check: ticks and min values go into the search");
-
   await browser.close();
   if (problems.length) {
     console.error(`\n${problems.length} problem(s)`);

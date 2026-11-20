@@ -18,17 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from poefire import (
-    __version__,
-    campaign,
-    gamepath,
-    layouts,
-    logs,
-    patches,
-    pricecheck,
-    trade,
-    wiring,
-)
+from poefire import __version__, campaign, gamepath, layouts, logs, patches, pricecheck, wiring
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -127,26 +117,6 @@ def price_line(r: dict[str, Any], chaos_per_divine: float | None) -> str:
     return f"{name}: {amount(r['chaos_total'])}{each}"
 
 
-def trade_line(state: dict[str, Any]) -> str:
-    """One line for the overlay: "Storm Loop Two-Stone Ring: from 12c, avg 18c (34 listed)"."""
-    name = state["item"]["name"]
-    if state.get("error"):
-        return f"{name}: {state['error']}"
-    r = state.get("result") or {}
-    if not r.get("cheapest"):
-        return f"{name}: no listings"
-    cpd = state.get("chaos_per_divine")
-
-    def amount(chaos: float) -> str:
-        if chaos >= 200 and cpd:
-            return f"{chaos / cpd:,.2f}d"
-        return f"{chaos:,.0f}c" if chaos >= 100 else f"{chaos:,.2f}".rstrip("0").rstrip(".") + "c"
-
-    avg = r.get("average_chaos")
-    tail = f", avg {amount(avg)}" if avg is not None else ""
-    return f"{name}: from {amount(r['cheapest'][0]['chaos'])}{tail} ({r['total']} listed)"
-
-
 class AppRuntime:
     def __init__(
         self,
@@ -199,15 +169,7 @@ class AppRuntime:
         self.game_input = GameInput()
         self.game_hotkeys: GameHotkeys | None = None
         self.game_hotkey_errors: dict[str, str] = {}  # config entry -> why it's off
-        # The newest price check, as the popup shows it (see open_price_check)
-        self.price_check: dict[str, Any] | None = None
-        self._check: tuple[int, Any, trade.Check | None] | None = None  # (id, item, filters)
-        self._check_seq = 0
-        self._check_lock = threading.Lock()
-        self._trade_client: trade.TradeClient | None = None
-        self._trade_data: trade.TradeData | None = None
-        self._trade_data_at = 0.0
-        self.request_price_popup: Callable[[], None] | None = None  # set by the window host
+        self.last_price_check: dict[str, Any] | None = None  # the newest result, for the UI
         self._flash: tuple[str, float] | None = None  # overlay message, until (monotonic)
         self._bests_cache: dict[tuple[str, tuple[int, ...]], campaign.Bests] = {}
         self.layouts = layouts.LayoutGuide(
@@ -687,107 +649,30 @@ class AppRuntime:
 
     # --- price check (docs/scope/price-check.md) ---
 
-    def trade_client(self) -> trade.TradeClient:
-        if self._trade_client is None:
-            store = SessionStore(self.cfg.session_path)
-            self._trade_client = trade.TradeClient(wiring.session_user_agent(self.cfg),
-                                                   cookie=store.load)  # fmt: skip
-        return self._trade_client
-
-    def trade_data(self) -> trade.TradeData:
-        """GGG's trade data (mod wording -> trade stat ids), kept for a day."""
-        if self._trade_data is None or self._trade_data_stale():
-            path = self.cfg.db_path.parent / "trade-data.json"
-            self._trade_data = trade.load_trade_data(path, self.trade_client().data)
-            self._trade_data_at = time.time()
-        return self._trade_data
-
-    def _trade_data_stale(self) -> bool:
-        return time.time() - self._trade_data_at > trade.DATA_MAX_AGE
-
-    def open_price_check(self, text: str) -> dict[str, Any]:
-        """Item text (from Ctrl+D, or pasted) -> the price check the popup shows. Bulk items
-        (currency, fragments, cards...) get poe.ninja's price; others the trade search's
-        filters (searched by the popup). Raises pricecheck.NotAnItem."""
+    def price_check_text(self, text: str) -> dict[str, Any]:
+        """Parse and price item text (from Ctrl+D, or pasted). Raises pricecheck.NotAnItem."""
         item = pricecheck.parse(text)
         book = self.prices.book(self.price_league)
-        cpd = book.chaos_per_divine
-        with self._check_lock:
-            self._check_seq += 1
-            state: dict[str, Any] = {
-                "id": self._check_seq, "at": self.now().isoformat(), "league": self.league,
-                "chaos_per_divine": cpd, "result": None, "error": None, "check": None,
-                "item": {"name": item.display_name, "class": item.item_class,
-                         "rarity": item.rarity, "stack": item.stack,
-                         "corrupted": item.corrupted, "links": item.links},
-            }  # fmt: skip
-            check: trade.Check | None = None
-            if item.is_bulk:
-                state["kind"] = "bulk"
-                state["ninja"] = pricecheck.price(item, book).to_json(cpd)
-                state["ninja"]["league"] = self.price_league
-            else:
-                state["kind"] = "trade"
-                try:
-                    check = trade.build_check(item, self.trade_data())
-                    state["check"] = check.to_json()
-                except Exception as e:  # the trade site unreachable: say so in the popup
-                    log.warning("trade data unavailable: %s", e)
-                    state["error"] = f"Couldn't load the trade site's data: {e}"
-            self._check = (self._check_seq, item, check)
-            self.price_check = state
-        log.info("price check: %s (%s)", item.display_name, state["kind"])
-        return state
-
-    def price_check_search(self, check_id: int, choices: list[dict[str, Any]]) -> dict[str, Any]:
-        """Search the trade site with the popup's filters. KeyError: not the current check."""
-        with self._check_lock:
-            if self._check is None or self._check[0] != check_id or self.price_check is None:
-                raise KeyError(check_id)
-            check = self._check[2]
-            state = self.price_check
-            if check is None:
-                return state
-            trade.apply_choices(check, choices)
-            state["check"] = check.to_json()
-        book = self.prices.book(self.price_league)
-        try:
-            result = trade.search(self.trade_client(), self.trade_data(), book, self.league,
-                                  check)  # fmt: skip
-        except trade.TradeError as e:
-            state.update(error=str(e))
-        else:
-            state.update(result=result, error=None)
-        return state
+        result = pricecheck.price(item, book).to_json(book.chaos_per_divine)
+        result["at"] = self.now().isoformat()
+        result["league"] = self.price_league
+        self.last_price_check = result
+        found = result["chaos_each"] if result["chaos_each"] is not None else result["note"]
+        log.info("price check: %s -> %s", result["name"], found)
+        return result
 
     def price_check_hotkey(self) -> None:
-        """Ctrl+D: copy the item under the cursor (the one action sent), then the popup."""
+        """Ctrl+D: copy the item under the cursor (the one action sent), price it, show it."""
         text = self.game_input.copy_item()
         if text is None:
             self.flash("Price check: nothing copied (hover an item, then press the key)")
             return
         try:
-            state = self.open_price_check(text)
+            r = self.price_check_text(text)
         except pricecheck.NotAnItem:
             self.flash("Price check: that isn't an item")
             return
-        if self.request_price_popup is not None:
-            self.request_price_popup()  # the popup searches with the default filters
-            return
-        # no popup (the app runs in a browser): one line on the overlay
-        if state["kind"] == "bulk":
-            cpd = state["chaos_per_divine"]
-            self.flash(price_line(state["ninja"], cpd) + " (Currency Exchange)")
-        else:
-            threading.Thread(target=self._flash_search, args=(state["id"],), daemon=True).start()
-
-    def _flash_search(self, check_id: int) -> None:
-        self.flash("Price check: searching the trade site…", 30)
-        try:
-            state = self.price_check_search(check_id, [])
-        except KeyError:
-            return  # a newer check replaced it
-        self.flash(trade_line(state))
+        self.flash(price_line(r, self.prices.book(self.price_league).chaos_per_divine))
 
     def flash(self, text: str, seconds: float = 8.0) -> None:
         """A message on the overlay for a few seconds."""

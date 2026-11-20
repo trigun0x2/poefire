@@ -477,12 +477,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
                 thread = threading.Thread(target=server.run, daemon=True)
                 thread.start()
                 try:
-                    from poefire.web.window import (
-                        MIN_HEIGHT,
-                        MIN_WIDTH,
-                        PopupControls,
-                        WindowControls,
-                    )
+                    from poefire.web.window import MIN_HEIGHT, MIN_WIDTH, WindowControls
 
                     controls = WindowControls()
                     # No OS title bar: the page draws its own (see web/window.py). Only the
@@ -497,16 +492,6 @@ def cmd_ui(args: argparse.Namespace) -> int:
                     rt.request_exit = controls.close  # updater: close the window to install
                     rt.request_show = controls._bring_to_front
                     _add_overlay(rt, window)
-                    # the price-check popup: hidden until the price check key (Ctrl+D)
-                    popup_controls = PopupControls()
-                    popup = webview.create_window(
-                        "poefire price check", url.rstrip("/") + "/price-check",
-                        width=PopupControls.WIDTH, height=PopupControls.HEIGHT,
-                        frameless=True, easy_drag=False, on_top=True, hidden=True,
-                        js_api=popup_controls, background_color="#111317",
-                    )  # fmt: skip
-                    popup_controls._attach(popup)
-                    rt.request_price_popup = popup_controls._show
                     # the packaged exe carries the icon itself; this covers running from source
                     icon = Path(__file__).parent / "web" / "static" / "favicon.ico"
                     webview.start(icon=str(icon))
