@@ -352,7 +352,7 @@ def cmd_trade_test(args: argparse.Namespace) -> int:
     search and one fetch, the way a price check would, with and without your POESESSID."""
     import httpx
 
-    from poefire import wiring
+    from poefire import trade, wiring
     from poefire.api.session import SessionStore
 
     cfg = _config(args)
@@ -360,7 +360,7 @@ def cmd_trade_test(args: argparse.Namespace) -> int:
     ua = wiring.session_user_agent(cfg)
     cookie = SessionStore(cfg.session_path).load()
     base = "https://www.pathofexile.com"
-    query = {"query": {"status": {"option": "online"}, "name": "Tabula Rasa",
+    query = {"query": {"status": {"option": trade.LISTING_STATUS}, "name": "Tabula Rasa",
                        "type": "Simple Robe"}, "sort": {"price": "asc"}}  # fmt: skip
     ok = False
     for label, use_cookie in (("without POESESSID", False), ("with POESESSID", True)):

@@ -41,6 +41,9 @@ DEFAULT_SHARE = 0.9  # ticked mods search for at least 90% of the item's roll
 SHOWN = 5  # cheapest listings shown
 AVERAGED = 20  # listings fetched for the average
 FETCH_CHUNK = 10  # the trade site's limit per fetch
+# "available" = Instant Buyout listings (merchant tabs), as the trade site encodes its status
+# dropdown; "online" would be In Person only.
+LISTING_STATUS = "available"
 
 # Item classes whose damage/defence mods are "local" (they change the item's own numbers).
 _LOCAL_CLASSES = frozenset({
@@ -333,7 +336,7 @@ def apply_choices(check: Check, choices: Iterable[Json]) -> None:
 
 
 def query(check: Check) -> Json:
-    q: Json = {"status": {"option": "online"}, "type": check.base}
+    q: Json = {"status": {"option": LISTING_STATUS}, "type": check.base}
     if check.name:
         q["name"] = check.name
     stats = []

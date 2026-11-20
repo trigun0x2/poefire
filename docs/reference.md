@@ -290,7 +290,7 @@ the browser version a one-line result shows on the overlay instead).
 - **Bulk items** (currency, fragments, scarabs, divination cards, essences, anything with a
   stack size): poe.ninja's price. These are bought and sold on the in-game Currency Exchange.
 - **Everything else** (uniques, rares, gems, maps, bases): a search on the official trade
-  site, online sellers only. The popup lists the item's mods as filters: explicit, crafted
+  site, Instant Buyout listings. The popup lists the item's mods as filters: explicit, crafted
   and fractured mods ticked at least 90% of your roll, implicits, enchants and item level
   unticked; tick, untick or change min/max and press **Search** (or Enter). It shows the
   **5 cheapest** listings and the **average of the 20 cheapest** without the cheapest and

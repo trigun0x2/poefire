@@ -137,7 +137,7 @@ def test_query_and_popup_choices() -> None:
     misc = q["filters"]["misc_filters"]["filters"]
     assert misc == {"ilvl": {"min": 84}, "corrupted": {"option": "false"}}
     assert q["filters"]["type_filters"]["filters"]["rarity"] == {"option": "nonunique"}
-    assert q["status"] == {"option": "online"}
+    assert q["status"] == {"option": "available"}  # Instant Buyout, not In Person
     gem = trade.build_check(pricecheck.parse(GEM), data())
     gq = trade.query(gem)["query"]
     assert gq["type"] == "Enlighten Support"
