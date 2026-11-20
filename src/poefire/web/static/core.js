@@ -11,7 +11,7 @@ let lastRunKey = "";
 // --- formatting ---
 
 const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+const nf1 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }); // up to 2 decimals
 const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function duration(sec) {

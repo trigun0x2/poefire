@@ -32,7 +32,7 @@ def history(store: Store, league: str, range_: str, now: datetime,
         points.append({
             "t": taken_at.isoformat(),
             "chaos": round(chaos, 1),
-            "divine": round(chaos / rate, 3) if rate else None,
+            "divine": round(chaos / rate, 2) if rate else None,
         })  # fmt: skip
     return {"league": league, "range": range_ if range_ in RANGES else "7d", "points": points}
 
@@ -138,7 +138,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
                 "quantity": h.quantity,
                 "chaos_each": _round(h.chaos_each),
                 "chaos_total": _round(h.chaos_total, 1),
-                "divine_total": _round(h.chaos_total / cpd, 3) if cpd and h.chaos_total else None,
+                "divine_total": _round(h.chaos_total / cpd, 2) if cpd and h.chaos_total else None,
                 "share": round(h.chaos_total / total, 4) if total and h.chaos_total else 0,
                 "icon": h.icon,
                 "tabs": [name_of(s) for s in h.sources],

@@ -16,15 +16,15 @@ function money(chaosValue, divineValue, digits) {
     return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits ?? (Math.abs(divineValue) >= 100 ? 0 : 2) }).format(divineValue)}d`;
   }
   if (chaosValue == null) return "—";
-  return `${(Math.abs(chaosValue) >= 100 ? nf0 : nf1).format(chaosValue)}c`;
+  return `${(Math.abs(chaosValue) >= 100 ? nf0 : nf1).format(chaosValue)}c`; // up to 2 decimals
 }
 /** An item's price: in divines like the rest, but under 200c in chaos (0.04d reads badly). */
 function eachPrice(chaosEach, cpd) {
   const div = cpd ? chaosEach / cpd : null;
   if (ovUnit === "divine" && div != null && Math.abs(chaosEach) < DIVINE_FROM) {
-    return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: chaosEach >= 10 ? 0 : 1 }).format(chaosEach)}c`;
+    return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: chaosEach >= 10 ? 0 : 2 }).format(chaosEach)}c`;
   }
-  return money(chaosEach, div, 3);
+  return money(chaosEach, div, 2);
 }
 
 function pointValue(p) { return ovUnit === "divine" ? p.divine : p.chaos; }
