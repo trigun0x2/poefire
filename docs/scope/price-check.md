@@ -2,6 +2,20 @@
 
 Status: **scoping** (branch `price-check`). Nothing here is built yet.
 
+## Decided (Nov 2026)
+
+- **Build only:** the price check, preset chat commands (zone shortcuts) and saved stash/vendor
+  search strings. **Not** the wiki links, heist OCR, stash scrolling, map check or widgets.
+- **Input rule relaxed to "one key press = one action"** (was "never send input to the game"):
+  a hotkey you press may send one action to the game (Ctrl+C to copy the item under the cursor;
+  type one chat command and press Enter; paste one search string). Never repeated, timed, chained
+  across server actions, or done without a key press. README and SECURITY.md say so.
+- **Rares:** trade search only (no poeprices.info; nothing leaves your PC except to GGG).
+- **Chat commands built in:** /hideout, /exit, and zone shortcuts (/kingsmarch, /menagerie and
+  the other zone commands the game has), each on its own hotkey, changeable or off.
+- **"Search":** saved stash/vendor search strings (e.g. map-mod regex): a hotkey types one
+  into the in-game search box you have open.
+
 ## What Awakened PoE Trade does
 
 [Awakened PoE Trade](https://github.com/SnosMe/awakened-poe-trade) (APT, MIT licence, Electron,
@@ -22,24 +36,26 @@ TypeScript + Vue) is the overlay most players use to price items. From its sourc
 
 ## The ToS line
 
-poefire reads files and website data that are yours, listens to global hotkeys, and **never
-sends input to the game**. APT crosses that line in several places: it presses Ctrl+C for you,
-types chat commands, sends arrow keys for stash scrolling, and captures the screen for OCR.
-A replacement keeps poefire's rules:
+GGG's rule for macros is one server action per key press. poefire follows it (decided above):
 
-| APT feature | poefire's version |
+| Feature | What poefire does |
 | --- | --- |
-| Ctrl+D presses Ctrl+C for you | **You press Ctrl+C** on the item (the game copies its text: a normal game feature). poefire sees item text arrive on the clipboard and opens the price check. Optionally only while a "price check" hotkey is held, or with a hotkey that opens the last copied item. |
-| Chat commands, stash scrolling | **Not built** (input automation). |
-| Heist OCR | **Not built** (screen reading). |
-| Trade site searches | **Built, user-initiated only**: one search when you ask, never in the background; follows the trade site's rate-limit headers; identifies itself honestly (no browser disguise). |
-| poeprices.info | Optional, off by default (a third party; the item text is sent to it). |
+| Price check (Ctrl+D) | On your key press: sends one Ctrl+C to the game (it copies the item under the cursor), reads the item text from the clipboard, restores what was on the clipboard before, and opens the panel. |
+| Chat commands (F5 /hideout ...) | On your key press: opens chat (Enter), types the one command, presses Enter. One command per press. |
+| Saved search strings | On your key press: pastes the saved string into the search box you have open (Ctrl+F is yours to press first). |
+| Trade site searches | Only when you ask (opening a price check, changing filters); never in the background; follows the trade site's rate-limit headers; identifies itself honestly (no browser disguise). |
+| Not built | Stash scrolling, heist OCR, wiki/poedb links, map check, widgets, poeprices.info. |
+
+Sending keys: Win32 `SendInput` (ctypes), only while the game window has focus (checked with
+`GetForegroundWindow`, like the overlay), after waiting for the hotkey's own modifier keys to be
+released so they don't mix with what's sent.
 
 ## How it would fit in poefire
 
-- **Clipboard watcher (Windows):** `AddClipboardFormatListener` on a hidden message window (ctypes,
-  like the overlay), on its own thread. Only text that looks like a PoE item ("Item Class:"
-  first line, `--------` separators) is used; anything else is ignored and never stored.
+- **Copying the item (Windows):** on Ctrl+D, save the clipboard, send Ctrl+C, wait for the
+  clipboard to change (up to ~250 ms), read it, then put the old clipboard back. Only text that
+  looks like a PoE item ("Item Class:" first line, `--------` separators) is used; nothing is
+  stored or logged.
 - **Item parser (Python):** port the needed part of APT's parser: header (class, rarity,
   name, base), properties (quality, sockets/links, item level, map tier), requirements, and mods
   with their type (implicit, explicit, crafted, fractured, enchant), plus corrupted/mirrored/
@@ -86,17 +102,17 @@ A replacement keeps poefire's rules:
 | # | Milestone | Size | Done when |
 | --- | --- | --- | --- |
 | 0 | Spike: trade search from Python on Windows (Cloudflare, rate limits) | 1 day | A search + fetch works, or we know we need WebView2 |
-| 1 | Clipboard watcher + item parser + poe.ninja prices | 3–4 days | Ctrl+C on a currency, card, unique, gem or map shows its price in a panel |
-| 2 | Price-check window (interactive, near the cursor) | 2–3 days | The panel opens at the cursor, closes on Esc/click-away, never takes focus from the game unless clicked |
-| 3 | Trade search for rares: mod filters, results list, link to the trade site | 1–2 weeks | Common rare bases (jewellery, armour, weapons, jewels) price with sensible default filters |
-| 4 | Pseudo stats, item level/influence/sockets filters, bulk (currency) search | 1 week | Parity with APT for the common cases |
-| 5 | Map check (dangerous mods you pick) | 2 days | Ctrl+C on a map highlights your bad mods |
-| — | Not planned | — | Chat commands, stash scrolling, OCR (input automation / screen reading) |
+| 1 | Key sending (SendInput, game-focus check) + chat commands + saved search strings, with Settings | 2–3 days | F5 takes you to your hideout; a search hotkey fills the stash search |
+| 2 | Ctrl+D copy + item parser + poe.ninja prices | 3–4 days | Ctrl+D on a currency, card, unique, gem or map shows its price |
+| 3 | Price-check window (interactive, near the cursor) | 2–3 days | The panel opens at the cursor, closes on Esc/click-away, never takes focus from the game unless clicked |
+| 4 | Trade search for rares: mod filters, results list, link to the trade site | 1–2 weeks | Common rare bases (jewellery, armour, weapons, jewels) price with sensible default filters |
+| 5 | Pseudo stats, item level/influence/sockets filters, bulk (currency) search | 1 week | Parity with APT for the common cases |
+| — | Not planned | — | Wiki links, map check, widgets, stash scrolling, OCR, poeprices.info |
 
-## Open questions
+## Defaults (change them if you disagree)
 
-1. Trigger: open on **any** item copy (Ctrl+C), or only while a hotkey is held / with a separate
-   "price check last copied item" hotkey?
-2. Rares: trade search only, or also poeprices.info estimates (sends item text to a third party)?
-3. Mod data: GGG's trade data (recommended), or reuse APT's data files with credit?
-4. Where results go: the new popup only, or also a "Price checks" history page in the app?
+- Hotkeys: Ctrl+D price check (closes when the cursor leaves it), Ctrl+Alt+D price check that
+  stays open; F5 /hideout, F9 /exit; zone shortcuts and search strings off until you give them
+  a key.
+- Mod data: GGG's trade data, with APT's data files (MIT) as a reference.
+- Results: the popup only (no history page).
