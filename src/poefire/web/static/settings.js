@@ -336,6 +336,9 @@ function renderDirty() {
     const field = $(id)?.closest(".field, .check, .tabs-list") || $(id);
     field?.classList.toggle("changed", changed.includes(key));
   }
+  for (const b of $("set-tabs-nav").querySelectorAll("button[data-tab]")) {
+    b.classList.toggle("has-changes", !!$(`set-panel-${b.dataset.tab}`).querySelector(".changed"));
+  }
   $("save-bar").classList.toggle("dirty", changed.length > 0);
   $("set-discard").hidden = !changed.length;
   $("set-dirty").hidden = !changed.length;
@@ -428,7 +431,33 @@ $("diag-logs").addEventListener("click", async () => {
   }
 });
 
-// --- routing: #settings shows the settings page, anything else the dashboard ---
+// --- tabs: one panel at a time; #settings/<tab> opens a given tab ---
+
+const SETTINGS_TABS = ["general", "loot", "campaign", "shortcuts", "app"];
+let settingsTab = "general";
+
+/** Shows a settings tab. Switching tabs never reloads the form, so unsaved edits stay. */
+function showSettingsTab(tab) {
+  if (!SETTINGS_TABS.includes(tab)) tab = settingsTab;
+  settingsTab = tab;
+  for (const b of $("set-tabs-nav").querySelectorAll("button[data-tab]")) {
+    b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  }
+  for (const p of $("settings-view").querySelectorAll(".settings-panel")) p.hidden = p.dataset.panel !== tab;
+  const hash = `#settings/${tab}`;
+  if (location.hash !== hash) history.replaceState(null, "", hash); // no hashchange: no re-route
+}
+$("set-tabs-nav").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-tab]");
+  if (!b) return;
+  showSettingsTab(b.dataset.tab);
+  $("content").scrollTop = 0;
+});
+// A field the browser rejects on Save may be on another tab: show that tab so it can be focused.
+$("settings-view").addEventListener("invalid", (e) => {
+  const panel = e.target.closest(".settings-panel");
+  if (panel?.hidden) showSettingsTab(panel.dataset.panel);
+}, true);
 
 
 // --- hotkey field: click it, then press the combination ---

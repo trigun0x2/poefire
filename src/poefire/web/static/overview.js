@@ -70,7 +70,7 @@ function renderChart(pts) {
   const box = $("ov-chart");
   if (!pts.length) {
     const why = !status?.loot.enabled
-      ? 'Loot tracking is off. Set up your account in <a href="#settings">Settings</a> to record values.'
+      ? 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a> to record values.'
       : ovHistory.points.length && ovUnit === "divine"
         ? "No divine price yet for these snapshots. Switch to chaos, or wait for poe.ninja prices."
         : "No values recorded in this range yet. A value is recorded every time you return to your hideout from a map, or when you press Snapshot now.";
@@ -172,7 +172,7 @@ function renderHoldings() {
   $("ov-tabs").innerHTML = d.tabs.length ? chips.join("") : "";
   $("ov-items-empty").hidden = d.items.length > 0;
   $("ov-items-empty").innerHTML = !d.taken_at
-    ? (d.loot_enabled ? "No snapshot yet. Press Snapshot now, or finish a map." : 'Loot tracking is off. Set up your account in <a href="#settings">Settings</a>.')
+    ? (d.loot_enabled ? "No snapshot yet. Press Snapshot now, or finish a map." : 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a>.')
     : "No items in the selected tabs.";
   $("ov-items-body").innerHTML = sortRows(d.items, itemsSort.key, itemsSort.dir).map((i) => {
     const icon = i.icon
@@ -214,7 +214,7 @@ $("ov-tabs").addEventListener("click", (e) => {
   loadOverview().catch(() => {});
 });
 async function requestSnapshot(button) {
-  if (!status?.loot.enabled) { location.hash = "#settings"; return; }
+  if (!status?.loot.enabled) { location.hash = "#settings/general"; return; }
   button.disabled = true;
   button.textContent = "Snapshot requested…";
   await api("/api/snapshot", { method: "POST" }).catch(() => {});

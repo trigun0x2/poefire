@@ -185,6 +185,11 @@ tbody tr.out-of-session td { color: var(--muted); }
 a.pill { text-decoration: none; }
 .settings { max-width: 860px; margin: 0 auto; padding: 18px 18px 90px; display: flex; flex-direction: column; gap: 14px; }
 .settings h1 { font-size: 20px; margin: 4px 0; }
+/* Settings tabs: one panel at a time; a dot marks a tab with unsaved changes */
+.settings-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+.settings-tabs button.has-changes::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+.settings-panel { display: flex; flex-direction: column; gap: 14px; }
+.settings-panel[hidden] { display: none; }
 .field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
 .field > span { font-weight: 600; font-size: 13px; }
 .field.narrow { max-width: 320px; }
@@ -340,9 +345,9 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
 .campaign:not([data-tab="history"]) :is(.cp-top, .cp-history),
 .campaign:not([data-tab="analysis"]) :is(.cp-worst, .cp-analysis-empty) { display: none; }
 .cp-tabs { grid-area: tabs; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
-.cp-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px 9px; cursor: pointer; margin-bottom: -1px; }
-.cp-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
-.cp-tabs button:hover { color: var(--text); }
+:is(.cp-tabs, .settings-tabs) button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px 9px; cursor: pointer; margin-bottom: -1px; }
+:is(.cp-tabs, .settings-tabs) button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+:is(.cp-tabs, .settings-tabs) button:hover { color: var(--text); }
 .cp-tabs-run { margin-left: auto; font-size: 12.5px; }
 .cp-analysis-empty { grid-area: worst; }
 .cp-run { grid-area: run; }
