@@ -153,6 +153,8 @@ class FakeApi:
                 {"id": "m16", "name": "Tier 16", "type": "MapStash", "parent": "m0"},
                 {"id": "m15", "name": "", "type": "MapStash",
                  "metadata": {"map": {"section": "tier15"}}},  # not watched
+                {"id": "m17", "name": "", "type": "MapStash",
+                 "metadata": {"map": {"section": "tier17"}}},
                 {"id": "mu", "name": "", "type": "MapStash",
                  "metadata": {"map": {"section": "unique"}}},
                 {"id": "ms", "name": "", "type": "MapStash",
