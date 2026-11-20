@@ -131,10 +131,6 @@ class OverlayController:
         if self.hwnd:
             self.win32.wake(self.hwnd)
 
-    def refresh(self) -> None:
-        """Fetch the data now (e.g. a price check result to show)."""
-        self._fetch_now.set()
-
     # --- data (its own thread) ---
 
     def fetch(self) -> None:

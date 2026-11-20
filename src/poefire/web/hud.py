@@ -34,7 +34,6 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
     if active is not None:
         areas = detail["zones"][-LAST_AREAS:]
         return {
-            "flash": rt.flash_text(),  # e.g. a price check's result
             "mode": "campaign",
             "rta": detail["rta"],
             "igt": detail["igt"],
@@ -79,7 +78,6 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
             ),
         }
     return {
-        "flash": rt.flash_text(),
         "mode": "mapping",
         "maps": summary.get("maps", 0),
         "avg_chaos": summary.get("avg_chaos"),
