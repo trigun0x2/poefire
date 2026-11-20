@@ -67,7 +67,7 @@ function renderCampaign() {
   $("cp-pause").hidden = !live;
   $("cp-pause").textContent = active?.paused ? "Resume" : "Pause";
   const hk = cpData.hotkey;
-  $("cp-hotkey-hint").innerHTML = !hk?.key ? 'No timer hotkey set (<a href="#settings">Settings</a>).'
+  $("cp-hotkey-hint").innerHTML = !hk?.key ? 'No timer hotkey set (<a href="#settings/campaign">Settings</a>).'
     : hk.error ? `<span class="neg">Hotkey ${esc(hk.key)} isn't working: ${esc(hk.error)}</span>`
     : `<b>${esc(hk.key)}</b> ${active ? (active.paused ? "resumes" : "pauses") : "starts a run"}, even while you're in the game.`;
   $("cp-char").innerHTML = r?.character

@@ -42,7 +42,7 @@ function renderStatus() {
   renderUpdate(s.update);
   $("last-empty").innerHTML = s.log_path
     ? "No map finished yet. Stats appear when you're back in your hideout."
-    : 'Client.txt not found. Set its location in <a href="#settings">Settings</a>.';
+    : 'Client.txt not found. Set its location in <a href="#settings/general">Settings</a>.';
 
   // Current run: map, elapsed time, level and deaths, in the sidebar.
   const run = s.run;
@@ -168,12 +168,12 @@ function renderLeagueBanners(s) {
   }
   if (!lh) b.dataset.key = "";
   const th = s.tabs_hint, t = $("tabs-banner");
-  const showTabs = th && !lh && location.hash !== "#settings";
+  const showTabs = th && !lh && !location.hash.startsWith("#settings");
   t.hidden = !showTabs;
   if (showTabs) {
     t.innerHTML = th.none_found
-      ? `<span><b>None of your watched stash tabs are in ${esc(th.league)}.</b> Only your inventory is tracked: pick this league's tabs in Settings.</span><a class="btn primary" href="#settings">Pick tabs</a>`
-      : `<span><b>Some watched tabs aren't in ${esc(th.league)}:</b> ${th.missing.map(esc).join(", ")}. Loot moved into other tabs isn't counted.</span><a class="btn" href="#settings">Check tabs</a>`;
+      ? `<span><b>None of your watched stash tabs are in ${esc(th.league)}.</b> Only your inventory is tracked: pick this league's tabs in Settings.</span><a class="btn primary" href="#settings/loot">Pick tabs</a>`
+      : `<span><b>Some watched tabs aren't in ${esc(th.league)}:</b> ${th.missing.map(esc).join(", ")}. Loot moved into other tabs isn't counted.</span><a class="btn" href="#settings/loot">Check tabs</a>`;
   }
 }
 $("league-banner").addEventListener("click", async (e) => {
@@ -196,12 +196,12 @@ $("league-banner").addEventListener("click", async (e) => {
 
 function renderSessionBanner(h) {
   const b = $("session-banner");
-  const show = h?.expired && location.hash !== "#settings";
+  const show = h?.expired && !location.hash.startsWith("#settings");
   b.hidden = !show;
   if (!show) return;
   const lasted = h.worked_seconds ? ` It worked for ${span(h.worked_seconds)} after you saved it.` : "";
   b.innerHTML = `<span><b>Your POESESSID expired ${since(h.expired_at)}.</b> Loot tracking is paused until you paste a new one.${lasted}</span>` +
-    '<a class="btn primary" href="#settings">Update in Settings</a>';
+    '<a class="btn primary" href="#settings/general">Update in Settings</a>';
 }
 
 function renderSidebarStats() {
@@ -579,7 +579,7 @@ $("league").addEventListener("change", async (e) => {
 $("prices-pill").addEventListener("click", () => api("/api/prices/refresh", { method: "POST" }).then(pollStatus));
 $("loot-pill").addEventListener("click", () => {
   if (status?.loot.enabled && !status.loot.session?.expired) api("/api/snapshot", { method: "POST" }).catch(() => {});
-  else location.hash = "#settings";
+  else location.hash = "#settings/general";
 });
 $("runs-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]");

@@ -1,17 +1,18 @@
 "use strict";
 // Routing between pages, and start-up (loaded last: everything else is defined by then).
 
-// --- routing: #session (default), #overview, #campaign, #settings ---
+// --- routing: #session (default), #overview, #campaign, #builds, #settings[/<tab>] ---
 
 const VIEWS = { session: "dashboard", overview: "overview-view", campaign: "campaign-view", builds: "builds-view", settings: "settings-view" };
 
 let routeView = null;
 let leavingSettings = false;
 async function route() {
-  const name = Object.hasOwn(VIEWS, location.hash.slice(1)) ? location.hash.slice(1) : "session";
+  const [base, sub] = location.hash.slice(1).split("/");
+  const name = Object.hasOwn(VIEWS, base) ? base : "session";
   if (routeView === "settings" && name !== "settings" && !leavingSettings && changedSettings().length) {
     const target = location.hash || "#session";
-    history.replaceState(null, "", "#settings"); // stay until they choose
+    history.replaceState(null, "", `#settings/${settingsTab}`); // stay until they choose
     const go = await confirmModal({
       title: "Leave without saving?",
       body: `You have unsaved settings: <b>${esc(changedSettings().map((k) => SETTING_FIELDS[k][1]).join(", "))}</b>.`,
@@ -23,6 +24,7 @@ async function route() {
     return;
   }
   leavingSettings = false;
+  if (name === "settings" && routeView === "settings") { showSettingsTab(sub); return; } // keep edits
   routeView = name;
   for (const [key, id] of Object.entries(VIEWS)) {
     $(id).hidden = key !== name;
@@ -30,6 +32,7 @@ async function route() {
   }
   $("content").scrollTop = 0;
   renderSessionBanner(status?.loot.session);
+  if (name === "settings") showSettingsTab(sub);
   if (name === "settings") loadSettings().catch((e) => setStatus("set-save-status", `✗ ${e.message}`, "bad"));
   if (name === "overview") loadOverview().catch(() => {});
   if (name === "campaign") loadCampaign().catch(() => {});

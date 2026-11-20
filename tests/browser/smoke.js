@@ -70,11 +70,18 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
   check(await count("#bd-gear > *") >= 1, "builds: gear shown");
 
   // Settings: opens clean, a change is flagged, discarding clears it
-  await go("settings");
+  await go("settings/campaign");
+  check(await page.isVisible("#set-hotkey-sound") && !(await page.isVisible("#set-tabs-refresh")),
+    "settings: #settings/campaign shows only its tab");
   check(!(await page.$eval("#save-bar", (e) => e.classList.contains("dirty"))), "settings: no unsaved changes on open");
   await page.click("#set-hotkey-sound");
   await page.waitForTimeout(200);
   check(await page.$eval("#save-bar", (e) => e.classList.contains("dirty")), "settings: a change is flagged");
+  await page.click('#set-tabs-nav [data-tab="app"]');
+  await page.waitForTimeout(200);
+  check(await page.$eval("#save-bar", (e) => e.classList.contains("dirty"))
+    && await page.$eval('#set-tabs-nav [data-tab="campaign"]', (e) => e.classList.contains("has-changes")),
+    "settings: switching tabs keeps the change and marks its tab");
   await page.click("#set-discard");
   await page.waitForTimeout(500);
   check(!(await page.$eval("#save-bar", (e) => e.classList.contains("dirty"))), "settings: discard clears it");
@@ -88,10 +95,11 @@ const check = (cond, msg) => { if (!cond) fail(msg); else console.log(`ok   ${ms
     tabs: [{ id: "a", name: "Currency", type: "CurrencyStash" }, { id: "b", name: "Trade", type: "PremiumStash" },
            { id: "c", name: "Dump", type: "QuadStash" }],
   } }));
-  await go("settings");
+  await go("settings/loot");
   await page.click("#set-tabs-refresh");
   await page.waitForTimeout(600);
   check(await count("#set-tabs label") >= 3, "settings: Refresh tabs loads the stash tabs");
+  await page.click('#set-tabs-nav [data-tab="general"]');
   await page.click("#set-wizard");
   await page.waitForTimeout(500);
   check(await page.$eval("#wizard", (d) => d.open), "wizard: opens from Settings");

@@ -277,241 +277,259 @@
   <form class="view settings" id="settings-view" hidden autocomplete="off">
     <h1>Settings</h1>
 
-    <section class="card">
-      <div class="card-title">Game log</div>
-      <label class="field">
-        <span>Client.txt location</span>
-        <input id="set-log" type="text" spellcheck="false">
-      </label>
-      <div class="hint" id="set-log-status"></div>
-      <div class="hint">Usually <code>logs\Client.txt</code> in your Path of Exile folder. You can also paste
-        the game folder. Leave empty to detect it automatically.</div>
-      <div class="row" id="set-log-detected" hidden>
-        <button type="button" class="btn" id="set-log-use">Use detected path</button>
-        <code id="set-log-detected-path"></code>
-      </div>
-    </section>
+    <nav class="settings-tabs" id="set-tabs-nav" role="tablist" aria-label="Settings">
+      <button type="button" role="tab" data-tab="general" aria-controls="set-panel-general" aria-selected="false">General</button>
+      <button type="button" role="tab" data-tab="loot" aria-controls="set-panel-loot" aria-selected="false">Loot</button>
+      <button type="button" role="tab" data-tab="campaign" aria-controls="set-panel-campaign" aria-selected="false">Campaign &amp; builds</button>
+      <button type="button" role="tab" data-tab="shortcuts" aria-controls="set-panel-shortcuts" aria-selected="false">Shortcuts &amp; overlay</button>
+      <button type="button" role="tab" data-tab="app" aria-controls="set-panel-app" aria-selected="false">App</button>
+    </nav>
 
-    <section class="card">
-      <div class="card-title">Path of Exile account <span class="muted">for loot tracking</span></div>
-      <label class="field">
-        <span>Account name</span>
-        <input id="set-account" type="text" placeholder="Name#1234" spellcheck="false">
-      </label>
-      <div class="hint">Your full account name including the <code>#1234</code> part, as shown on pathofexile.com when you're logged in.</div>
+    <div class="settings-panel" id="set-panel-general" role="tabpanel" aria-label="General" data-panel="general" hidden>
+      <section class="card">
+        <div class="card-title">Game log</div>
+        <label class="field">
+          <span>Client.txt location</span>
+          <input id="set-log" type="text" spellcheck="false">
+        </label>
+        <div class="hint" id="set-log-status"></div>
+        <div class="hint">Usually <code>logs\Client.txt</code> in your Path of Exile folder. You can also paste
+          the game folder. Leave empty to detect it automatically.</div>
+        <div class="row" id="set-log-detected" hidden>
+          <button type="button" class="btn" id="set-log-use">Use detected path</button>
+          <code id="set-log-detected-path"></code>
+        </div>
+      </section>
 
-      <div class="field">
-        <span>POESESSID cookie <span class="chip" id="set-session-chip"></span></span>
-        <div class="hint" id="set-session-health"></div>
+      <section class="card">
+        <div class="card-title">Path of Exile account <span class="muted">for loot tracking</span></div>
+        <label class="field">
+          <span>Account name</span>
+          <input id="set-account" type="text" placeholder="Name#1234" spellcheck="false">
+        </label>
+        <div class="hint">Your full account name including the <code>#1234</code> part, as shown on pathofexile.com when you're logged in.</div>
+
+        <div class="field">
+          <span>POESESSID cookie <span class="chip" id="set-session-chip"></span></span>
+          <div class="hint" id="set-session-health"></div>
+          <div class="row">
+            <input id="set-session" type="password" placeholder="Paste a new POESESSID to save it" spellcheck="false" autocomplete="new-password">
+            <button type="button" class="btn primary" id="set-session-save">Save cookie</button>
+            <button type="button" class="btn" id="set-session-clear">Remove</button>
+          </div>
+        </div>
+        <details class="hint">
+          <summary>How do I get it?</summary>
+          <ol>
+            <li>Log in on <b>pathofexile.com</b> in your browser.</li>
+            <li>Open developer tools (F12) → <b>Application</b> (Chrome/Edge) or <b>Storage</b> (Firefox) → Cookies → https://www.pathofexile.com.</li>
+            <li>Copy the value of <code>POESESSID</code> (32 characters) and paste it above.</li>
+          </ol>
+          It's your whole logged-in session: never share it or show it on stream. poefire stores it only on this
+          PC, readable by your Windows user, and never displays it again. Logging out of the website ends it;
+          then paste a new one.
+        </details>
+
         <div class="row">
-          <input id="set-session" type="password" placeholder="Paste a new POESESSID to save it" spellcheck="false" autocomplete="new-password">
-          <button type="button" class="btn primary" id="set-session-save">Save cookie</button>
-          <button type="button" class="btn" id="set-session-clear">Remove</button>
+          <button type="button" class="btn" id="set-check">Check connection</button>
+          <span class="hint" id="set-check-result"></span>
         </div>
-      </div>
-      <details class="hint">
-        <summary>How do I get it?</summary>
-        <ol>
-          <li>Log in on <b>pathofexile.com</b> in your browser.</li>
-          <li>Open developer tools (F12) → <b>Application</b> (Chrome/Edge) or <b>Storage</b> (Firefox) → Cookies → https://www.pathofexile.com.</li>
-          <li>Copy the value of <code>POESESSID</code> (32 characters) and paste it above.</li>
-        </ol>
-        It's your whole logged-in session: never share it or show it on stream. poefire stores it only on this
-        PC, readable by your Windows user, and never displays it again. Logging out of the website ends it;
-        then paste a new one.
-      </details>
+      </section>
 
-      <div class="row">
-        <button type="button" class="btn" id="set-check">Check connection</button>
-        <span class="hint" id="set-check-result"></span>
-      </div>
-    </section>
+      <section class="card">
+        <div class="card-title">Setup</div>
+        <div class="row" style="margin-top:0"><button type="button" class="btn" id="set-wizard">Run the setup again</button>
+          <span class="hint">Game log, account, league and stash tabs, step by step.</span></div>
+      </section>
+    </div>
 
-    <section class="card">
-      <div class="card-title">Loot tracking</div>
-      <div class="grid2">
+    <div class="settings-panel" id="set-panel-loot" role="tabpanel" aria-label="Loot" data-panel="loot" hidden>
+      <section class="card">
+        <div class="card-title">Loot tracking</div>
+        <div class="grid2">
+          <label class="field">
+            <span>League</span>
+            <input id="set-league" type="text" list="set-league-options" spellcheck="false">
+            <datalist id="set-league-options"></datalist>
+          </label>
+          <label class="field">
+            <span>Character</span>
+            <select id="set-character"></select>
+          </label>
+        </div>
+        <div class="hint" id="set-league-hint"></div>
         <label class="field">
-          <span>League</span>
-          <input id="set-league" type="text" list="set-league-options" spellcheck="false">
-          <datalist id="set-league-options"></datalist>
+          <span>Prices from <span class="muted">(poe.ninja league)</span></span>
+          <input id="set-price-league" type="text" list="set-price-options" spellcheck="false">
+          <datalist id="set-price-options"></datalist>
         </label>
-        <label class="field">
-          <span>Character</span>
-          <select id="set-character"></select>
-        </label>
-      </div>
-      <div class="hint" id="set-league-hint"></div>
-      <label class="field">
-        <span>Prices from <span class="muted">(poe.ninja league)</span></span>
-        <input id="set-price-league" type="text" list="set-price-options" spellcheck="false">
-        <datalist id="set-price-options"></datalist>
-      </label>
-      <div class="hint" id="set-price-hint"></div>
-      <div class="field">
-        <span>Stash tabs to watch</span>
-        <div class="tabs-list" id="set-tabs"></div>
-        <div class="row-actions">
-          <button type="button" class="btn small" id="set-tabs-refresh">Refresh tabs</button>
-          <span class="hint" id="set-tabs-age"></span>
-        </div>
-        <div class="hint" id="set-tabs-cost"></div>
-        <div class="hint">Pick every tab your loot goes into, including the ones Ctrl+click sends items to
-          (currency, fragments…). Items moved to an unwatched tab count as lost.</div>
-      </div>
-      <label class="field narrow">
-        <span>Tracking mode</span>
-        <select id="set-loot-mode">
-          <option value="per_map">Per map: snapshots around each map</option>
-          <option value="interval">Every 10 minutes: session totals only</option>
-        </select>
-      </label>
-      <div class="hint" id="set-loot-mode-hint"></div>
-      <label class="check">
-        <input id="set-run-start" type="checkbox">
-        <span>Also snapshot when a map starts <span class="muted">— keeps hideout trading and crafting out of a map's loot</span></span>
-      </label>
-      <label class="check">
-        <input id="set-trade-sales" type="checkbox">
-        <span>Don't count trade sales as loot <span class="muted">— reads your trade history at each snapshot and takes sold items' payments out of the map they show up in. More requests: the trade site rate-limits hard.</span></span>
-      </label>
-      <label class="field narrow">
-        <span>Wait before the hideout snapshot (seconds)</span>
-        <input id="set-delay" type="number" min="0" max="60" step="0.5">
-      </label>
-      <label class="field">
-        <span>Count deaths for <span class="muted">(comma-separated; empty = everyone in the log, fine when playing solo)</span></span>
-        <input id="set-deaths" type="text" spellcheck="false">
-      </label>
-      <div class="name-chips" id="set-deaths-seen"></div>
-    </section>
-
-    <section class="card">
-      <div class="card-title">Campaign</div>
-      <label class="field narrow">
-        <span>Timer hotkey <span class="muted">— starts a run, then pauses and resumes it</span></span>
-        <div class="row" style="margin-top:0">
-          <input id="set-hotkey" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-hotkey-status">
-          <button type="button" class="btn" id="set-hotkey-clear">Turn off</button>
-        </div>
-      </label>
-      <div class="hint" id="set-hotkey-status"></div>
-      <label class="check">
-        <input id="set-hotkey-sound" type="checkbox">
-        <span>Beep when the hotkey is pressed <span class="muted">— high: started or resumed, low: paused</span></span>
-      </label>
-      <div class="hint">Works while the game has focus. poefire only listens for the key; it never sends input to the game.</div>
-    </section>
-
-    <section class="card">
-      <div class="card-title">Builds</div>
-      <label class="check">
-        <input id="set-build-snapshots" type="checkbox">
-        <span>Take build snapshots <span class="muted">— gear, gems and passive tree at levels 5 and 10, then every level from 15 (uses the account connection set up for loot)</span></span>
-      </label>
-      <label class="field">
-        <span>When not levelling (level 80+), also snapshot every (hours)</span>
-        <input id="set-build-stale" class="hours-input" type="number" min="0" max="720" step="1" inputmode="numeric">
-      </label>
-      <div class="hint">A snapshot is kept only if your gear, gems or passives changed since the last one. 0 = never; 24 = once a day.</div>
-    </section>
-
-    <section class="card">
-      <div class="card-title">In-game shortcuts</div>
-      <div class="hint">Hotkeys that work while Path of Exile has focus (elsewhere, F5 and the rest do what they normally do). Each key press sends one action: open chat, paste the command, Enter; or paste a search into the stash/vendor search box. Click a hotkey box, then press the keys.</div>
-      <label class="field narrow">
-        <span>Price check <span class="muted">— copies the item under the cursor and shows its price</span></span>
-        <div class="row" style="margin-top:0">
-          <input id="set-price-key" type="text" readonly placeholder="Click, then press keys">
-          <button type="button" class="btn" id="set-price-key-clear">Turn off</button>
-        </div>
-      </label>
-      <div class="hint" id="set-price-key-status"></div>
-      <div class="section-label">Chat commands</div>
-      <div class="shortcut-rows" id="set-chat-rows"></div>
-      <button type="button" class="btn small" id="set-chat-add">Add command</button>
-      <div class="section-label">Stash and vendor searches <span class="muted">— e.g. a map-mod regex; the stash or vendor window must be open</span></div>
-      <div class="shortcut-rows" id="set-search-rows"></div>
-      <button type="button" class="btn small" id="set-search-add">Add search</button>
-      <div class="hint" id="set-shortcuts-status"></div>
-    </section>
-
-    <section class="card">
-      <div class="card-title">In-game overlay</div>
-      <label class="check" style="margin-top:0">
-        <input id="set-overlay" type="checkbox">
-        <span>Show the overlay over the game <span class="muted">— campaign: timer and your last 3 areas against your PB; mapping: chaos per map this session</span></span>
-      </label>
-      <div class="grid2">
-        <label class="field">
-          <span>Show / hide hotkey</span>
-          <div class="row" style="margin-top:0">
-            <input id="set-overlay-key" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-overlay-key-status">
-            <button type="button" class="btn" id="set-overlay-key-clear">Turn off</button>
+        <div class="hint" id="set-price-hint"></div>
+        <div class="field">
+          <span>Stash tabs to watch</span>
+          <div class="tabs-list" id="set-tabs"></div>
+          <div class="row-actions">
+            <button type="button" class="btn small" id="set-tabs-refresh">Refresh tabs</button>
+            <span class="hint" id="set-tabs-age"></span>
           </div>
-          <div class="hint" id="set-overlay-key-status"></div>
+          <div class="hint" id="set-tabs-cost"></div>
+          <div class="hint">Pick every tab your loot goes into, including the ones Ctrl+click sends items to
+            (currency, fragments…). Items moved to an unwatched tab count as lost.</div>
+        </div>
+        <label class="field narrow">
+          <span>Tracking mode</span>
+          <select id="set-loot-mode">
+            <option value="per_map">Per map: snapshots around each map</option>
+            <option value="interval">Every 10 minutes: session totals only</option>
+          </select>
+        </label>
+        <div class="hint" id="set-loot-mode-hint"></div>
+        <label class="check">
+          <input id="set-run-start" type="checkbox">
+          <span>Also snapshot when a map starts <span class="muted">— keeps hideout trading and crafting out of a map's loot</span></span>
+        </label>
+        <label class="check">
+          <input id="set-trade-sales" type="checkbox">
+          <span>Don't count trade sales as loot <span class="muted">— reads your trade history at each snapshot and takes sold items' payments out of the map they show up in. More requests: the trade site rate-limits hard.</span></span>
+        </label>
+        <label class="field narrow">
+          <span>Wait before the hideout snapshot (seconds)</span>
+          <input id="set-delay" type="number" min="0" max="60" step="0.5">
         </label>
         <label class="field">
-          <span>Move hotkey <span class="muted">— unlock to drag it, press again to lock</span></span>
-          <div class="row" style="margin-top:0">
-            <input id="set-overlay-move" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-overlay-move-status">
-            <button type="button" class="btn" id="set-overlay-move-clear">Turn off</button>
-          </div>
-          <div class="hint" id="set-overlay-move-status"></div>
+          <span>Count deaths for <span class="muted">(comma-separated; empty = everyone in the log, fine when playing solo)</span></span>
+          <input id="set-deaths" type="text" spellcheck="false">
         </label>
-      </div>
-      <label class="field">
-        <span>Background opacity <span class="muted">— the text always stays solid; drag to preview, saved when you let go</span></span>
-        <div class="row opacity-row" style="margin-top:0">
-          <input id="set-overlay-opacity" type="range" min="20" max="100" step="5" value="90">
-          <span id="set-overlay-opacity-value" class="opacity-value">90%</span>
+        <div class="name-chips" id="set-deaths-seen"></div>
+      </section>
+    </div>
+
+    <div class="settings-panel" id="set-panel-campaign" role="tabpanel" aria-label="Campaign &amp; builds" data-panel="campaign" hidden>
+      <section class="card">
+        <div class="card-title">Campaign</div>
+        <label class="field narrow">
+          <span>Timer hotkey <span class="muted">— starts a run, then pauses and resumes it</span></span>
+          <div class="row" style="margin-top:0">
+            <input id="set-hotkey" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-hotkey-status">
+            <button type="button" class="btn" id="set-hotkey-clear">Turn off</button>
+          </div>
+        </label>
+        <div class="hint" id="set-hotkey-status"></div>
+        <label class="check">
+          <input id="set-hotkey-sound" type="checkbox">
+          <span>Beep when the hotkey is pressed <span class="muted">— high: started or resumed, low: paused</span></span>
+        </label>
+        <div class="hint">Works while the game has focus. poefire only listens for the key; it never sends input to the game.</div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Builds</div>
+        <label class="check">
+          <input id="set-build-snapshots" type="checkbox">
+          <span>Take build snapshots <span class="muted">— gear, gems and passive tree at levels 5 and 10, then every level from 15 (uses the account connection set up for loot)</span></span>
+        </label>
+        <label class="field">
+          <span>When not levelling (level 80+), also snapshot every (hours)</span>
+          <input id="set-build-stale" class="hours-input" type="number" min="0" max="720" step="1" inputmode="numeric">
+        </label>
+        <div class="hint">A snapshot is kept only if your gear, gems or passives changed since the last one. 0 = never; 24 = once a day.</div>
+      </section>
+    </div>
+
+    <div class="settings-panel" id="set-panel-shortcuts" role="tabpanel" aria-label="Shortcuts &amp; overlay" data-panel="shortcuts" hidden>
+      <section class="card">
+        <div class="card-title">In-game shortcuts</div>
+        <div class="hint">Hotkeys that work while Path of Exile has focus (elsewhere, F5 and the rest do what they normally do). Each key press sends one action: open chat, paste the command, Enter; or paste a search into the stash/vendor search box. Click a hotkey box, then press the keys.</div>
+        <label class="field narrow">
+          <span>Price check <span class="muted">— copies the item under the cursor and shows its price</span></span>
+          <div class="row" style="margin-top:0">
+            <input id="set-price-key" type="text" readonly placeholder="Click, then press keys">
+            <button type="button" class="btn" id="set-price-key-clear">Turn off</button>
+          </div>
+        </label>
+        <div class="hint" id="set-price-key-status"></div>
+        <div class="section-label">Chat commands</div>
+        <div class="shortcut-rows" id="set-chat-rows"></div>
+        <button type="button" class="btn small" id="set-chat-add">Add command</button>
+        <div class="section-label">Stash and vendor searches <span class="muted">— e.g. a map-mod regex; the stash or vendor window must be open</span></div>
+        <div class="shortcut-rows" id="set-search-rows"></div>
+        <button type="button" class="btn small" id="set-search-add">Add search</button>
+        <div class="hint" id="set-shortcuts-status"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">In-game overlay</div>
+        <label class="check" style="margin-top:0">
+          <input id="set-overlay" type="checkbox">
+          <span>Show the overlay over the game <span class="muted">— campaign: timer and your last 3 areas against your PB; mapping: chaos per map this session</span></span>
+        </label>
+        <div class="grid2">
+          <label class="field">
+            <span>Show / hide hotkey</span>
+            <div class="row" style="margin-top:0">
+              <input id="set-overlay-key" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-overlay-key-status">
+              <button type="button" class="btn" id="set-overlay-key-clear">Turn off</button>
+            </div>
+            <div class="hint" id="set-overlay-key-status"></div>
+          </label>
+          <label class="field">
+            <span>Move hotkey <span class="muted">— unlock to drag it, press again to lock</span></span>
+            <div class="row" style="margin-top:0">
+              <input id="set-overlay-move" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-overlay-move-status">
+              <button type="button" class="btn" id="set-overlay-move-clear">Turn off</button>
+            </div>
+            <div class="hint" id="set-overlay-move-status"></div>
+          </label>
         </div>
-      </label>
-      <div class="hint">The overlay shows while Path of Exile is the active window, and clicks pass through it. Set the game to <b>Windowed</b> or <b>Windowed Fullscreen</b>: nothing can be drawn over exclusive fullscreen. It only displays information; it never sends input to the game. Windows app only.</div>
-      <div class="hint warn" id="set-overlay-unavailable" hidden>The overlay isn't running: it needs the Windows app's own window (not the browser).</div>
-    </section>
+        <label class="field">
+          <span>Background opacity <span class="muted">— the text always stays solid; drag to preview, saved when you let go</span></span>
+          <div class="row opacity-row" style="margin-top:0">
+            <input id="set-overlay-opacity" type="range" min="20" max="100" step="5" value="90">
+            <span id="set-overlay-opacity-value" class="opacity-value">90%</span>
+          </div>
+        </label>
+        <div class="hint">The overlay shows while Path of Exile is the active window, and clicks pass through it. Set the game to <b>Windowed</b> or <b>Windowed Fullscreen</b>: nothing can be drawn over exclusive fullscreen. It only displays information; it never sends input to the game. Windows app only.</div>
+        <div class="hint warn" id="set-overlay-unavailable" hidden>The overlay isn't running: it needs the Windows app's own window (not the browser).</div>
+      </section>
+    </div>
 
-    <section class="card">
-      <div class="card-title">Setup</div>
-      <div class="row" style="margin-top:0"><button type="button" class="btn" id="set-wizard">Run the setup again</button>
-        <span class="hint">Game log, account, league and stash tabs, step by step.</span></div>
-    </section>
+    <div class="settings-panel" id="set-panel-app" role="tabpanel" aria-label="App" data-panel="app" hidden>
+      <section class="card">
+        <div class="card-title">Updates</div>
+        <div class="row" style="margin-top:0">
+          <span>poefire <b id="set-version"></b></span>
+          <button type="button" class="btn" id="set-update-check">Check for updates</button>
+          <span class="hint" id="set-update-result"></span>
+        </div>
+        <label class="check">
+          <input id="set-check-updates" type="checkbox">
+          <span>Check for updates automatically <span class="muted">— on start and every 6 hours, from GitHub releases</span></span>
+        </label>
+        <label class="field narrow">
+          <span>Channel</span>
+          <select id="set-update-channel">
+            <option value="stable">Stable — public releases</option>
+            <option value="beta">Beta — also development pre-releases</option>
+          </select>
+        </label>
+        <div class="hint">Updates are downloaded from GitHub, checked against their published SHA-256, and
+          installed when poefire restarts. Your settings and history live in %APPDATA%\poefire and are kept.</div>
+      </section>
 
-    <section class="card">
-      <div class="card-title">Updates</div>
-      <div class="row" style="margin-top:0">
-        <span>poefire <b id="set-version"></b></span>
-        <button type="button" class="btn" id="set-update-check">Check for updates</button>
-        <span class="hint" id="set-update-result"></span>
-      </div>
-      <label class="check">
-        <input id="set-check-updates" type="checkbox">
-        <span>Check for updates automatically <span class="muted">— on start and every 6 hours, from GitHub releases</span></span>
-      </label>
-      <label class="field narrow">
-        <span>Channel</span>
-        <select id="set-update-channel">
-          <option value="stable">Stable — public releases</option>
-          <option value="beta">Beta — also development pre-releases</option>
-        </select>
-      </label>
-      <div class="hint">Updates are downloaded from GitHub, checked against their published SHA-256, and
-        installed when poefire restarts. Your settings and history live in %APPDATA%\poefire and are kept.</div>
-    </section>
-
-    <section class="card" id="diagnostics">
-      <div class="card-title">Diagnostics</div>
-      <p class="hint" style="margin-top:0">Something not working (the campaign tracker, run tracking, the overlay…)? Save a debug report and send the .zip to the developer.</p>
-      <div class="row" style="margin-top:0">
-        <button type="button" class="btn primary" id="diag-report">Save debug report</button>
-        <button type="button" class="btn" id="diag-logs">Open log folder</button>
-      </div>
-      <div class="hint" id="diag-result" aria-live="polite"></div>
-      <label class="check">
-        <input id="set-debug-logging" type="checkbox">
-        <span>Verbose logging <span class="muted">— log more detail, e.g. why a Client.txt line was ignored. Turn it on, reproduce the problem, then save a report.</span></span>
-      </label>
-      <div class="hint">The report has poefire's log, your settings (never your POESESSID), your campaign runs, and the game's system lines from the end of Client.txt (area changes, zone entries, level-ups, deaths). No chat or whispers.</div>
-    </section>
+      <section class="card" id="diagnostics">
+        <div class="card-title">Diagnostics</div>
+        <p class="hint" style="margin-top:0">Something not working (the campaign tracker, run tracking, the overlay…)? Save a debug report and send the .zip to the developer.</p>
+        <div class="row" style="margin-top:0">
+          <button type="button" class="btn primary" id="diag-report">Save debug report</button>
+          <button type="button" class="btn" id="diag-logs">Open log folder</button>
+        </div>
+        <div class="hint" id="diag-result" aria-live="polite"></div>
+        <label class="check">
+          <input id="set-debug-logging" type="checkbox">
+          <span>Verbose logging <span class="muted">— log more detail, e.g. why a Client.txt line was ignored. Turn it on, reproduce the problem, then save a report.</span></span>
+        </label>
+        <div class="hint">The report has poefire's log, your settings (never your POESESSID), your campaign runs, and the game's system lines from the end of Client.txt (area changes, zone entries, level-ups, deaths). No chat or whispers.</div>
+      </section>
+    </div>
 
     <div class="save-bar" id="save-bar">
       <button type="submit" class="btn primary" id="set-save">Save settings</button>
