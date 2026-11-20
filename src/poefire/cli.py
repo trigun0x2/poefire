@@ -347,6 +347,76 @@ def cmd_debug_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_trade_test(args: argparse.Namespace) -> int:
+    """Can poefire search the trade site from this PC? (Step 0 of the price check.) One
+    search and one fetch, the way a price check would, with and without your POESESSID."""
+    import httpx
+
+    from poefire import wiring
+    from poefire.api.session import SessionStore
+
+    cfg = _config(args)
+    league = args.league or cfg.league or "Standard"
+    ua = wiring.session_user_agent(cfg)
+    cookie = SessionStore(cfg.session_path).load()
+    base = "https://www.pathofexile.com"
+    query = {"query": {"status": {"option": "online"}, "name": "Tabula Rasa",
+                       "type": "Simple Robe"}, "sort": {"price": "asc"}}  # fmt: skip
+    ok = False
+    for label, use_cookie in (("without POESESSID", False), ("with POESESSID", True)):
+        if use_cookie and not cookie:
+            print(f"\n[{label}] skipped: no POESESSID saved")
+            continue
+        headers = {"User-Agent": ua, "Accept": "application/json"}
+        if use_cookie:
+            headers["Cookie"] = f"POESESSID={cookie}"
+        print(f"\n[{label}] league {league!r}, User-Agent {ua!r}")
+        with httpx.Client(timeout=20, headers=headers) as http:
+            try:
+                r = http.post(f"{base}/api/trade/search/{league}", json=query)
+            except httpx.HTTPError as e:
+                print(f"  search: network error: {e}")
+                continue
+            print(f"  search: HTTP {r.status_code}{_cloudflare(r)}")
+            _limits(r)
+            if r.status_code != 200:
+                print(f"  {r.text[:200]!r}")
+                continue
+            data = r.json()
+            ids = data.get("result") or []
+            print(f"  {data.get('total', len(ids))} listings, query id {data.get('id')}")
+            if not ids:
+                ok = True
+                continue
+            f = http.get(f"{base}/api/trade/fetch/{','.join(ids[:5])}",
+                         params={"query": data.get("id")})  # fmt: skip
+            print(f"  fetch: HTTP {f.status_code}{_cloudflare(f)}")
+            _limits(f)
+            if f.status_code == 200:
+                for hit in f.json().get("result") or []:
+                    price = (hit.get("listing") or {}).get("price") or {}
+                    print(f"    {price.get('amount')} {price.get('currency')}")
+                ok = True
+    print("\nTRADE TEST: " + ("OK: poefire can search the trade site from here"
+                              if ok else "FAILED: see above"))  # fmt: skip
+    return 0 if ok else 1
+
+
+def _cloudflare(r: object) -> str:
+    """' (Cloudflare challenge)' when the edge protection stopped the request."""
+    headers = getattr(r, "headers", {})
+    text = getattr(r, "text", "")[:2000]
+    blocked = headers.get("cf-mitigated") == "challenge" or "Just a moment" in text
+    return " (Cloudflare challenge: blocked as a bot)" if blocked else ""
+
+
+def _limits(r: object) -> None:
+    headers = getattr(r, "headers", {})
+    for k, v in headers.items():
+        if k.lower().startswith("x-rate-limit") or k.lower() == "retry-after":
+            print(f"    {k}: {v}")
+
+
 def cmd_paths(args: argparse.Namespace) -> int:
     cfg = _config(args)
     print(f"log: {cfg.resolve_log_path() or '(not found)'}")
@@ -476,6 +546,10 @@ def build_parser() -> argparse.ArgumentParser:
     lp.set_defaults(fn=cmd_runs)
 
     sub.add_parser("paths", help="show resolved paths").set_defaults(fn=cmd_paths)
+    tp = sub.add_parser("trade-test", help="check that the trade site can be searched from here "
+                        "(for the price check)")  # fmt: skip
+    tp.add_argument("--league", help="default: your league from Settings")
+    tp.set_defaults(fn=cmd_trade_test)
     vp = sub.add_parser("verify", help="check a downloaded release zip against its signed "
                         "build attestation")  # fmt: skip
     vp.add_argument("zip", type=Path)

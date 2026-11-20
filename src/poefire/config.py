@@ -122,6 +122,7 @@ class Config:
         default_factory=lambda: ["F5|/hideout", "F9|/exit", "|/kingsmarch", "|/menagerie",
                                  "|/delve"])  # fmt: skip
     search_strings: list[str] = field(default_factory=list)  # "hotkey|name|text"
+    price_check_hotkey: str = "Ctrl+D"  # copies the item under the cursor and prices it
     # --- troubleshooting ---
     debug_logging: bool = False  # verbose log file (Settings > Diagnostics)
 

@@ -66,6 +66,7 @@ async function loadSettings() {
   $("set-build-snapshots").checked = s.build_snapshots;
   $("set-build-stale").value = String(s.build_stale_hours ?? 24);
   renderShortcuts(s.chat_commands || [], s.search_strings || []);
+  $("set-price-key").value = s.price_check_hotkey || "";
   renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
   $("set-delay").value = s.snapshot_delay;
@@ -231,6 +232,7 @@ $("set-deaths-seen").addEventListener("click", (e) => {
 
 function settingsBody() {
   return {
+    price_check_hotkey: $("set-price-key").value,
     chat_commands: [...$("set-chat-rows").querySelectorAll(".shortcut-row")].map((r) => ({
       key: r.querySelector(".hk").value, text: r.querySelector(".text").value.trim(),
     })).filter((c) => c.text),
@@ -277,7 +279,7 @@ const SETTING_FIELDS = {
   overlay_move_hotkey: ["set-overlay-move", "Overlay move hotkey"],
   build_snapshots: ["set-build-snapshots", "Build snapshots"],
   build_stale_hours: ["set-build-stale", "Stale-level snapshots"],
-  chat_commands: ["set-chat-rows", "Chat commands"], search_strings: ["set-search-rows", "Searches"], update_channel: ["set-update-channel", "Update channel"],
+  price_check_hotkey: ["set-price-key", "Price check hotkey"], chat_commands: ["set-chat-rows", "Chat commands"], search_strings: ["set-search-rows", "Searches"], update_channel: ["set-update-channel", "Update channel"],
 };
 
 function sameSetting(a, b) {
@@ -432,6 +434,7 @@ const HOTKEY_FIELDS = {
   "set-hotkey": { status: "set-hotkey-status", live: () => status?.hotkey },
   "set-overlay-key": { status: "set-overlay-key-status", live: () => status?.overlay?.toggle },
   "set-overlay-move": { status: "set-overlay-move-status", live: () => status?.overlay?.move },
+  "set-price-key": { status: "set-price-key-status", live: () => settings?.game_hotkeys?.price_check },
 };
 
 function renderHotkeyStatus() {

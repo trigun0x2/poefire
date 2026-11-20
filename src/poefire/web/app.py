@@ -19,7 +19,17 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from poefire import __version__, builds, diagnostics, layouts, logs, patches, pob, pob_tree
+from poefire import (
+    __version__,
+    builds,
+    diagnostics,
+    layouts,
+    logs,
+    patches,
+    pob,
+    pob_tree,
+    pricecheck,
+)
 from poefire.store import Store
 from poefire.tracker import RunStatus
 from poefire.web import hud, overview, sessions, settings, views
@@ -76,6 +86,10 @@ class LocalOnly(BaseHTTPMiddleware):
         if request.method == "POST" and request.headers.get("x-poefire") != "1":
             return JSONResponse({"detail": "missing X-Poefire header"}, status_code=403)
         return await call_next(request)
+
+
+class PriceCheckIn(BaseModel):
+    text: str = Field(min_length=1, max_length=20_000)
 
 
 def create_app(rt: AppRuntime) -> FastAPI:
@@ -497,6 +511,18 @@ def create_app(rt: AppRuntime) -> FastAPI:
         """The setup wizard was finished or skipped: don't open it on start again."""
         rt.kv_set(settings.ONBOARDED_KEY, True)
         return {"ok": True}
+
+    @app.get("/api/pricecheck/last")
+    def price_check_last() -> dict[str, Any]:
+        return {"result": rt.last_price_check}
+
+    @app.post("/api/pricecheck")
+    def price_check(body: PriceCheckIn) -> dict[str, Any]:
+        """Price item text (as Ctrl+C copies it in the game)."""
+        try:
+            return {"result": rt.price_check_text(body.text)}
+        except pricecheck.NotAnItem as e:
+            raise HTTPException(400, str(e)) from e
 
     @app.post("/api/window/show")
     def window_show() -> dict[str, Any]:

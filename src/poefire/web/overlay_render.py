@@ -76,6 +76,7 @@ class Frame:
     map_name: str = ""
     map_time: str = ""
     notice: str = ""  # e.g. the website's rate limit
+    flash: str = ""  # a message for a few seconds, any mode (e.g. a price check's result)
 
 
 def duration(sec: float | None) -> str:
@@ -149,7 +150,8 @@ def frame(data: Json | None, elapsed: float, moving: bool = False, hot: bool = F
         paused = bool(data.get("paused"))
         rta = float(data.get("rta") or 0) + (0 if paused else elapsed)
         return Frame(
-            "campaign", moving, hot, timer=duration(rta), paused=paused,
+            "campaign", moving, hot, flash=str(data.get("flash") or ""),
+            timer=duration(rta), paused=paused,
             meta=" · ".join(str(m) for m in meta if m), pb=pb, areas=tuple(areas),
         )  # fmt: skip
     maps = int(data.get("maps") or 0)
@@ -172,6 +174,7 @@ def frame(data: Json | None, elapsed: float, moving: bool = False, hot: bool = F
         total_divine="" if not maps else total_sub,
         maps=f"{maps} map{'' if maps == 1 else 's'}" if maps else "No maps yet",
         map_name=map_name, map_time=map_time, notice=str(data.get("notice") or ""),
+        flash=str(data.get("flash") or ""),
     )  # fmt: skip
 
 
@@ -349,6 +352,17 @@ def render(fr: Frame, scale: float = 1.0, opacity: int = 90) -> Rendered:
     else:
         c.put(left, y + 12, "poefire", c.font(11), "muted")
         y += 18
+    if fr.flash:  # e.g. "Divine Orb x3: 546c (182c each)"; too long: item, then price
+        ff = c.font(13, "semibold")
+        lines = [fr.flash]
+        if c.width(fr.flash, ff) > right - left and ": " in fr.flash:
+            head, _, tail = fr.flash.partition(": ")
+            lines = [head, tail]
+        for text in lines:
+            base = y + 18
+            c.put(left, base, c.fit(text, ff, right - left), ff, "accent")
+            y = base + 1
+        y += 5
     bottom = max(y + PAD_BOTTOM, by1 + 6)
     height = bottom + MARGIN
 

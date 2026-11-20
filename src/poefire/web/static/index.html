@@ -414,6 +414,14 @@
     <section class="card">
       <div class="card-title">In-game shortcuts</div>
       <div class="hint">Hotkeys that work while Path of Exile has focus (elsewhere, F5 and the rest do what they normally do). Each key press sends one action: open chat, paste the command, Enter; or paste a search into the stash/vendor search box. Click a hotkey box, then press the keys.</div>
+      <label class="field narrow">
+        <span>Price check <span class="muted">— copies the item under the cursor and shows its price</span></span>
+        <div class="row" style="margin-top:0">
+          <input id="set-price-key" type="text" readonly placeholder="Click, then press keys">
+          <button type="button" class="btn" id="set-price-key-clear">Turn off</button>
+        </div>
+      </label>
+      <div class="hint" id="set-price-key-status"></div>
       <div class="section-label">Chat commands</div>
       <div class="shortcut-rows" id="set-chat-rows"></div>
       <button type="button" class="btn small" id="set-chat-add">Add command</button>

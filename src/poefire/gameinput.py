@@ -35,11 +35,12 @@ log = logging.getLogger(__name__)
 
 GAME_CLASS = "POEWindowClass"
 VK_RETURN, VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN = 0x0D, 0x10, 0x11, 0x12, 0x5B, 0x5C
-VK_A, VK_F, VK_V = 0x41, 0x46, 0x56
+VK_A, VK_C, VK_F, VK_V = 0x41, 0x43, 0x46, 0x56
 MODIFIERS = (VK_CONTROL, VK_SHIFT, VK_MENU, VK_LWIN, VK_RWIN)
 STEP = 0.03  # seconds between key events (the game reads input per frame)
 RESTORE_AFTER = 0.3  # seconds before the clipboard is put back
 RELEASE_WAIT = 0.6  # seconds to wait for the hotkey's modifiers to be let go
+COPY_WAIT = 0.4  # seconds for the game to put the item's text on the clipboard
 
 DEFAULT_CHAT_COMMANDS = ["F5|/hideout", "F9|/exit", "|/kingsmarch", "|/menagerie", "|/delve"]
 
@@ -113,6 +114,32 @@ class GameInput:
     def search(self, text: str) -> bool:
         """Focus the open stash/vendor search box (Ctrl+F), replace its text with `text`."""
         return self._paste(text, before=[(VK_CONTROL, VK_F)], after=[], what="search")
+
+    def copy_item(self) -> str | None:
+        """The price check's one action: Ctrl+C, so the game copies the item under the cursor.
+        Returns its text (None if nothing was copied: no item under the cursor, or the game
+        isn't in front), and puts back what was on the clipboard."""
+        b = self.backend
+        if b is None or not b.game_focused():
+            return None
+        with self._lock:
+            self._release_modifiers(b)
+            old = b.get_clipboard()
+            marker = "\u2063poefire"  # an invisible marker: the copy replaces it
+            if not b.set_clipboard(marker):
+                return None
+            self._combo(b, (VK_CONTROL, VK_C))
+            text = None
+            waited = 0.0
+            while waited < COPY_WAIT:
+                current = b.get_clipboard()
+                if current is not None and current != marker:
+                    text = current
+                    break
+                self.sleep(STEP)
+                waited += STEP
+            b.set_clipboard(old if old is not None else "")
+        return text
 
     def _paste(self, text: str, before: list[tuple[int, ...]], after: list[tuple[int, ...]],
                what: str) -> bool:  # fmt: skip
