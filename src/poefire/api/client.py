@@ -21,6 +21,10 @@ from poefire.api.ratelimit import RateLimiter
 
 API_BASE = "https://api.pathofexile.com"
 
+# rate-limit buckets, one per endpoint (see poefire.api.ratelimit)
+CHARACTER_LIST, CHARACTER, STASH_LIST, STASH = "character-list", "character", "stash-list", "stash"
+LOOT_BUCKETS = (CHARACTER, STASH_LIST, STASH)
+
 type Json = dict[str, Any]
 
 
@@ -53,7 +57,12 @@ class PoeApi:
 
     def rate_limited_for(self) -> float:
         """Seconds until loot snapshots may make requests again (0 when they can)."""
-        return max(self.limiter.wait_time(b) for b in ("character", "stash"))
+        return max(self.limiter.wait_time(b) for b in LOOT_BUCKETS)
+
+    def fits(self, n: int, reserve: int = 0) -> bool:
+        """Whether `n` more loot requests fit in the rate limits right now, with `reserve`
+        hits to spare (see RateLimiter.fits)."""
+        return self.limiter.fits(LOOT_BUCKETS, n, reserve)
 
     def _get(self, bucket: str, path: str) -> Json:
         refreshed = False
@@ -80,11 +89,11 @@ class PoeApi:
         raise ApiError(resp.status_code, f"giving up after retries: {_error_message(resp)}")
 
     def list_characters(self) -> list[Json]:
-        chars: list[Json] = self._get("character", self._path("character"))["characters"]
+        chars: list[Json] = self._get(CHARACTER_LIST, self._path("character"))["characters"]
         return chars
 
     def get_character(self, name: str) -> Json:
-        char: Json = self._get("character", self._path("character", name))["character"]
+        char: Json = self._get(CHARACTER, self._path("character", name))["character"]
         return char
 
     def get_build(self, name: str) -> Json:
@@ -92,12 +101,12 @@ class PoeApi:
         return {"source": "oauth", "character": self.get_character(name)}
 
     def list_stashes(self, league: str) -> list[Json]:
-        tabs: list[Json] = self._get("stash", self._path("stash", league))["stashes"]
+        tabs: list[Json] = self._get(STASH_LIST, self._path("stash", league))["stashes"]
         return tabs
 
     def get_stash(self, league: str, stash_id: str, substash_id: str | None = None) -> Json:
         parts = [league, stash_id, *([substash_id] if substash_id else [])]
-        stash: Json = self._get("stash", self._path("stash", *parts))["stash"]
+        stash: Json = self._get(STASH, self._path("stash", *parts))["stash"]
         return stash
 
 

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from poefire import __version__, campaign, gamepath, layouts, logs, patches, wiring
+from poefire.api.ratelimit import RateLimiter
 from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
@@ -56,6 +57,7 @@ from poefire.web.cache import BookCache
 
 log = logging.getLogger(__name__)
 GAME_LOG_KEY = "game_log_path"  # where the running game's Client.txt was last found
+RATE_LIMITS_KEY = "rate_limits"  # the website's rate-limit state (RateLimiter.to_json)
 GAME_LOG_CHECK = 15.0  # seconds
 LEAGUE_CHECK = 15 * 60.0  # seconds between checks of your characters' league and your tabs
 DISMISSED_LEAGUES_KEY = "league_hint_dismissed"
@@ -127,6 +129,10 @@ class AppRuntime:
         self.config_path = config_path
         self.now = now
         self._store = Store(cfg.db_path)  # used by the tail thread, under _lock
+        # One rate limiter for every website request, kept when loot tracking is rebuilt and
+        # saved between runs: a restart mustn't forget a penalty in force or recent hits.
+        self.web_limiter = RateLimiter()
+        self.web_limiter.restore(self._store.get_json(RATE_LIMITS_KEY))
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
@@ -234,11 +240,17 @@ class AppRuntime:
     def _build_recorder(self) -> None:
         self.loot = LootStatus(enabled=False)
         try:
-            rec = wiring.recorder(self.cfg, wiring.account_api(self.cfg))
+            rec = wiring.recorder(self.cfg, wiring.account_api(self.cfg, self.web_limiter))
         except wiring.ConfigError as e:
             self.loot.reason = str(e)
             return
         self._install_recorder(rec)
+
+    def save_rate_limits(self) -> None:
+        try:
+            self._kv_set(RATE_LIMITS_KEY, self.web_limiter.to_json())
+        except Exception:  # never worth failing a snapshot over
+            log.exception("couldn't save the rate-limit state")
 
     def _build_api(self) -> Any:
         """The loot tracker's website connection, shared so both respect one rate limit."""
@@ -388,6 +400,7 @@ class AppRuntime:
     def _on_loot(self, result: LootResult) -> None:
         self.loot.last = result
         self.loot.last_at = self.now()
+        self.save_rate_limits()
 
     @property
     def interval_mode(self) -> bool:
@@ -968,4 +981,5 @@ class AppRuntime:
             self.recorder.stop()
         for t in self._threads:
             t.join(timeout=5)
+        self.save_rate_limits()
         self._store.close()

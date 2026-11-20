@@ -73,6 +73,21 @@ def test_hits_from_other_tools_are_counted() -> None:
     assert rl.wait_time("stash") == 60.0
 
 
+def test_unknown_older_hits_dont_fill_the_short_window() -> None:
+    """A first response says 60 hits in 30 minutes, 1 in the last minute: the other 59 are
+    older than a minute, so the minute window has room; the 30-minute one doesn't."""
+    rl, clock = limiter()
+    rl.acquire("items")
+    rl.update("items", headers("item", Account=("30:60:60,70:1800:600", "1:60:0,60:1800:0")),
+              200)  # fmt: skip
+    assert rl.fits(["items"], 3) and not rl.fits(["items"], 4)  # we use 63: 70 less 10%
+    assert rl.wait_time("items") == 0.0
+    for _ in range(3):
+        rl.acquire("items")
+    assert clock.slept == []
+    assert rl.wait_time("items") > 1000  # the 30-minute window is full: wait for old hits
+
+
 def test_active_restriction_blocks() -> None:
     rl, _clock = limiter()
     rl.acquire("stash")
@@ -94,6 +109,66 @@ def test_policies_shared_between_buckets() -> None:
         rl.acquire(bucket)
         rl.update(bucket, headers("shared", Client=("2:10:10", "1:10:0")), 200)
     assert rl.wait_time("a") > 0 and rl.wait_time("b") > 0
+
+
+def test_a_share_of_every_window_is_kept_free() -> None:
+    """The website and other tools share the account's and the IP's limits."""
+    rl = RateLimiter()
+    assert rl.allowed(100) == 90 and rl.allowed(30) == 27 and rl.allowed(45) == 40
+    assert rl.allowed(3) == 2 and rl.allowed(2) == 1 and rl.allowed(1) == 1
+
+
+def test_fits() -> None:
+    rl, clock = limiter()  # margin 1 hit, share 10%
+    assert rl.fits(["items", "stash"], 50)  # nothing known yet: nothing to go by
+    rl.acquire("items")
+    rl.update("items", headers("item", Account=("30:60:60,100:1800:600", "1:60:0,70:1800:0")),
+              200)  # fmt: skip
+    rl.acquire("stash")
+    rl.update("stash", headers("item", Account=("30:60:60,100:1800:600", "2:60:0,71:1800:0")),
+              200)  # fmt: skip
+    # 71 hits of the 90 we use in 30 minutes (100 less 10%); 2 of 27 in a minute
+    assert rl.fits(["items", "stash"], 19) and not rl.fits(["items", "stash"], 20)
+    assert not rl.fits(["stash"], 15, reserve=5)
+    clock.t += 61
+    assert rl.fits(["items"], 19)
+    rl.update("stash", headers("item", Account=("30:60:60", "31:60:60")), 429)
+    assert not rl.fits(["items"], 1)  # restricted: nothing fits
+
+
+def test_state_survives_a_restart() -> None:
+    wall = [1_000_000.0]
+    clock = FakeClock()
+    rl = RateLimiter(clock=clock, sleep=clock.sleep, wall=lambda: wall[0] + clock.t)
+    rl.acquire("stash")
+    rl.update("stash", headers("item", Account=("10:60:60,100:1800:600", "4:60:0,50:1800:0")),
+              200)  # fmt: skip
+    rl.update("items", headers("item", Account=("10:60:60,100:1800:600", "5:60:0,51:1800:600")),
+              429)  # fmt: skip
+    saved = rl.to_json()
+    assert len(saved["policies"]["item"]["history"]) == 51
+
+    later = FakeClock()  # a new process: its monotonic clock starts over
+    later.t = 5.0
+    wall[0] += 30  # restarted 30 s of wall time later
+    rl2 = RateLimiter(clock=later, sleep=later.sleep, wall=lambda: wall[0] + later.t - 5.0)
+    rl2.restore(saved)
+    # the 600 s penalty is still on for the 570 s left, on both endpoints of the policy
+    assert 560 < rl2.wait_time("items") <= 570 and 560 < rl2.wait_time("stash") <= 570
+    assert not rl2.fits(["stash"], 1)
+    later.t += 600  # the penalty is over; the 51 hits are still in the 30-minute window
+    assert rl2.wait_time("stash") == 0.0
+    assert rl2.fits(["stash"], 39) and not rl2.fits(["stash"], 40)
+
+
+def test_restore_ignores_junk() -> None:
+    rl, clock = limiter()
+    junk: list[object] = [None, [], "x", {"policies": {"p": {"windows": "bad"}}},
+                          {"buckets": {"a": "z"}}]  # fmt: skip
+    for j in junk:
+        rl.restore(j)
+    assert rl.wait_time("a") == 0.0 and rl.fits(["a"], 99)
+    assert clock.slept == []
 
 
 # --- PoeApi ---

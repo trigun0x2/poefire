@@ -415,7 +415,8 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
     from poefire import wiring
 
     try:
-        api = rt.recorder.snapshotter.api if rt.recorder is not None else wiring.account_api(rt.cfg)
+        api = (rt.recorder.snapshotter.api if rt.recorder is not None
+               else wiring.account_api(rt.cfg, rt.web_limiter))  # fmt: skip
         chars = api.list_characters()  # this is the cookie check
         rt.note_account_leagues(str(c.get("league") or "") for c in chars)
     except Exception as e:  # shown to the user as is (never contains the cookie)

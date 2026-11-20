@@ -161,7 +161,47 @@ def test_429_is_not_retried_but_blocks_the_bucket() -> None:
     with pytest.raises(SessionError):
         api.list_characters()
     assert len(site.requests) == 1
-    assert api.limiter.wait_time("character") == 30.0
+    assert api.limiter.wait_time("characters") == 30.0
+
+
+def limits(policy: str, state: str) -> dict[str, str]:
+    return {
+        "X-Rate-Limit-Policy": policy,
+        "X-Rate-Limit-Rules": "Account",
+        "X-Rate-Limit-Account": "30:60:60,100:1800:600",
+        "X-Rate-Limit-Account-State": state,
+    }
+
+
+def test_a_penalty_on_the_stash_also_holds_back_the_inventory() -> None:
+    """get-items and get-stash-items share GGG's policy, get-characters has its own. A 429 on
+    the stash must keep the inventory read back, even right after a characters request
+    (one bucket for all character endpoints used to forget the stash's policy)."""
+    calls: list[str] = []
+
+    def site(r: httpx.Request) -> httpx.Response:
+        calls.append(r.url.path)
+        if r.url.path.endswith("get-characters"):
+            return httpx.Response(200, json=[], headers=limits("characters", "1:60:0,1:1800:0"))
+        if r.url.path.endswith("get-items"):
+            return httpx.Response(
+                200, json={"items": []}, headers=limits("item", "1:60:0,5:1800:0")
+            )
+        return httpx.Response(429, headers={**limits("item", "2:60:0,6:1800:300"),
+                                            "Retry-After": "300"})  # fmt: skip
+
+    api, _ = make(site)  # type: ignore[arg-type]
+    api.get_character("Me")
+    with pytest.raises(SessionError, match="rate limited"):
+        api.get_stash("Keepers", "aaa", "child")
+    api.list_characters()  # its own policy: not held back
+    assert 295 < api.rate_limited_for() <= 300  # less the 1.5 s between requests
+    assert not api.fits(1)
+    assert calls == [
+        "/character-window/get-items",
+        "/api/stash/Keepers/aaa/child",
+        "/character-window/get-characters",
+    ]
 
 
 def test_snapshot_through_session_api_with_map_sections() -> None:

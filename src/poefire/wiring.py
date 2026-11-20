@@ -5,6 +5,7 @@ from __future__ import annotations
 from poefire import __version__
 from poefire.api.client import PoeApi
 from poefire.api.oauth import OAuthClient, TokenManager, TokenStore, user_agent
+from poefire.api.ratelimit import RateLimiter
 from poefire.api.session import SessionApi, SessionStore
 from poefire.config import Config
 from poefire.loot.recorder import LootRecorder
@@ -38,13 +39,15 @@ def session_user_agent(cfg: Config) -> str:
     return f"poefire/{__version__} (+{PROJECT_URL}{contact})"
 
 
-def account_api(cfg: Config) -> AccountApi:
-    """The account-data client for the configured auth method, ready to use."""
+def account_api(cfg: Config, limiter: RateLimiter | None = None) -> AccountApi:
+    """The account-data client for the configured auth method, ready to use. `limiter`: one
+    shared with earlier clients (the app keeps one, so rebuilding the client after a
+    settings change doesn't forget the rate limits)."""
     if cfg.auth == "oauth":
         tokens = token_manager(cfg)
         if not tokens.logged_in:
             raise ConfigError("not logged in; run `poefire-cli login`")
-        return PoeApi(tokens, tokens.oauth.user_agent, cfg.realm)
+        return PoeApi(tokens, tokens.oauth.user_agent, cfg.realm, limiter=limiter)
     if cfg.auth == "session":
         if not cfg.account_name:
             raise ConfigError("set account_name in config.toml (full name, e.g. Name#1234)")
@@ -56,7 +59,7 @@ def account_api(cfg: Config) -> AccountApi:
             )
         return SessionApi(
             poesessid, cfg.account_name, session_user_agent(cfg), cfg.realm,
-            on_auth=sessions.record_auth,
+            limiter=limiter, on_auth=sessions.record_auth,
         )  # fmt: skip
     raise ConfigError(f'unknown auth {cfg.auth!r} (use "session" or "oauth")')
 

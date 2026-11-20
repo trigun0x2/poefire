@@ -16,6 +16,9 @@ endpoints the pathofexile.com website uses, not the documented developer API:
 The cookie is a full login session for the account: it is kept out of logs and error
 messages, and stored separately from the config (see SessionStore).
 
+Each endpoint has its own rate-limit bucket (see poefire.api.ratelimit): the inventory and
+the stash reads share GGG's policy, and the limiter finds that out from the responses.
+
 Unlike some tools, this client identifies itself honestly in the User-Agent rather than
 posing as a browser. If GGG's edge protection rejects it, that's a decision to respect.
 """
@@ -39,6 +42,11 @@ from poefire.api.ratelimit import RateLimiter
 
 log = logging.getLogger(__name__)
 WEB_BASE = "https://www.pathofexile.com"
+
+# rate-limit buckets, one per endpoint
+CHARACTERS, ITEMS, PASSIVES = "characters", "items", "passives"
+STASH, STASH_API, TRADE = "stash", "stash-api", "trade"
+LOOT_BUCKETS = (ITEMS, STASH, STASH_API)  # what loot snapshots read
 
 type Json = dict[str, Any]
 
@@ -306,7 +314,7 @@ class SessionApi:
     # --- AccountApi ---
 
     def list_characters(self) -> list[Json]:
-        chars = self._get("character", "/character-window/get-characters", self._common())
+        chars = self._get(CHARACTERS, "/character-window/get-characters", self._common())
         if not isinstance(chars, list):
             raise SessionError("unexpected get-characters response")
         # Same shape the OAuth API uses for "the character you're playing".
@@ -314,7 +322,7 @@ class SessionApi:
 
     def get_character(self, name: str) -> Json:
         data = self._get(
-            "character", "/character-window/get-items", {**self._common(), "character": name}
+            ITEMS, "/character-window/get-items", {**self._common(), "character": name}
         )
         char: Json = dict(data.get("character") or {"name": name})
         # get-items mixes equipment and bags; keep the bags (OAuth's `inventory`).
@@ -327,10 +335,10 @@ class SessionApi:
         """Everything Path of Building's "Import from website" reads: equipped items with
         their socketed gems, and the passive tree with jewels, masteries and bandit."""
         items = self._get(
-            "character", "/character-window/get-items", {**self._common(), "character": name}
+            ITEMS, "/character-window/get-items", {**self._common(), "character": name}
         )
         passives = self._get(
-            "character",
+            PASSIVES,
             "/character-window/get-passive-skills",
             {**self._common(), "character": name},
         )
@@ -338,12 +346,17 @@ class SessionApi:
 
     def rate_limited_for(self) -> float:
         """Seconds until loot snapshots may make requests again (0 when they can)."""
-        return max(self.limiter.wait_time(b) for b in ("character", "stash"))
+        return max(self.limiter.wait_time(b) for b in LOOT_BUCKETS)
+
+    def fits(self, n: int, reserve: int = 0) -> bool:
+        """Whether `n` more loot requests fit in the rate limits right now, with `reserve`
+        hits to spare (see RateLimiter.fits)."""
+        return self.limiter.fits(LOOT_BUCKETS, n, reserve)
 
     def trade_history(self, league: str) -> Any:
         """Your sales from merchant tabs in `league`: {"result": [{time, item_id, item,
         price: {amount, currency}}, ...]} (see poefire.loot.sales)."""
-        return self._get("trade", f"/api/trade/history/{quote(league, safe='')}", auth=False,
+        return self._get(TRADE, f"/api/trade/history/{quote(league, safe='')}", auth=False,
                          block=False)  # fmt: skip
 
     def list_stashes(self, league: str) -> list[Json]:
@@ -352,7 +365,7 @@ class SessionApi:
         one. So it raises LeagueError and never marks the cookie as bad."""
         try:
             data = self._get(
-                "stash",
+                STASH,
                 "/character-window/get-stash-items",
                 {**self._common(), "league": league, "tabs": 1, "tabIndex": 0},
                 auth=False,
@@ -375,13 +388,13 @@ class SessionApi:
 
     def list_tab_children(self, league: str, tab_id: str) -> list[Json]:
         """Sections of a map/unique tab (the legacy endpoint returns no items for them)."""
-        data = self._get("stash", self._api_stash_path(league, tab_id))
+        data = self._get(STASH_API, self._api_stash_path(league, tab_id))
         children: list[Json] = (data.get("stash") or {}).get("children") or []
         return children
 
     def get_stash(self, league: str, stash_id: str, substash_id: str | None = None) -> Json:
         if substash_id:
-            data = self._get("stash", self._api_stash_path(league, stash_id, substash_id))
+            data = self._get(STASH_API, self._api_stash_path(league, stash_id, substash_id))
             stash: Json = data.get("stash") or {}
             return stash
         if stash_id not in self._tab_index:
@@ -389,7 +402,7 @@ class SessionApi:
         if stash_id not in self._tab_index:
             raise SessionError(f"stash tab {stash_id} not found in {league}")
         data = self._get(
-            "stash",
+            STASH,
             "/character-window/get-stash-items",
             {**self._common(), "league": league, "tabs": 0,
              "tabIndex": self._tab_index[stash_id]},

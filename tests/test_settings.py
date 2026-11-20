@@ -146,7 +146,7 @@ def test_check_account(
     client, _, _ = env
     r = client.post("/api/settings/check-account", headers=H).json()
     assert r["ok"] is False and "account_name" in r["error"]
-    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg: FakeAccount())
+    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg, limiter=None: FakeAccount())
     r = client.post("/api/settings/check-account", headers=H).json()
     assert r["ok"] and r["characters"][0]["name"] == "xyz_bow"
     assert r["tabs"] == [{"id": "a", "name": "Dump", "type": "PremiumStash"}]
@@ -226,7 +226,7 @@ def test_check_account_with_a_wrong_league(
     rt.set_league("Typo League")
     monkeypatch.setattr(rt, "default_league", lambda: "Keepers")  # newest on poe.ninja
     acc = WrongLeagueAccount(ok)
-    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg: acc)
+    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg, limiter=None: acc)
     r = client.post("/api/settings/check-account", headers=H).json()
     assert r["ok"] and r["characters"][0]["name"] == "xyz_bow"  # the cookie works
     assert r["tabs_league"] == tabs_league
