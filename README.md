@@ -36,9 +36,10 @@ Regardless, thanks for taking a view and feel free to check out the AI summary o
 
 ## What it does
 
-- **Loot per map.** When you return to your hideout, poefire sees what the map dropped and
-  prices it with poe.ninja: chaos per map, average map time, your best drops, and every
-  session's totals.
+- **Loot per map.** When you return to your hideout, poefire sees what the map dropped (what
+  came into your inventory: two requests per map, so the website's rate limits stay out of
+  the way) and prices it with poe.ninja: chaos per map, average map time, your best drops,
+  and every session's totals.
 - **Stash value over time.** A chart of what your stash is worth, and its most valuable items.
 - **Campaign timer.** Splits for every act and zone, load-free time, your PB and best times per
   class, your top 3 runs, and notes for each run.
@@ -81,7 +82,8 @@ To see what your maps drop, poefire needs to read your stash:
 2. Copy the `POESESSID` cookie (press F12 → **Application** or **Storage** → **Cookies**).
 3. In poefire's **Settings**, enter your account name (with the `#1234`), paste the cookie and
    click **Check connection**.
-4. Pick your league, your character, and the stash tabs your loot goes into.
+4. Pick your league, your character (the one you map with), and the stash tabs to show on
+   the Overview.
 
 Your cookie stays on your PC and is never shown or logged. Treat it like a password: anyone
 who has it can act as you on the website.
@@ -137,8 +139,9 @@ download yourself, see what poefire reads and which sites it connects to (no tel
 [SECURITY.md](SECURITY.md).
 
 **My maps show no loot.** Check that loot tracking is on (bottom left of the window), and that
-you've picked every stash tab your loot goes into in Settings. Loot is counted when you're
-back in the hideout, not while you're in the map.
+Settings → Character is the character you map with: a map's loot is what came into that
+character's inventory. Loot is counted when you're back in the hideout, not while you're in
+the map.
 
 **The campaign timer doesn't split.** The game has to be set to **English**: poefire reads the
 game's English log messages. Also check that Settings shows the right `Client.txt`.

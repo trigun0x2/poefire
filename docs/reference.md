@@ -69,9 +69,8 @@ auth = "session"                     # "session" (POESESSID, default) or "oauth"
 account_name = "Exile#1234"          # full account name, with the #1234 part
 league = "Keepers"
 character = "MyWitch"                # default: the account's current character in the league
-stash_tabs = ["Dump", "Currency"]    # tab names or ids to include in snapshots
-snapshot_delay = 3.0                 # seconds to wait after reaching the hideout
-snapshot_on_run_start = true         # also snapshot on map entry (see below)
+stash_tabs = ["Dump", "Currency"]    # tab names or ids: the Overview (and the 10-minute mode)
+snapshot_delay = 3.0                 # seconds after a zone change before the inventory is read
 # realm = "pc"                       # or "xbox" / "sony"
 # contact = "you@example.com"        # optional; added to the User-Agent
 # For auth = "oauth" only (needs an app registered with GGG):
@@ -92,16 +91,68 @@ There are two ways to read your inventory and stash:
   registered with GGG (`oauth@grindinggear.com`). Set `oauth_client_id` and `contact`, then
   run `poefire login`.
 
+**How a map's loot is measured** (the default, "per map"). Your stash can't change while
+you're in a map (there's no stash there), only your inventory can. So poefire reads your
+inventory as you go into a map and again when you're back in your hideout or town: what came
+into it in between is the map's loot, wherever it goes afterwards (any tab, sold, used up).
+That's two requests per map, however many tabs you watch. Going back into the same map after
+a hideout trip is another pair of reads, and the map's loot adds up over its trips.
+
+| Your inventory is read | For |
+| --- | --- |
+| as you go into a map (or back into it) | the starting point of that stay |
+| when you're back in your hideout or town | that stay's loot: what came into the inventory |
+| about every 30 minutes while you map, with the watched tabs | the Overview: what you hold, and its value over time |
+| when you press Snapshot now, with the watched tabs | the same, at once |
+
+The website shows your inventory as the game last saved your character, which it does at
+every zone change. A read between two zone changes sees the inventory as it was when you
+entered that zone, so it doesn't matter exactly when it's made, as long as you haven't
+changed zones again: a read that finishes after you have could hold what you did since, and
+is thrown away. A read that fails (network, rate limit) is tried again while you're still in
+that zone, and one held up by the website's rate limit waits before it's sent (never by
+sending a request that will be refused). If you leave the hideout again within a few seconds,
+before your inventory could be read, the read as you go back into a map counts for both: a
+few seconds aren't enough to change anything there. Otherwise that trip has no loot data
+rather than a wrong number: the map counts the loot of its other trips, or shows no loot
+data.
+
+**The watched tabs** are read for the Overview, about every 30 minutes while you map, just
+after a map starts: your stash can't change until you're back, so the tabs agree with each
+other and with the inventory. Reading them stops (and what was read is dropped) if you're
+back before they're all read, and waits when the website's rate limits are tight, so the
+inventory reads always have room. Each watched tab costs one request; of the map tab, each
+Tier 16, Tier 17 and special section (originator, nightmare, Valdo maps...) costs one, and
+lower tiers aren't read. The map tab's unique sections and unique tabs aren't read at all:
+uniques aren't counted. The Overview shows a tab's sections as one chip (e.g. "Maps").
+Changed in Settings, the watched tabs are read at the next map start.
+
+**Tracking mode** (Settings → Loot tracking, `loot_mode` in config.toml):
+
+- **Per map** (default, `per_map`): as above, each map has its own loot, from two inventory
+  reads.
+- **Every 10 minutes** (`interval`): your inventory and every watched tab are read every
+  10 minutes while you're mapping (a map run in the last 30 minutes), plus once when you
+  start mapping again after that, and not around maps. The change between two reads, over
+  the inventory and all the tabs, counts towards the session, so hideout trading and crafting
+  count too. The Session page then shows the session's total net loot, maps done, the average
+  per map (total ÷ maps), loot per hour and what changed, with the recent maps listed
+  without loot; per-map loot, the Maps table and the Sessions history are hidden. Every read
+  costs a request per tab: by far the more expensive mode. A read waits when it doesn't fit
+  in the website's rate limits. Changing the watched tabs reads them at once, so what's
+  already in a new tab isn't counted.
+
 **Trade sales aren't loot** (Settings → "Don't count trade sales as loot", off by default;
-`trade_sales = true` in config.toml). With the POESESSID connection, each snapshot also reads your
-trade history (`/api/trade/history/<league>`, the sales from your merchant tabs, at most once
-a minute). When a sale's payment shows up in a watched tab, at least the whole price in the
-currency it was paid in, that amount is taken back out of the map you were running (or the
-hideout time between maps). The map's loot shows it as a minus line, "Sold on trade · <item>",
-tagged *trade*. Sales from before poefire first read the history are skipped. A sale whose
-payment never shows up in a watched tab is dropped after a week. If the history can't be
-read (OAuth login, the site refusing it), sales count as loot, as before, and poefire tries
-again after 30 minutes.
+`trade_sales = true` in config.toml). Per map, a sale's payment never comes into your
+inventory, so it never counts: the setting is for the 10-minute mode. There, with the
+POESESSID connection, each read also fetches your trade history
+(`/api/trade/history/<league>`, the sales from your merchant tabs, at most once a minute).
+When a sale's payment shows up in a watched tab, at least the whole price in the currency it
+was paid in, that amount is taken back out of the change it shows up in, as a minus line,
+"Sold on trade · <item>", tagged *trade*. Sales from before poefire first read the history
+are skipped. A sale whose payment never shows up in a watched tab is dropped after a week. If
+the history can't be read (OAuth login, the site refusing it), sales count, and poefire
+tries again after 30 minutes.
 
 **Session setup.** Log in on pathofexile.com in your browser and copy the `POESESSID` cookie
 (dev tools → Storage/Application → Cookies). Set `account_name` in `config.toml` to your full
@@ -125,69 +176,38 @@ paste it into chats or screenshots. poefire keeps it out of every log line and e
 These endpoints aren't the documented developer API, so GGG can change or restrict them at
 any time.
 
-**Rate limits.** The website endpoints have tight per-IP limits. poefire waits at least 1.5s
-between requests, follows the rate-limit headers, and never retries a 429: it skips that
-snapshot and waits out `Retry-After` before the next one. While a rate limit is in force, the
-sidebar, a banner and the in-game overlay say so and when it ends; maps finished meanwhile are
-counted together when it does. poefire also identifies itself in its User-Agent instead of
+**Rate limits.** The website allows about 100 inventory and stash reads per account every 30
+minutes, and answers going over with 10 minutes of refusals (GGG also restricts apps that make
+many refused requests). poefire reads the limits from the `X-Rate-Limit-*` headers on every
+response, never hard-coded; keeps a tenth of every window free for the website itself and
+other tools; counts hits the server reports from other tools on the same account; waits at
+least 1.5s between requests; and never retries a 429: it waits out `Retry-After` first. What
+it knows of the limits is kept across a restart, so a restarted app doesn't walk into a
+penalty still in force. While a rate limit is in force, the sidebar, a banner and the in-game
+overlay say so and when it ends. poefire also identifies itself in its User-Agent instead of
 posing as a browser. If GGG's edge protection starts rejecting it, that's their call.
 
-**Tracking mode** (Settings → Loot tracking, `loot_mode` in config.toml):
-
-- **Per map** (default, `per_map`): snapshots around each map, as below, so each map has its
-  own loot.
-- **Every 10 minutes** (`interval`): one snapshot every 10 minutes while you're mapping (a
-  map run in the last 30 minutes), plus one when you start mapping again after that, and none
-  around maps. Far fewer requests, so rate limits are rare. The Session page then shows the
-  session's total net loot, maps done, the average per map (total ÷ maps), loot per hour and
-  what changed, with the recent maps listed without loot; per-map loot, the Maps table and
-  the Sessions history are hidden. Hideout trading during the session counts in the total.
-
-**How it works.** Each snapshot holds your character's inventory plus the watched stash tabs.
-Equipped gear is not included. Snapshots form one chain, and each change is labelled by what
-triggered the snapshot that closed it:
-
-| Snapshot taken when | Change since the previous snapshot is |
-| --- | --- |
-| you return to hideout/town from a map | that map's **loot** |
-| you enter a new map | hideout activity before it (trades, crafting, the map used) |
-| you've stayed in the hideout for 5 minutes (then every 5, for 30 minutes) | hideout activity, not attached to a run |
-| `poefire snapshot` | a manual change, not attached to a run |
-
-The snapshot on map entry keeps trading and crafting out of the loot figures. To save
-requests, it's skipped when a snapshot was taken less than a minute before (usually the one
-back from the previous map; a quick hideout trip then counts towards the next map), unless
-there's been no hideout snapshot for 5 minutes. If the snapshot back from a map fails, the
-next one (when the following map starts) is counted as that map's loot. Several hideout trips
-during one map add up into that map's loot.
-
 **Loot counts what you gained, not what you spent.** A map's (or a session's) loot is the value
-of the items that went up. Items that went down (the map and threads you used, currency spent
-crafting) are listed, dimmed, but not taken off, so loot is never negative. Trade sales'
-payments are the exception: when that setting is on, they're taken back out.
+of the items that went up. Items that went down (portal scrolls used in the map; in the
+10-minute mode also the maps and currency used, and crafting) are listed, dimmed, but not
+taken off, so loot is never negative. Trade sales' payments are the exception: when that
+setting is on, they're taken back out.
 
 Stackable items are compared by total quantity per item kind, so stack merges and splits don't
-count as changes. Other items are compared by their unique item id, so moving loot from your
-inventory into a watched tab nets to zero.
+count as changes. Other items are compared by their unique item id, so moving an item between
+your inventory and a watched tab nets to zero (in the 10-minute mode, where tabs count).
 
 **Caveats**
 
-- Watch every tab your loot lands in, including ones that Ctrl+click affinities send it to.
-  Moving an item into an unwatched tab counts as losing it.
-- Every watched tab costs one API request per snapshot. Special tabs (map, unique) cost one
-  request per section. Of the map tab, only the Tier 16 (originator maps included), Tier 17,
-  Unique, Special and other non-tier sections (e.g. Nightmare) are watched; lower tiers aren't counted. The Overview shows a tab's
-  sections as one chip (e.g. "Maps").
+- Per map, loot is what came into the inventory of the character poefire reads (Settings →
+  Character, or the account's current one): map with that character.
+- In the 10-minute mode, watch every tab your loot lands in, including ones that Ctrl+click
+  affinities send it to: moving an item into an unwatched tab counts as losing it.
 - Map prices from poe.ninja with fewer than 10 listings are left out (a few sellers' asking
   prices); a blighted map without its own price gets the cheapest blighted map of its tier.
 - The API shows current state only. Map runs replayed from the log after a restart get no
-  snapshots, and a snapshot more than 2 hours after the previous one starts a fresh baseline.
-- A failed snapshot (rate limit, network) is skipped. The next good snapshot then covers both
-  periods.
-
-**Rate limits** are read from the `X-Rate-Limit-*` headers on every response, never
-hard-coded. poefire keeps one hit of headroom under each window, counts hits made by other
-tools on the same account, and on HTTP 429 waits for `Retry-After`.
+  reads, and in the 10-minute mode a read more than 2 hours after the previous one starts a
+  fresh baseline.
 
 ### Sessions
 
@@ -332,7 +352,8 @@ Click **Settings** in the app's top bar to set up everything without editing fil
   whether one is saved, but never displays it again. **Check connection** lists your
   characters and stash tabs.
 - **Loot tracking:** league, character, the stash tabs to watch (chosen from your real tab
-  list), the map-start snapshot, the hideout snapshot delay, and whose deaths count. Death
+  list) and what they cost in requests, the tracking mode, the wait after a zone change
+  before your inventory is read, and whose deaths count. Death
   names match regardless of capitalization. The page lists the character names seen in your
   log and whether their deaths count, and it warns about a name that never appears in your log
   (an account name, for example).
