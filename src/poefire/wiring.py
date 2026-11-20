@@ -77,5 +77,4 @@ def recorder(cfg: Config, poe: AccountApi) -> LootRecorder:
         snapshotter(cfg, poe),
         lambda: Store(cfg.db_path),
         return_delay=cfg.snapshot_delay,
-        snapshot_on_run_start=cfg.snapshot_on_run_start,
     )

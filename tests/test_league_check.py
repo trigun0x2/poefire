@@ -71,19 +71,26 @@ def test_league_hint_and_tabs(tmp_path: Path) -> None:
         rt.stop()
 
 
-def test_changing_watched_tabs_takes_a_snapshot(tmp_path: Path) -> None:
+def test_changing_watched_tabs(tmp_path: Path) -> None:
+    """Per map, loot doesn't depend on the tabs: they're read at the next map start. In the
+    interval mode, a snapshot is taken at once, so what's in a new tab isn't counted."""
     rt = AppRuntime(Config(db_path=tmp_path / "db", league="Keepers", stash_tabs=["Dump"]),
                     recorder=None, log_path=tmp_path / "Client.txt")  # fmt: skip
     rt.refresh_prices = lambda force=False: None  # type: ignore[method-assign]
     snaps: list[bool] = []
+    soon: list[bool] = []
     rt.snapshot_now = lambda: snaps.append(True) or True  # type: ignore[method-assign,func-returns-value]
+    rt.recorder = SimpleNamespace(stash_soon=lambda: soon.append(True), stop=lambda: None)  # type: ignore[assignment]
     client = TestClient(create_app(rt))
     client.headers["host"] = "127.0.0.1:8460"
     try:
         r = client.post("/api/settings", json={"stash_tabs": ["dump"]}, headers=H).json()
-        assert r["snapshot"] is False and snaps == []  # same tab (any case): nothing to do
+        assert r["snapshot"] is False and snaps == soon == []  # same tab (any case)
         r = client.post("/api/settings", json={"stash_tabs": ["Dump", "Currency"]}, headers=H)
-        assert r.json()["snapshot"] is True and snaps == [True]
+        assert r.json()["snapshot"] is False and snaps == [] and soon == [True]
+        client.post("/api/settings", json={"loot_mode": "interval"}, headers=H)
+        r = client.post("/api/settings", json={"stash_tabs": ["Dump"]}, headers=H)
+        assert r.json()["snapshot"] is True and snaps == [True] and soon == [True]
         r = client.post("/api/settings", json={"check_updates": False}, headers=H)
         assert r.json()["snapshot"] is False and snaps == [True]
     finally:

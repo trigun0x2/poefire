@@ -24,6 +24,7 @@ from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
+from poefire.events import LogEvent
 from poefire.gameinput import (
     GameHotkeys,
     GameInput,
@@ -36,6 +37,7 @@ from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.loot import sales
 from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import INTERVAL, LootRecorder, LootResult, Trigger
+from poefire.loot.snapshot import FULL, Snapshotter
 from poefire.pricing.ninja import NinjaClient
 from poefire.pricing.service import PriceService
 from poefire.pricing.valuation import value_holdings
@@ -59,7 +61,14 @@ log = logging.getLogger(__name__)
 GAME_LOG_KEY = "game_log_path"  # where the running game's Client.txt was last found
 RATE_LIMITS_KEY = "rate_limits"  # the website's rate-limit state (RateLimiter.to_json)
 GAME_LOG_CHECK = 15.0  # seconds
-LEAGUE_CHECK = 15 * 60.0  # seconds between checks of your characters' league and your tabs
+# seconds between checks of the league your characters play in (the watched tabs are
+# checked when they're read, and when the league or the tabs change)
+LEAGUE_CHECK = 60 * 60.0
+# Settings that loot tracking is built from: a change rebuilds it (others don't, so saving
+# e.g. a hotkey doesn't throw away what it knows, like the tab list)
+LOOT_FIELDS = ("auth", "account_name", "realm", "league", "stash_tabs", "character",
+               "snapshot_delay", "loot_mode", "trade_sales", "session_path", "token_path",
+               "oauth_client_id", "oauth_redirect_uri", "contact", "db_path")  # fmt: skip
 DISMISSED_LEAGUES_KEY = "league_hint_dismissed"
 
 LEAGUE_KEY = "ui_league"
@@ -145,6 +154,7 @@ class AppRuntime:
         self.league_hint: dict[str, Any] | None = None
         self.tabs_hint: dict[str, Any] | None = None
         self._league_check_now = threading.Event()
+        self._league_check_tabs = False  # the next league check also checks the tabs
         self._auto_recorder = recorder is True
 
         self.patches = patches.PatchBook(
@@ -234,6 +244,7 @@ class AppRuntime:
             self.service.handlers.append(self._dispatch)
             self.service.line_observers.append(self.campaign.handle)
             self.service.line_observers.append(self.builds.handle)
+            self.service.line_observers.append(self._observe_line)
             if self._started:
                 self.service.start()
 
@@ -266,7 +277,14 @@ class AppRuntime:
         rec.interval = INTERVAL if self.interval_mode else None
         rec.snapshotter.set_league(self._league)
         api = getattr(rec.snapshotter, "api", None)
-        if self.cfg.trade_sales and api is not None and hasattr(api, "trade_history"):
+        # Only the interval mode counts what lands in the tabs: per map, a sale's payment
+        # never comes into your inventory, so it's never counted as loot anyway.
+        if (
+            self.interval_mode
+            and self.cfg.trade_sales
+            and api is not None
+            and hasattr(api, "trade_history")
+        ):
             snapshotter = rec.snapshotter
             rec.sales = lambda: sales.parse_history(api.trade_history(snapshotter.league))
         if self._started:
@@ -277,14 +295,22 @@ class AppRuntime:
         if rec is not None:
             rec.on_notice(n)
 
-    def reconfigure(self, cfg: Config) -> None:
+    def _observe_line(self, event: LogEvent | None, line: str) -> None:
+        rec = self.recorder
+        if rec is not None:
+            rec.on_event(event, line)
+
+    def reconfigure(self, cfg: Config, rebuild_loot: bool = False) -> None:
         """Apply a new config: re-open the log if its path or tracking rules changed, and
-        rebuild loot tracking (account, session cookie, tabs...)."""
+        rebuild loot tracking when its settings changed (or `rebuild_loot`: a new cookie)."""
         old = self.cfg
         self.cfg = cfg
         self.builds.enabled = cfg.build_snapshots
         self.builds.stale_hours = cfg.build_stale_hours
-        self._league_check_now.set()  # tabs, account or cookie may have changed
+        loot_changed = rebuild_loot or any(getattr(cfg, f) != getattr(old, f) for f in LOOT_FIELDS)
+        if loot_changed:  # the account, cookie, league or tabs may have changed: check them
+            self._league_check_tabs = True
+            self._league_check_now.set()
         if cfg.debug_logging != old.debug_logging:
             logs.set_verbose(cfg.debug_logging)
             log.info("verbose logging %s", "on" if cfg.debug_logging else "off")
@@ -296,12 +322,14 @@ class AppRuntime:
         if log_changed:
             with self._lock:
                 self._build_service()
-        if self._auto_recorder:
+        if self._auto_recorder and loot_changed:
             previous = self.recorder
             self.recorder = None
             if previous is not None:
                 previous.stop()
             self._build_recorder()
+            if previous is not None and self.recorder is not None:
+                self.recorder.adopt(previous)
         if self._started and any(
             getattr(cfg, f) != getattr(old, f) for f in HOTKEY_FIELDS.values()
         ):
@@ -337,6 +365,7 @@ class AppRuntime:
         if self.recorder is not None:
             self.recorder.snapshotter.set_league(league)
         self.league_hint = self.tabs_hint = None
+        self._league_check_tabs = True
         self._league_check_now.set()  # check the new league's tabs
         self.refresh_prices()
 
@@ -400,6 +429,9 @@ class AppRuntime:
     def _on_loot(self, result: LootResult) -> None:
         self.loot.last = result
         self.loot.last_at = self.now()
+        rec = self.recorder
+        if result.complete and result.scope == FULL and rec is not None:
+            self._set_tabs_hint(rec.snapshotter)  # the tab list was just read
         self.save_rate_limits()
 
     @property
@@ -430,6 +462,18 @@ class AppRuntime:
             return False
         self.recorder.request(Trigger.MANUAL, None)
         return True
+
+    def watched_tabs_changed(self) -> bool:
+        """After the watched tabs changed in Settings. In the interval mode a snapshot is
+        taken now (True), so what's already in a newly watched tab isn't counted as loot (or
+        a dropped tab's items as spent). Per map, loot doesn't depend on the tabs: they're
+        read at the next map start instead, for the Overview."""
+        if self.recorder is None:
+            return False
+        if self.interval_mode:
+            return self.snapshot_now()
+        self.recorder.stash_soon()
+        return False
 
     # --- farming sessions ---
 
@@ -802,10 +846,11 @@ class AppRuntime:
             store.set_json(DISMISSED_LEAGUES_KEY, [*dismissed, hint["league"]][-20:])
         self.league_hint = None
 
-    def check_league(self) -> None:
-        """Your account's newest character in another league -> league_hint; watched stash
-        tabs that don't exist in this league -> tabs_hint. Uses the loot connection (its rate
-        limits); does nothing while loot tracking is off."""
+    def check_league(self, tabs: bool = True) -> None:
+        """Your account's newest character in another league -> league_hint; with `tabs`,
+        watched stash tabs that don't exist in this league -> tabs_hint (the tab list is read
+        again). Uses the loot connection (its rate limits); does nothing while loot tracking
+        is off."""
         rec = self.recorder
         if rec is None:
             self.league_hint = self.tabs_hint = None
@@ -823,26 +868,30 @@ class AppRuntime:
             }  # fmt: skip
         else:
             self.league_hint = None
-        if snap.wanted:
+        if tabs and snap.wanted:
             snap.resolve_tabs(refresh=True)
-            missing = list(snap.missing_tabs)
-            none_found = len(missing) == len(snap.wanted)
-            self.tabs_hint = (
-                {"league": league, "missing": missing, "none_found": none_found}
-                if missing
-                else None
-            )
-        else:
-            self.tabs_hint = None
+        if tabs or not snap.wanted:
+            self._set_tabs_hint(snap)
+
+    def _set_tabs_hint(self, snap: Snapshotter) -> None:
+        """From the tab list the snapshotter read last."""
+        missing = list(snap.missing_tabs) if snap.wanted else []
+        self.tabs_hint = (
+            {"league": self.league, "missing": missing,
+             "none_found": len(missing) == len(snap.wanted)}
+            if missing
+            else None
+        )  # fmt: skip
 
     def _league_loop(self) -> None:
         if self._stop.wait(20):  # let loot tracking start first
             return
         while not self._stop.is_set():
             self._league_check_now.clear()
+            tabs, self._league_check_tabs = self._league_check_tabs, False
             try:
                 self._pick_default_league()
-                self.check_league()
+                self.check_league(tabs=tabs)
             except Exception as e:  # offline, rate limited, cookie expired: try next time
                 log.info("league check skipped: %s", e)
             self._league_check_now.wait(LEAGUE_CHECK)

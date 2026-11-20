@@ -119,8 +119,9 @@ def cmd_track(args: argparse.Namespace) -> int:
         if rec is not None:
             rec.handlers.append(_print_loot)
             service.handlers.append(rec.on_notice)
+            service.line_observers.append(rec.on_event)
             rec.start()
-            print("loot tracking on: snapshots on map entry and on return to hideout")
+            print("loot tracking on: your inventory is read on map entry and back in hideout")
         service.start()
         print(f"tailing {log_path} -> {cfg.db_path} (Ctrl+C to stop)", flush=True)
         stop = threading.Event()

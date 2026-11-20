@@ -9,7 +9,7 @@ from typing import Any
 from test_loot import T, currency, make_recorder, snap
 
 from poefire.loot import sales
-from poefire.loot.recorder import SALES_KEY, Trigger
+from poefire.loot.recorder import INTERVAL, SALES_KEY, Trigger
 from poefire.loot.sales import Sale, SaleBook
 
 
@@ -53,52 +53,36 @@ def test_first_fetch_is_only_remembered() -> None:
     assert SaleBook.from_json(None) == SaleBook([], [])
 
 
-def test_sales_are_taken_out_of_the_map_they_were_paid_into(tmp_path: Path) -> None:
+def test_sales_are_taken_out_of_the_change_they_were_paid_into(tmp_path: Path) -> None:
+    """The interval mode reads the tabs, where a sale's payment lands: it comes back out of
+    the change it shows up in. (Per map, loot is what came into the inventory, which a
+    payment never does.)"""
     div, c = "Divine Orb", "Chaos Orb"
     history: list[dict[str, Any]] = [{"result": []}]
     rec, store = make_recorder(
         tmp_path,
         [
             snap(0, [currency(div, 1, "d"), currency(c, 10, "c")]),
-            snap(1, [currency(div, 1, "d"), currency(c, 10, "c")]),  # map 1 starts
-            # map 1: 44 div from the sale (at minute 3) + 1 div and 20c that dropped
+            # 44 div from the sale (at minute 3) + 1 div and 20c that dropped
             snap(5, [currency(div, 46, "d"), currency(c, 30, "c")]),
-            snap(6, [currency(div, 46, "d"), currency(c, 30, "c")]),  # map 2 starts
-            # map 2: the 5c sale was paid, the 7 div one (minute 7) not yet: nothing to take
+            # the 5c sale was paid, the 7 div one (minute 7) not yet: nothing to take
             snap(10, [currency(div, 46, "d"), currency(c, 35, "c")]),
-            snap(11, [currency(div, 46, "d"), currency(c, 35, "c")]),  # map 3 starts
-            snap(15, [currency(div, 53, "d"), currency(c, 35, "c")]),  # map 3: the 7 div arrive
+            snap(15, [currency(div, 53, "d"), currency(c, 35, "c")]),  # the 7 div arrive
         ],
     )
+    rec.interval = INTERVAL
     rec.sales = lambda: sales.parse_history(history[0])
     rec.monotonic = iter(range(0, 10_000, 100)).__next__  # every record may fetch
-    rec.record(Trigger.MANUAL)  # first fetch: empty, remembered
+    rec.record(Trigger.INTERVAL)  # first fetch: empty, remembered
     history[0] = {"result": [sale("gem", 3, 44), sale("map", 8, 5, "chaos"),
                              sale("ring", 7, 7)]}  # fmt: skip
-    rec.record(Trigger.RUN_START, "r1")
-    r1 = rec.record(Trigger.RUN_RETURN, "r1")
-    assert {d.name: d.quantity for d in r1.deltas} == {
-        div: 45,
-        c: 20,
-        "Sold on trade · Bladefall of Impaling": -44,
-    }
-    assert {d.name: d.quantity for d in store.run_loot("r1")} == {
-        div: 45,
-        c: 20,
-        "Sold on trade · Bladefall of Impaling": -44,
-    }  # net 1 div 20c
-    rec.record(Trigger.RUN_START, "r2")
-    r2 = rec.record(Trigger.RUN_RETURN, "r2")
-    assert {d.name: d.quantity for d in r2.deltas} == {
-        c: 5,
-        "Sold on trade · Bladefall of Impaling": -5,
-    }  # the "map" sale (same item name)
-    rec.record(Trigger.RUN_START, "r3")
-    r3 = rec.record(Trigger.RUN_RETURN, "r3")
-    assert {d.name: d.quantity for d in r3.deltas} == {
-        div: 7,
-        "Sold on trade · Bladefall of Impaling": -7,
-    }
+    r1 = rec.record(Trigger.INTERVAL)
+    sold = "Sold on trade · Bladefall of Impaling"
+    assert {d.name: d.quantity for d in r1.deltas} == {div: 45, c: 20, sold: -44}  # net 1 div
+    r2 = rec.record(Trigger.INTERVAL)
+    assert {d.name: d.quantity for d in r2.deltas} == {c: 5, sold: -5}  # the "map" sale
+    r3 = rec.record(Trigger.INTERVAL)
+    assert {d.name: d.quantity for d in r3.deltas} == {div: 7, sold: -7}
     assert store.get_json(SALES_KEY)["pending"] == []  # every sale counted once
 
 

@@ -73,7 +73,7 @@ function renderChart(pts) {
       ? 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a> to record values.'
       : ovHistory.points.length && ovUnit === "divine"
         ? "No divine price yet for these snapshots. Switch to chaos, or wait for poe.ninja prices."
-        : "No values recorded in this range yet. A value is recorded every time you return to your hideout from a map, or when you press Snapshot now.";
+        : "No values recorded in this range yet. A value is recorded when the watched tabs are read: about every 30 minutes while you map, and when you press Snapshot now.";
     box.innerHTML = `<div class="chart-empty">${why}</div>`;
     return;
   }

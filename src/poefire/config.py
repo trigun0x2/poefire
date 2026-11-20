@@ -95,10 +95,9 @@ class Config:
     realm: str = "pc"
     character: str | None = None
     stash_tabs: list[str] = field(default_factory=list)
-    snapshot_delay: float = 3.0
+    snapshot_delay: float = 3.0  # seconds after a zone change before the inventory is read
     check_updates: bool = True
     update_channel: str = "stable"  # "stable": public releases; "beta": also pre-releases
-    snapshot_on_run_start: bool = True
     build_snapshots: bool = True  # gear/gems/tree at levels 5, 10 and 15+ (needs loot setup)
     # from level 80: a snapshot after this many hours without one, kept only if the build
     # changed (0 = off)

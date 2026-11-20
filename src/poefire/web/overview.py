@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from poefire.loot.recorder import TAB_NAMES_KEY
+from poefire.loot.snapshot import FULL
 from poefire.pricing.book import PriceBook
 from poefire.pricing.valuation import is_worth_showing, value_holdings
 from poefire.store import Store
@@ -72,16 +73,17 @@ def _round(v: float | None, nd: int = 2) -> float | None:
 
 def _latest(store: Store, book: PriceBook, cache: BookCache | None) -> Any:
     """(taken_at, entries, {source: (entries, chaos)}, all held items) of the latest complete
-    snapshot, valued; kept in `cache` until there's a new snapshot or new prices."""
-    snap_id = store.last_complete_snapshot_id()
-    if snap_id is None:
+    snapshot of the inventory and the watched tabs (not an inventory-only one), valued; kept
+    in `cache` until there's a new one or new prices."""
+    head = store.latest_snapshot(scope=FULL, items=False)
+    if head is None:
         return None
-    if cache is not None and (hit := cache.get(book, ("holdings", snap_id))) is not None:
+    if cache is not None and (hit := cache.get(book, ("holdings", head.id))) is not None:
         return hit
-    latest = store.latest_snapshot_items()
+    latest = store.latest_snapshot(scope=FULL)
     if latest is None:
         return None
-    taken_at, entries = latest
+    taken_at, entries = latest.taken_at, latest.items
     by_source: dict[str, list[Any]] = {}
     for e in entries:
         by_source.setdefault(e.source, []).append(e)
@@ -91,7 +93,7 @@ def _latest(store: Store, book: PriceBook, cache: BookCache | None) -> Any:
     }
     result = (taken_at, entries, by_source, tab_values, value_holdings(entries, book))
     if cache is not None:
-        cache.put(book, ("holdings", snap_id), result)
+        cache.put(book, ("holdings", head.id), result)
     return result
 
 

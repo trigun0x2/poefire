@@ -60,7 +60,6 @@ class SettingsIn(BaseModel):
     character: str | None = None  # "" = the account's current character
     characters: list[str] | None = None  # whose deaths count; [] = everyone's
     stash_tabs: list[str] | None = None
-    snapshot_on_run_start: bool | None = None
     snapshot_delay: float | None = Field(default=None, ge=0, le=60)
     check_updates: bool | None = None
     update_channel: Literal["stable", "beta"] | None = None
@@ -165,7 +164,6 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "log_characters": log_characters(rt),
         "stash_tabs": cfg.stash_tabs,
         "account_cache": account_cache(rt),
-        "snapshot_on_run_start": cfg.snapshot_on_run_start,
         "snapshot_delay": cfg.snapshot_delay,
         "loot": {"enabled": rt.loot.enabled, "reason": rt.loot.reason},
         "check_updates": cfg.check_updates,
@@ -338,8 +336,6 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["characters"] = names
     if body.stash_tabs is not None:
         changes["stash_tabs"] = list(dict.fromkeys(t.strip() for t in body.stash_tabs if t.strip()))
-    if body.snapshot_on_run_start is not None:
-        changes["snapshot_on_run_start"] = body.snapshot_on_run_start
     if body.check_updates is not None:
         changes["check_updates"] = body.check_updates
     if body.update_channel is not None:
@@ -399,14 +395,14 @@ def save_session(rt: AppRuntime, poesessid: str) -> list[str]:
     if not POESESSID_RE.fullmatch(value):
         warnings.append("a POESESSID is usually 32 hex characters; saved anyway")
     _session_store(rt).save(value)
-    rt.reconfigure(rt.cfg)
+    rt.reconfigure(rt.cfg, rebuild_loot=True)
     return warnings
 
 
 def clear_session(rt: AppRuntime) -> None:
     _session_store(rt).clear()
     _account_cache_path(rt).unlink(missing_ok=True)
-    rt.reconfigure(rt.cfg)
+    rt.reconfigure(rt.cfg, rebuild_loot=True)
 
 
 def check_account(rt: AppRuntime) -> dict[str, Any]:

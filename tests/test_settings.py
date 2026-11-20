@@ -68,7 +68,6 @@ def test_save_settings_writes_config_and_applies_live(
         "league": "Standard",
         "stash_tabs": ["Dump", " Currency ", "Dump", ""],
         "characters": ["xyz_bow"],
-        "snapshot_on_run_start": False,
         "snapshot_delay": 5,
     })  # fmt: skip
     assert r.status_code == 200, r.text
@@ -84,7 +83,7 @@ def test_save_settings_writes_config_and_applies_live(
     # persisted
     saved = Config.from_dict(tomllib.loads((tmp / "config.toml").read_text()))
     assert saved.account_name == "Exile#1234" and saved.snapshot_delay == 5.0
-    assert saved.snapshot_on_run_start is False and saved.stash_tabs == ["Dump", "Currency"]
+    assert saved.stash_tabs == ["Dump", "Currency"]
 
 
 def test_settings_warnings_and_validation(env: tuple[TestClient, AppRuntime, Path]) -> None:
@@ -159,7 +158,7 @@ def test_check_account(
 
 def test_config_toml_roundtrip(tmp_path: Path) -> None:
     cfg = Config(log_path=Path(r"C:\Program Files (x86)\Path of Exile\logs\Client.txt"),
-                 stash_tabs=['Quote"s', "Dump"], snapshot_on_run_start=False,
+                 stash_tabs=['Quote"s', "Dump"], loot_mode="interval",
                  account_name="Exile#1234")  # fmt: skip
     path = cfg.save(tmp_path / "config.toml")
     assert Config.load(path) == cfg
@@ -272,14 +271,16 @@ def test_trade_sales_is_off_by_default(env: tuple[TestClient, AppRuntime, Path])
         def set_league(self, league: str) -> None:
             pass
 
-    def installed(enabled: bool) -> LootRecorder:
-        rt.cfg = Config(**{**rt.cfg.__dict__, "trade_sales": enabled})
+    def installed(enabled: bool, mode: str = "interval") -> LootRecorder:
+        rt.cfg = Config(**{**rt.cfg.__dict__, "trade_sales": enabled, "loot_mode": mode})
         rec = LootRecorder(Snap(), lambda: Store(rt.cfg.db_path))  # type: ignore[arg-type]
         rt._install_recorder(rec)
         return rec
 
     assert installed(False).sales is None  # no trade history requests
     assert installed(True).sales is not None
+    # per map, loot is what came into the inventory: a sale's payment never counts anyway
+    assert installed(True, "per_map").sales is None
     r = client.post("/api/settings", headers=H, json={"trade_sales": True})
     assert r.status_code == 200 and r.json()["trade_sales"] is True
 

@@ -6,8 +6,9 @@ import json
 import logging
 import sqlite3
 import zlib
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,7 @@ from poefire.tracker import Run, RunStatus, Segment
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -200,6 +201,19 @@ _SCHEMA_V12 = """
 ALTER TABLE campaign_runs ADD COLUMN town TEXT
 """
 
+_SCHEMA_V13 = """
+-- What a snapshot read: 'full' = the inventory and the watched tabs, 'inventory' = the
+-- inventory alone (one request, what map loot is measured with). No semicolons in comments
+-- here: the statements are split on them.
+ALTER TABLE snapshots ADD COLUMN scope TEXT NOT NULL DEFAULT 'full'
+"""
+
+# Snapshot triggers of map segments (poefire.loot.recorder): a segment is a stay in a map
+# between two visits to a hideout or town, and its loot is the change in the inventory from
+# the read at its start to the read at its end.
+SEGMENT_STARTS = ("run_start", "run_resume")
+SEGMENT_ENDS = ("run_return", "run_return_unpaired")
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -213,7 +227,21 @@ _MIGRATIONS = (
     _SCHEMA_V10,
     _SCHEMA_V11,
     _SCHEMA_V12,
+    _SCHEMA_V13,
 )  # index i upgrades schema version i -> i + 1
+
+
+@dataclass(frozen=True)
+class StoredSnapshot:
+    id: int
+    taken_at: datetime
+    trigger: str
+    run_id: str | None
+    scope: str  # "full" or "inventory" (see poefire.loot.snapshot)
+    items: list[ItemEntry]
+
+    def inventory(self) -> list[ItemEntry]:
+        return [e for e in self.items if e.source == "inventory"]
 
 
 def _chunks[T](items: list[T], size: int = 500) -> Iterator[list[T]]:
@@ -373,10 +401,10 @@ class Store:
 
     def add_snapshot(self, snap: Snapshot, trigger: str, run_id: str | None) -> int:
         cur = self.conn.execute(
-            "INSERT INTO snapshots (taken_at, trigger, run_id, complete, item_count, error) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO snapshots (taken_at, trigger, run_id, complete, item_count, error, "
+            "scope) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (snap.taken_at.isoformat(), trigger, run_id, int(snap.complete),
-             len(snap.items), snap.error),
+             len(snap.items), snap.error, snap.scope),
         )  # fmt: skip
         snapshot_id = cur.lastrowid
         assert snapshot_id is not None
@@ -392,40 +420,36 @@ class Store:
             )  # fmt: skip
         return snapshot_id
 
-    def last_complete_snapshot_id(self) -> int | None:
-        row = self.conn.execute(
-            "SELECT id FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        return int(row["id"]) if row else None
-
-    def last_complete_snapshot_trigger(self) -> tuple[str, str | None] | None:
-        """(trigger, run_id) of the newest complete snapshot."""
-        row = self.conn.execute(
-            "SELECT trigger, run_id FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        return (str(row["trigger"]), row["run_id"]) if row else None
-
-    def last_complete_snapshot(self) -> tuple[int, datetime, list[ItemEntry]] | None:
-        row = self.conn.execute(
-            "SELECT id, taken_at FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+    def latest_snapshot(
+        self, triggers: Sequence[str] = (), scope: str | None = None, items: bool = True
+    ) -> StoredSnapshot | None:
+        """The newest complete snapshot (of one of `triggers`, and of `scope`, when given),
+        with its items unless `items` is False."""
+        sql, args = "SELECT * FROM snapshots WHERE complete = 1", []
+        if triggers:
+            sql += f" AND trigger IN ({','.join('?' * len(triggers))})"
+            args += list(triggers)
+        if scope is not None:
+            sql += " AND scope = ?"
+            args.append(scope)
+        row = self.conn.execute(sql + " ORDER BY id DESC LIMIT 1", args).fetchone()
         if row is None:
             return None
-        items = [
-            ItemEntry(
-                item_id=r["item_id"], key=r["key"], name=r["name"], frame_type=r["frame_type"],
-                quantity=r["quantity"], stackable=bool(r["stackable"]), source=r["source"],
-                raw=json.loads(r["raw"]),
-            )
-            for r in self.conn.execute(
-                "SELECT * FROM snapshot_items WHERE snapshot_id = ?", (row["id"],)
-            )
-        ]  # fmt: skip
-        return row["id"], datetime.fromisoformat(row["taken_at"]), items
-
-    def latest_snapshot_items(self) -> tuple[datetime, list[ItemEntry]] | None:
-        latest = self.last_complete_snapshot()
-        return None if latest is None else (latest[1], latest[2])
+        entries = []
+        if items:
+            entries = [
+                ItemEntry(
+                    item_id=r["item_id"], key=r["key"], name=r["name"],
+                    frame_type=r["frame_type"], quantity=r["quantity"],
+                    stackable=bool(r["stackable"]), source=r["source"], raw=json.loads(r["raw"]),
+                )
+                for r in self.conn.execute(
+                    "SELECT * FROM snapshot_items WHERE snapshot_id = ?", (row["id"],)
+                )
+            ]  # fmt: skip
+        return StoredSnapshot(int(row["id"]), datetime.fromisoformat(row["taken_at"]),
+                              str(row["trigger"]), row["run_id"], str(row["scope"]),
+                              entries)  # fmt: skip
 
     def add_snapshot_value(
         self,
@@ -464,10 +488,20 @@ class Store:
         return None if row is None else (datetime.fromisoformat(row[0]), row[1], row[2])
 
     def prune_snapshot_items(self, keep: int = 2) -> None:
+        """Only the items still needed are kept: the newest `keep` complete snapshots' (the
+        next diff), the newest full snapshot's (the Overview's holdings) and the newest map
+        segment snapshot's (the start of the segment you may be in)."""
+        segment = (*SEGMENT_STARTS, *SEGMENT_ENDS)
         self.conn.execute(
-            "DELETE FROM snapshot_items WHERE snapshot_id NOT IN "
-            "(SELECT id FROM snapshots WHERE complete = 1 ORDER BY id DESC LIMIT ?)",
-            (keep,),
+            "WITH keep(id) AS ("
+            " SELECT id FROM (SELECT id FROM snapshots WHERE complete = 1 ORDER BY id DESC"
+            "  LIMIT ?)"
+            " UNION SELECT MAX(id) FROM snapshots WHERE complete = 1 AND scope = 'full'"
+            " UNION SELECT MAX(id) FROM snapshots WHERE complete = 1 AND trigger IN"
+            f"  ({','.join('?' * len(segment))})"
+            ") DELETE FROM snapshot_items WHERE snapshot_id NOT IN"
+            " (SELECT id FROM keep WHERE id IS NOT NULL)",
+            (keep, *segment),
         )
 
     def add_loot(

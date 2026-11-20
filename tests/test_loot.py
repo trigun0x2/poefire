@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import copy
 import itertools
 import threading
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from poefire.events import AreaGenerated
+from poefire.loot import recorder
 from poefire.loot.diff import diff_items
 from poefire.loot.items import ItemEntry, display_name, item_key
 from poefire.loot.recorder import LootRecorder, LootResult, Trigger
 from poefire.loot.snapshot import Snapshot, Snapshotter
 from poefire.store import Store
-from poefire.tracker import NoticeKind, Run, RunNotice, SafeZoneEntered
+from poefire.tracker import NoticeKind, Run, RunNotice, RunStatus, SafeZoneEntered, Segment
 from poefire.zones import ZoneKind
 
 type Json = dict[str, Any]
@@ -203,8 +207,7 @@ def test_resolves_tabs_folders_and_special_sections() -> None:
         ("t2", None),
         ("t4", None),  # folder expanded to its tabs, fetched directly
         ("m16", "m0"),  # special tab sections fetched as substashes
-        ("m17", "m0"),  # map tab: tier 16 and 17, unique and special maps only
-        ("mu", "m0"),
+        ("m17", "m0"),  # map tab: tier 16 and 17 and special maps only (not unique ones)
         ("ms", "m0"),
     ]
     s.resolve_tabs()
@@ -228,7 +231,7 @@ def test_tab_names_never_fall_back_to_the_tab_id() -> None:
     assert s.take().complete
     assert s.tab_names() == {
         "inventory": "Inventory", "a1b2c3": "Tab 5", "d4e5f6": "Currency",
-        "m0": "Maps", "s1": "Maps / Tier 16", "s2": "Maps / Unique",
+        "m0": "Maps", "s1": "Maps / Tier 16", "s2": "Unique",  # unique maps: not read
         "o9": "Other",  # unwatched tabs are named too
     }  # fmt: skip
 
@@ -261,17 +264,82 @@ def test_character_in_other_league_is_an_error() -> None:
     assert not snap.complete and "Settlers" in (snap.error or "")
 
 
+def test_unique_tabs_and_sections_are_never_read() -> None:
+    """Uniques are never counted: the map tab's unique sections and unique tabs cost nothing."""
+    api = FakeApi()
+    api.tabs.append({"id": "u0", "name": "Uniques", "type": "UniqueStash", "children": [
+        {"id": "u1", "name": "Flasks", "type": "UniqueStash"}]})  # fmt: skip
+    s = make_snapshotter(api, ["Maps", "Uniques"])
+    assert [r.id for r in s.resolve_tabs()] == ["m16", "m17", "ms"]
+    assert s.tab_requests() == 3
+
+
+def test_reading_tabs_stops_when_told() -> None:
+    api = FakeApi()
+    s = make_snapshotter(api, ["Dump", "Currency"], character="Me")
+    asked: list[int] = []
+
+    def keep_going() -> bool:
+        asked.append(1)
+        return len(asked) < 3  # yes before the tab list and the first tab, no before the next
+
+    assert s.read_tabs(keep_going) is None
+    assert [c for c in api.calls if c[0] == "get_stash"] == [("get_stash", "t1")]
+
+
+def test_the_tab_list_is_read_again_after_a_while() -> None:
+    from poefire.loot import snapshot as sn
+
+    api = FakeApi()
+    clock = [0.0]
+    s = Snapshotter(api, "Settlers", ["Dump", "Maps"], "Me", monotonic=lambda: clock[0])
+    s.resolve_tabs()
+    assert s.tab_requests() == 4  # Dump and Maps' 3 sections (tier 16, 17, special)
+    clock[0] = sn.TAB_LIST_EVERY
+    assert s.tab_requests() == 5  # and the tab list
+    s.resolve_tabs()
+    assert api.calls.count(("list_stashes", "Settlers")) == 2
+
+
+def test_retryable() -> None:
+    from poefire.api.client import ApiError
+    from poefire.api.session import LeagueError, SessionError, SessionExpiredError
+    from poefire.loot.snapshot import SnapshotError, retryable
+
+    assert retryable(SessionError("rate limited; retry after 30s"))
+    assert retryable(RuntimeError("boom")) and retryable(ApiError(503, "busy"))
+    assert retryable(ApiError(429, "slow down"))
+    assert not retryable(SessionExpiredError("expired")) and not retryable(ApiError(404, "no"))
+    assert not retryable(LeagueError("X", "no")) and not retryable(SnapshotError("other league"))
+
+
 # --- recorder ---
 
 
 class ScriptedSnapshotter:
-    """Returns pre-baked snapshots in order."""
+    """Returns pre-baked snapshots in order (their items, for an inventory read)."""
 
     def __init__(self, snaps: list[Snapshot]) -> None:
         self.snaps = snaps
+        self.wanted: list[str] = []
 
-    def take(self) -> Snapshot:
+    def clock(self) -> datetime:
+        return self.snaps[0].taken_at if self.snaps else T
+
+    def take(self, scope: str = "full") -> Snapshot:
         return self.snaps.pop(0)
+
+    def read_inventory(self) -> list[ItemEntry]:
+        s = self.snaps.pop(0)
+        if not s.complete:
+            raise RuntimeError(s.error or "failed")
+        return s.items
+
+    def read_tabs(self, keep_going: Callable[[], bool] | None = None) -> list[ItemEntry]:
+        return []
+
+    def tab_requests(self) -> int:
+        return 0
 
     def tab_names(self) -> dict[str, str]:
         return {"inventory": "Inventory"}
@@ -280,10 +348,9 @@ class ScriptedSnapshotter:
 T = datetime(2024, 7, 27, 20, 0)
 
 
-def snap(minute: int, items: list[Json], complete: bool = True) -> Snapshot:
-    return Snapshot(
-        T + timedelta(minutes=minute), entries(items), complete, None if complete else "x"
-    )
+def snap(minute: int, items: list[Json], complete: bool = True, scope: str = "full") -> Snapshot:
+    return Snapshot(T + timedelta(minutes=minute), entries(items), complete,
+                    None if complete else "x", scope)  # fmt: skip
 
 
 def make_recorder(tmp_path: Path, snaps: list[Snapshot], **kw: Any) -> tuple[LootRecorder, Store]:
@@ -293,73 +360,399 @@ def make_recorder(tmp_path: Path, snaps: list[Snapshot], **kw: Any) -> tuple[Loo
     return rec, Store(db)  # separate connection for assertions, like the real wiring
 
 
-def test_chain_attributes_hideout_and_run_deltas(tmp_path: Path) -> None:
-    c = "Chaos Orb"
-    rec, store = make_recorder(
-        tmp_path,
-        [
-            snap(0, [currency(c, 10), {"id": "map", "typeLine": "Strand Map", "frameType": 0}]),
-            snap(1, [currency(c, 10)]),  # entered map: the map item was used
-            snap(5, [currency(c, 25), currency("Divine Orb", 1, "d")]),  # back in hideout
-            snap(6, [currency(c, 40), currency("Divine Orb", 1, "d")]),  # mid-map dump trip
-        ],
-    )
-    assert rec.record(Trigger.MANUAL).baseline
-    r1 = rec.record(Trigger.RUN_START, "run1")
-    assert r1.kind == "between" and {d.name: d.quantity for d in r1.deltas} == {"Strand Map": -1}
-    rec.record(Trigger.RUN_RETURN, "run1")
-    rec.record(Trigger.RUN_RETURN, "run1")
-    loot = {d.name: d.quantity for d in store.run_loot("run1")}
-    assert loot == {"Chaos Orb": 30, "Divine Orb": 1}
-    assert {d.name: d.quantity for d in store.run_loot("run1", "between")} == {"Strand Map": -1}
-
-
-def test_incomplete_snapshot_is_skipped_in_chain(tmp_path: Path) -> None:
-    c = "Chaos Orb"
-    rec, store = make_recorder(
-        tmp_path,
-        [snap(0, [currency(c, 1)]), snap(1, [], complete=False), snap(2, [currency(c, 5)])],
-    )
-    rec.record(Trigger.MANUAL)
-    failed = rec.record(Trigger.RUN_RETURN, "run1")
-    assert not failed.complete
-    ok = rec.record(Trigger.RUN_RETURN, "run1")
-    assert {d.name: d.quantity for d in ok.deltas} == {c: 4}
-    assert [s["complete"] for s in store.list_snapshots()] == [1, 0, 1]
-
-
-def test_large_gap_starts_new_baseline(tmp_path: Path) -> None:
-    rec, store = make_recorder(
-        tmp_path, [snap(0, [currency("Chaos Orb", 1)]), snap(600, [currency("Chaos Orb", 99)])]
-    )
-    rec.record(Trigger.MANUAL)
-    assert rec.record(Trigger.RUN_RETURN, "run1").baseline
-    assert store.run_loot("run1") == []
-
-
-def test_only_latest_snapshot_items_are_kept(tmp_path: Path) -> None:
-    rec, store = make_recorder(
-        tmp_path, [snap(i, [currency("Chaos Orb", i + 1)]) for i in range(5)]
-    )
-    for _ in range(5):
-        rec.record(Trigger.MANUAL)
-    (n,) = store.conn.execute("SELECT COUNT(DISTINCT snapshot_id) FROM snapshot_items").fetchone()
-    assert n == 2
-
-
 def run(run_id: str = "run1", started: datetime = T) -> Run:
     return Run(run_id, "MapWorldsStrand", "Strand", 83, 1, started)
+
+
+class Clock:
+    """The app's clocks, moved by hand: wall time (as in the log) and monotonic seconds."""
+
+    def __init__(self) -> None:
+        self.t = T
+
+    def now(self) -> datetime:
+        return self.t
+
+    def mono(self) -> float:
+        return (self.t - T).total_seconds()
+
+    def tick(self, seconds: float) -> datetime:
+        self.t += timedelta(seconds=seconds)
+        return self.t
+
+
+class Limits:
+    """The website's rate limits as the recorder asks about them."""
+
+    def __init__(self) -> None:
+        self.wait = 0.0
+        self.room = True
+        self.asked: list[tuple[int, int]] = []
+
+    def rate_limited_for(self) -> float:
+        return self.wait
+
+    def fits(self, n: int, reserve: int = 0) -> bool:
+        self.asked.append((n, reserve))
+        return self.room
+
+
+class Account:
+    """A fake account as the website shows it: the inventory (as the game last saved it) and
+    the watched tabs. `reads` lists what was read; hooks run during a read."""
+
+    def __init__(self, clock: Clock) -> None:
+        self.clock = clock.now  # what a snapshot's time is read from
+        self.api = Limits()
+        self.inventory: list[Json] = []
+        self.tabs: dict[str, list[Json]] = {"dump": []}
+        self.wanted = ["Dump"]
+        self.reads: list[str] = []
+        self.fail: list[Exception] = []  # raised by the next inventory reads
+        self.during_read: Callable[[], None] | None = None
+        self.during_tabs: Callable[[], None] | None = None
+
+    def read_inventory(self) -> list[ItemEntry]:
+        self.reads.append("inventory")
+        if self.during_read is not None:
+            self.during_read()
+        if self.fail:
+            raise self.fail.pop(0)
+        return entries(self.inventory)
+
+    def read_tabs(self, keep_going: Callable[[], bool] | None = None) -> list[ItemEntry] | None:
+        out: list[ItemEntry] = []
+        for tab, items in self.tabs.items():
+            if keep_going is not None and not keep_going():
+                return None
+            self.reads.append(f"tab {tab}")
+            out += entries(items, tab)
+            if self.during_tabs is not None:
+                self.during_tabs()
+        return out
+
+    def take(self, scope: str = "full") -> Snapshot:
+        items = self.read_inventory() + (self.read_tabs() or [] if scope == "full" else [])
+        return Snapshot(self.clock(), items, scope=scope)
+
+    def tab_requests(self) -> int:
+        return len(self.tabs)
+
+    def tab_names(self) -> dict[str, str]:
+        return {"inventory": "Inventory", **{t: t.title() for t in self.tabs}}
+
+
+class Play:
+    """Drives a recorder like the game and the log would."""
+
+    def __init__(self, tmp_path: Path, **kw: Any) -> None:
+        self.clock = Clock()
+        self.account = Account(self.clock)
+        db = tmp_path / "db.sqlite3"
+        self.rec = LootRecorder(self.account, lambda: Store(db), now=self.clock.now,  # type: ignore[arg-type]
+                                monotonic=self.clock.mono, **kw)  # fmt: skip
+        self.store = Store(db)  # separate connection for assertions, like the real wiring
+        self.results: list[LootResult] = []
+        self.rec.handlers.append(self.results.append)
+        self.run: Run | None = None
+        self.seeds = itertools.count(1)
+
+    def load(self) -> None:
+        """An area starts loading: the game saves the character."""
+        self.clock.tick(1)
+        self.rec.on_event(AreaGenerated(self.clock.now(), 83, "MapWorldsStrand", 0))
+        self.clock.tick(2)
+
+    def enter_map(self, run_id: str = "run1") -> None:
+        """Into a new map (a new run), or back into the same one."""
+        self.load()
+        now = self.clock.now()
+        if self.run is not None and self.run.id == run_id:
+            self.run.segments.append(Segment(now))
+            self.rec.on_notice(RunNotice(NoticeKind.RESUMED, copy.deepcopy(self.run)))
+        else:
+            if self.run is not None:
+                self.finish()
+            self.run = Run(run_id, "MapWorldsStrand", "Strand", 83, next(self.seeds), now,
+                           segments=[Segment(now)])  # fmt: skip
+            self.rec.on_notice(RunNotice(NoticeKind.STARTED, copy.deepcopy(self.run)))
+
+    def back_home(self) -> None:
+        assert self.run is not None
+        self.load()
+        now = self.clock.now()
+        start = self.run.segments[-1].start
+        self.run.segments[-1].end = now
+        self.rec.on_notice(SafeZoneEntered(now, "Hideout", ZoneKind.HIDEOUT, self.run.id, True,
+                                           start))  # fmt: skip
+
+    def finish(self) -> None:
+        assert self.run is not None
+        self.run.status, self.run.ended_at = RunStatus.FINISHED, self.run.last_activity
+        self.rec.on_notice(RunNotice(NoticeKind.FINISHED, copy.deepcopy(self.run)))
+        self.run = None
+
+    def settle(self, seconds: float = 5) -> None:
+        """Time passes; the recorder does what's due by then (as its worker thread would)."""
+        self.clock.tick(seconds)
+        while True:
+            with self.rec._cond:
+                due = [r for r in self.rec._pending if r.due <= self.rec.monotonic()]
+                if not due:
+                    return
+                req = min(due, key=lambda r: r.due)
+                self.rec._pending.remove(req)
+                if self.rec._superseded(req):
+                    continue
+            self.rec._handle(req)
+
+    def loot(self, run_id: str = "run1") -> dict[str, int]:
+        return {d.name: d.quantity for d in self.store.run_loot(run_id)}
+
+    def snapshots(self) -> list[tuple[str, int, str]]:
+        return [(s["trigger"], s["complete"], s["scope"]) for s in reversed(
+            self.store.list_snapshots(100))]  # fmt: skip
+
+
+def test_a_map_is_measured_with_two_inventory_reads(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    c = "Chaos Orb"
+    p.account.inventory = [currency(c, 10, "c")]
+    p.account.tabs["dump"] = [currency("Divine Orb", 3, "d")]
+    p.enter_map("run1")
+    p.settle()  # the inventory as you go in; the tabs too: never read yet
+    p.account.inventory = [currency(c, 25, "c"), frag("Xoph's Breachstone", "x")]  # picked up
+    p.clock.tick(120)
+    p.back_home()
+    p.settle()
+    assert p.loot("run1") == {c: 15, "Xoph's Breachstone": 1}
+    assert p.account.reads == ["inventory", "tab dump", "inventory"]
+
+    # in the hideout: everything into the stash, then the next map
+    p.account.tabs["dump"] = [currency("Divine Orb", 3, "d"), currency(c, 25, "c2"),
+                              frag("Xoph's Breachstone", "x")]  # fmt: skip
+    p.account.inventory = []
+    p.enter_map("run2")
+    p.settle()  # the tabs were read minutes ago: the inventory only
+    p.account.inventory = [currency(c, 5, "c3")]
+    p.clock.tick(120)
+    p.back_home()
+    p.settle()
+    assert p.loot("run2") == {c: 5}  # what went into the stash doesn't hide it
+    assert p.account.reads[3:] == ["inventory", "inventory"]
+    assert p.store.runs_with_loot_data(["run1", "run2"]) == {"run1", "run2"}
+    assert p.snapshots() == [
+        ("run_start", 1, "full"),
+        ("run_return", 1, "inventory"),
+        ("run_start", 1, "inventory"),
+        ("run_return", 1, "inventory"),
+    ]
+    assert p.store.run_loot("run2", "between") == []  # hideout activity isn't recorded
+
+
+def test_hideout_trips_add_up(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    c = "Chaos Orb"
+    p.enter_map("run1")
+    p.settle()
+    p.account.inventory = [currency(c, 10, "c")]
+    p.back_home()
+    p.settle()
+    p.account.tabs["dump"] = [currency(c, 10, "c")]  # stashed, and a scroll taken out
+    p.account.inventory = [currency("Portal Scroll", 20, "p")]
+    p.enter_map("run1")  # back into the same map
+    p.settle()
+    p.account.inventory = [currency("Portal Scroll", 19, "p"), currency(c, 4, "c2")]
+    p.back_home()
+    p.settle()
+    assert p.loot("run1") == {c: 14, "Portal Scroll": -1}  # the scroll taken out isn't loot
+    assert [s[0] for s in p.snapshots()] == ["run_start", "run_return", "run_resume", "run_return"]
+
+
+def test_a_read_after_you_moved_on_is_thrown_away(tmp_path: Path) -> None:
+    """Into a side area before the start read: the inventory may already hold loot, so
+    the read isn't made, and the map has no loot data instead of a wrong number."""
+    p = Play(tmp_path)
+    p.enter_map("run1")
+    p.load()  # a side area, before the read was due
+    p.settle()
+    assert p.account.reads == []
+    p.account.inventory = [currency("Chaos Orb", 50, "c")]
+    p.back_home()
+    p.settle()
+    assert p.snapshots() == [("run_start", 0, "inventory"), ("run_return_unpaired", 1, "inventory")]
+    assert p.results[0].error == recorder.ZONE_CHANGED
+    assert p.loot() == {} and p.store.runs_with_loot_data(["run1"]) == set()
+
+
+def test_a_quick_hideout_trip_is_read_as_you_go_back_in(tmp_path: Path) -> None:
+    """In and out of the hideout before your inventory was read: nothing could change in a
+    second there, so the read as you go back in ends the segment before, too."""
+    p = Play(tmp_path)
+    c = "Chaos Orb"
+    p.enter_map("run1")
+    p.settle()
+    p.account.inventory = [currency(c, 10, "c")]
+    p.back_home()
+    p.enter_map("run1")  # a second later, back into the map
+    p.settle()
+    assert p.loot() == {c: 10}
+    p.account.inventory = [currency(c, 15, "c")]
+    p.back_home()
+    p.settle()
+    assert p.loot() == {c: 15}
+    assert [s[:2] for s in p.snapshots()] == [("run_start", 1), ("run_return", 0),
+                                              ("run_return", 1), ("run_resume", 1),
+                                              ("run_return", 1)]  # fmt: skip
+
+
+def test_a_longer_trip_without_a_read_isnt_guessed(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    c = "Chaos Orb"
+    p.enter_map("run1")
+    p.settle()
+    p.account.inventory = [currency(c, 10, "c")]
+    p.account.api.wait = 100.0  # rate limited: the read back home waits
+    p.back_home()
+    p.settle()
+    p.account.inventory = []  # stashed it all
+    p.clock.tick(30)
+    p.enter_map("run1")
+    p.account.api.wait = 0.0
+    p.settle(100)
+    p.account.inventory = [currency(c, 5, "c2")]
+    p.back_home()
+    p.settle()
+    assert p.loot() == {c: 5}  # the first trip's loot isn't known, and isn't made up
+
+
+def test_a_zone_change_during_the_read_spoils_it(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.enter_map("run1")
+    p.account.during_read = p.load  # you go into a side area while it's being read
+    p.settle()
+    assert p.snapshots() == [("run_start", 0, "inventory")]
+
+
+def test_a_failed_read_is_tried_again_in_the_same_zone(tmp_path: Path) -> None:
+    from poefire.api.session import SessionError, SessionExpiredError
+
+    p = Play(tmp_path)
+    p.account.fail = [SessionError("network error on /x"), SessionError("HTTP 503 from /x")]
+    p.enter_map("run1")
+    p.settle()
+    assert p.snapshots() == [] and len(p.account.reads) == 1  # tried again in 5 s
+    p.settle(5)
+    assert len(p.account.reads) == 2
+    p.settle(15)
+    assert p.snapshots() == [("run_start", 1, "full")] and p.account.reads.count("inventory") == 3
+    assert [r.complete for r in p.results] == [True]  # only the outcome is reported
+
+    p.account.fail = [SessionExpiredError("The website rejected your POESESSID")]
+    p.back_home()
+    p.settle()
+    assert p.snapshots()[-1] == ("run_return", 0, "inventory")  # an expired cookie: no retry
+    assert not p.results[-1].complete and "POESESSID" in (p.results[-1].error or "")
+
+
+def test_a_rate_limit_is_waited_out_before_reading(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.account.api.wait = 100.0
+    p.enter_map("run1")
+    p.settle()
+    assert p.account.reads == []  # not sent into the rate limit
+    p.account.api.wait = 0.0
+    p.settle(100)
+    assert p.account.reads[0] == "inventory" and p.snapshots()[0][:2] == ("run_start", 1)
+
+
+def test_the_tabs_are_read_every_30_minutes_while_mapping(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    for i in range(4):  # a map every 10 minutes
+        p.enter_map(f"run{i}")
+        p.settle()
+        p.clock.tick(590)
+        p.back_home()
+        p.settle()
+    starts = [s[2] for s in p.snapshots() if s[0] == "run_start"]
+    assert starts == ["full", "inventory", "inventory", "full"]
+    assert p.account.api.asked == [(1, recorder.STASH_RESERVE)] * 2  # checked before reading
+
+
+def test_the_tabs_wait_for_room_in_the_rate_limits(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.account.api.room = False
+    p.enter_map("run1")
+    p.settle()
+    assert p.account.reads == ["inventory"]
+    p.account.api.room = True
+    p.back_home()
+    p.settle()
+    p.enter_map("run2")  # 5 minutes after: not tried again yet
+    p.settle()
+    assert "tab dump" not in p.account.reads
+    p.clock.tick(recorder.STASH_RETRY)
+    p.back_home()
+    p.settle()
+    p.enter_map("run3")
+    p.settle()
+    assert p.account.reads[-2:] == ["inventory", "tab dump"]
+
+
+def test_reading_the_tabs_stops_when_you_are_back(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.account.tabs = {"dump": [], "currency": [currency("Chaos Orb", 1, "c")]}
+    p.account.inventory = [currency("Chaos Orb", 5, "i")]
+    p.enter_map("run1")
+
+    def back_after_the_first_tab() -> None:
+        p.account.during_tabs = None
+        p.back_home()
+
+    p.account.during_tabs = back_after_the_first_tab
+    p.settle()
+    assert p.account.reads == ["inventory", "tab dump"]  # stopped before the next tab
+    p.account.inventory = [currency("Chaos Orb", 7, "i")]
+    p.settle()
+    assert p.snapshots() == [("run_start", 1, "inventory"), ("run_return", 1, "inventory")]
+    assert p.loot() == {"Chaos Orb": 2}
+    assert p.store.latest_snapshot(scope="full") is None  # nothing half-read is kept
+
+
+def test_the_game_closed_in_a_map(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.enter_map("run1")
+    p.settle()
+    p.account.inventory = [currency("Chaos Orb", 3, "c")]
+    p.clock.tick(60)
+    assert p.run is not None
+    p.run.segments[-1].end = p.clock.now()
+    p.finish()  # "Closing game gracefully": the game saved the character
+    p.settle()
+    assert p.loot() == {"Chaos Orb": 3}
+
+
+def test_a_new_map_from_the_hideout_is_no_closed_game(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.enter_map("run1")
+    p.settle()
+    p.back_home()
+    p.settle()
+    p.enter_map("run2")  # run1 finishes as run2's map is made: nothing more to read for it
+    p.settle()
+    assert [s[0] for s in p.snapshots()] == ["run_start", "run_return", "run_start"]
 
 
 @pytest.mark.parametrize(
     ("notice", "expected"),
     [
         (RunNotice(NoticeKind.STARTED, run()), [(Trigger.RUN_START, "run1")]),
-        (RunNotice(NoticeKind.RESUMED, run()), []),
-        (SafeZoneEntered(T, "Hideout", ZoneKind.HIDEOUT, "run1", True),
+        (RunNotice(NoticeKind.RESUMED, run()), [(Trigger.RUN_RESUME, "run1")]),
+        (SafeZoneEntered(T, "Hideout", ZoneKind.HIDEOUT, "run1", True, T),
          [(Trigger.RUN_RETURN, "run1")]),
         (SafeZoneEntered(T, "Hideout", ZoneKind.HIDEOUT, "run1", False), []),  # from town
         (SafeZoneEntered(T, "Hideout", ZoneKind.HIDEOUT, None, False), []),
+        (RunNotice(NoticeKind.FINISHED, run()), []),  # finished from the hideout
         # catching up on old log lines after a restart: the API can't show the past
         (SafeZoneEntered(T - timedelta(hours=1), "Hideout", ZoneKind.HIDEOUT, "run1", True), []),
         (RunNotice(NoticeKind.STARTED, run(started=T - timedelta(hours=1))), []),
@@ -371,12 +764,6 @@ def test_notices_to_requests(
     rec, _ = make_recorder(tmp_path, [])
     rec.on_notice(notice)
     assert [(r.trigger, r.run_id) for r in rec._pending] == expected
-
-
-def test_run_start_snapshot_can_be_disabled(tmp_path: Path) -> None:
-    rec, _ = make_recorder(tmp_path, [], snapshot_on_run_start=False)
-    rec.on_notice(RunNotice(NoticeKind.STARTED, run()))
-    assert rec._pending == []
 
 
 def test_worker_processes_and_coalesces(tmp_path: Path) -> None:
@@ -392,14 +779,60 @@ def test_worker_processes_and_coalesces(tmp_path: Path) -> None:
             done.set()
 
     rec.handlers.append(handler)
-    rec.request(Trigger.MANUAL, None)
+    rec.request(Trigger.RUN_START, "run1")
     rec.request(Trigger.RUN_RETURN, "run1", delay=0.05)
     rec.request(Trigger.RUN_RETURN, "run1", delay=0.1)  # supersedes the previous one
     rec.start()
     assert done.wait(5)
     rec.stop()
-    assert [r.trigger for r in results] == [Trigger.MANUAL, Trigger.RUN_RETURN]
+    assert [r.trigger for r in results] == [Trigger.RUN_START, Trigger.RUN_RETURN]
     assert {d.name: d.quantity for d in store.run_loot("run1")} == {"Chaos Orb": 2}
+
+
+def test_snapshot_now_counts_the_change_and_keeps_the_map_going(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    c = "Chaos Orb"
+    p.account.inventory = [currency(c, 10, "c")]
+    p.rec.request(Trigger.MANUAL, None)
+    p.settle()
+    assert p.results[-1].baseline and p.results[-1].scope == "full"
+    p.enter_map("run1")
+    p.settle()  # the tabs were read just now: the inventory only
+    p.account.inventory = [currency(c, 12, "c")]
+    p.rec.request(Trigger.MANUAL, None)  # Snapshot now, in the map
+    p.settle()
+    r = p.results[-1]
+    assert r.kind == "manual" and {d.name: d.quantity for d in r.deltas} == {c: 2}  # inventory
+    p.account.inventory = [currency(c, 20, "c")]
+    p.back_home()
+    p.settle()
+    assert p.loot() == {c: 10}  # still measured from the map's start
+
+
+def test_large_gap_starts_new_baseline(tmp_path: Path) -> None:
+    rec, _ = make_recorder(
+        tmp_path, [snap(0, [currency("Chaos Orb", 1)]), snap(600, [currency("Chaos Orb", 99)])]
+    )
+    rec.record(Trigger.MANUAL)
+    assert rec.record(Trigger.MANUAL).baseline
+
+
+def test_only_the_snapshot_items_still_needed_are_kept(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.account.inventory = [currency("Chaos Orb", 1, "c")]
+    p.enter_map("run1")
+    p.settle()  # full: the Overview's holdings
+    for _ in range(3):
+        p.back_home()
+        p.settle()
+        p.enter_map("run1")
+        p.settle()
+    (ids,) = p.store.conn.execute(
+        "SELECT GROUP_CONCAT(DISTINCT snapshot_id) FROM snapshot_items").fetchone()  # fmt: skip
+    kept = sorted(int(i) for i in ids.split(","))
+    full = p.store.latest_snapshot(scope="full", items=False)
+    assert full is not None and kept[0] == full.id  # the holdings
+    assert len(kept) == 3  # and the newest two (one of them the segment start)
 
 
 def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
@@ -408,21 +841,11 @@ def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
     log = tmp_path / "Client.txt"
     log.write_text("")
     db = tmp_path / "db.sqlite3"
-    c = "Chaos Orb"
-    snaps = [
-        snap(0, [currency(c, 5), {"id": "m", "typeLine": "Strand Map", "frameType": 0}]),
-        snap(1, [currency(c, 5)]),  # map entry
-        snap(
-            4,
-            [
-                currency(c, 9),
-                gear("Headhunter", "Leather Belt", "hh"),  # back home
-                frag("Xoph's Breachstone", "xb"),
-            ],
-        ),
-    ]
-    rec = LootRecorder(ScriptedSnapshotter(snaps), lambda: Store(db),  # type: ignore[arg-type]
-                       return_delay=0, now=lambda: T)  # fmt: skip
+    clock = Clock()
+    clock.t = datetime(2024, 7, 27, 20, 0, 40)
+    account = Account(clock)
+    account.inventory = [currency("Chaos Orb", 5, "c")]  # the map is in the map device
+    rec = LootRecorder(account, lambda: Store(db), return_delay=0, now=clock.now)  # type: ignore[arg-type]
     results: list[LootResult] = []
     got = threading.Semaphore(0)
 
@@ -434,11 +857,10 @@ def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
     store = Store(db)
     svc = TrackerService(store, log)
     svc.handlers.append(rec.on_notice)
+    svc.line_observers.append(rec.on_event)
     svc.start()
     rec.start()
     try:
-        rec.request(Trigger.MANUAL, None)  # baseline
-        assert got.acquire(timeout=5)
         prefix = "2024/07/27 20:{} 1 abc [{} Client 1] "
         with open(log, "a") as f:
             f.write(
@@ -448,6 +870,12 @@ def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
             f.write(prefix.format("00:32", "INFO") + ": You have entered Strand.\n")
         svc.poll()
         assert got.acquire(timeout=5)
+        account.inventory = [
+            currency("Chaos Orb", 9, "c"),
+            gear("Headhunter", "Leather Belt", "hh"),
+            frag("Xoph's Breachstone", "xb"),
+        ]
+        clock.t = datetime(2024, 7, 27, 20, 3, 10)
         with open(log, "a") as f:
             f.write(
                 prefix.format("03:00", "DEBUG")
@@ -459,12 +887,29 @@ def test_end_to_end_log_to_run_loot(tmp_path: Path) -> None:
     finally:
         rec.stop()
     (run_row,) = store.list_runs()
-    assert [r.trigger for r in results] == [Trigger.MANUAL, Trigger.RUN_START, Trigger.RUN_RETURN]
+    assert [r.trigger for r in results] == [Trigger.RUN_START, Trigger.RUN_RETURN]
     assert {d.name: d.quantity for d in store.run_loot(run_row.id)} == {
         "Chaos Orb": 4,
         "Xoph's Breachstone": 1,  # the Headhunter is gear: not counted
     }
-    assert {d.name: d.quantity for d in store.run_loot(run_row.id, "between")} == {"Strand Map": -1}
+
+
+def test_segment_triggers_match_the_store() -> None:
+    from poefire.store import SEGMENT_ENDS, SEGMENT_STARTS
+
+    assert (Trigger.RUN_START.value, Trigger.RUN_RESUME.value) == SEGMENT_STARTS
+    assert (Trigger.RUN_RETURN.value, recorder.UNPAIRED) == SEGMENT_ENDS
+
+
+def test_a_settings_change_keeps_the_pending_reads(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.enter_map("run1")
+    db = tmp_path / "db.sqlite3"
+    fresh = LootRecorder(p.account, lambda: Store(db), now=p.clock.now,  # type: ignore[arg-type]
+                         monotonic=p.clock.mono)  # fmt: skip
+    fresh.adopt(p.rec)
+    assert p.rec._pending == [] and [r.trigger for r in fresh._pending] == [Trigger.RUN_START]
+    assert fresh._last_load == p.rec._last_load and fresh._segment == p.rec._segment
 
 
 ICON_BASE = "https://web.poecdn.com/gen/image/"
@@ -509,79 +954,6 @@ def test_is_tracked(raw: Json, tracked: bool) -> None:
     from poefire.loot.items import is_tracked
 
     assert is_tracked(raw) is tracked
-
-
-def test_a_failed_return_snapshot_doesnt_lose_the_map(tmp_path: Path) -> None:
-    """Back from map 1 the snapshot failed (rate limited): the next snapshot, when map 2
-    starts, holds map 1's loot. It goes to map 1, not to "before the run" of map 2."""
-    c = "Chaos Orb"
-    rec, store = make_recorder(tmp_path, [
-        snap(0, [currency(c, 10, "c")]),
-        snap(1, [currency(c, 10, "c")]),  # map 1 starts
-        snap(5, [], complete=False),  # back from map 1: rate limited
-        snap(6, [currency(c, 50, "c")]),  # map 2 starts
-        snap(10, [currency(c, 60, "c")]),  # back from map 2
-    ])  # fmt: skip
-    rec.record(Trigger.MANUAL)
-    rec.record(Trigger.RUN_START, "map1")
-    assert not rec.record(Trigger.RUN_RETURN, "map1").complete
-    rec.record(Trigger.RUN_START, "map2")
-    rec.record(Trigger.RUN_RETURN, "map2")
-    assert {d.name: d.quantity for d in store.run_loot("map1")} == {c: 40}
-    assert store.run_loot("map2", "between") == []
-    assert {d.name: d.quantity for d in store.run_loot("map2")} == {c: 10}
-
-
-def test_hideout_snapshot_rules(tmp_path: Path) -> None:
-    """Map start within a minute of the last snapshot: skipped, unless there was no hideout
-    snapshot for 5 minutes. Staying in the hideout: one every 5 minutes, for 30 minutes."""
-    from poefire.loot import recorder as r
-    from poefire.loot.recorder import _Request
-
-    rec, _ = make_recorder(tmp_path, [])
-    clock = [1000.0]
-    rec.monotonic = lambda: clock[0]
-    start = _Request(Trigger.RUN_START, "m2", 0)
-    assert not rec._skip(start)  # nothing taken yet
-    rec._last_snap = rec._last_hideout = 1000.0  # back from map 1, and a hideout one
-    clock[0] += 40
-    assert rec._skip(start)  # 40 s after the last snapshot
-    clock[0] += 30
-    assert not rec._skip(start)  # 70 s: taken
-    rec._last_hideout = 1000.0 - r.HIDEOUT_EVERY  # no hideout snapshot for 5 min
-    clock[0] = 1010.0
-    assert not rec._skip(start)  # taken even right after the return snapshot
-    assert not rec._skip(_Request(Trigger.RUN_RETURN, "m1", 0))  # never skipped
-
-    rec._last_snap = rec._last_hideout = 1000.0
-    assert rec._hideout_due() is None  # in a map
-    rec._back_at = 1000.0  # back in the hideout
-    assert rec._hideout_due() == 1000.0 + r.HIDEOUT_EVERY
-    rec._last_hideout = 1000.0 + 4 * r.HIDEOUT_EVERY
-    assert rec._hideout_due() == 1000.0 + 5 * r.HIDEOUT_EVERY
-    rec._last_hideout = 1000.0 + r.HIDEOUT_IDLE
-    assert rec._hideout_due() is None  # 30 min in the hideout: stop (AFK)
-    rec.snapshot_on_run_start = False  # hideout snapshots turned off in Settings
-    rec._last_hideout = 1000.0
-    assert rec._hideout_due() is None
-
-
-def test_auto_hideout_snapshot_is_taken(tmp_path: Path) -> None:
-    from poefire.loot import recorder as r
-
-    rec, _ = make_recorder(tmp_path, [snap(0, [currency("Chaos Orb", 1, "c")]),
-                                          snap(6, [currency("Chaos Orb", 3, "c")])])  # fmt: skip
-    clock = [0.0]
-    rec.monotonic = lambda: clock[0]
-    rec.record(Trigger.MANUAL)
-    rec._last_snap = 0.0
-    rec._back_at = 0.0
-    clock[0] = r.HIDEOUT_EVERY
-    req = rec._next()
-    assert req is not None and req.trigger is Trigger.HIDEOUT and req.run_id is None
-    result = rec.record(req.trigger, req.run_id)
-    assert result.kind == "manual"  # hideout activity, counted in no map
-    assert {d.name: d.quantity for d in result.deltas} == {"Chaos Orb": 2}
 
 
 def test_interval_mode_snapshots(tmp_path: Path) -> None:

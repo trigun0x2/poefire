@@ -125,7 +125,7 @@ class OneSnapshot:
     def __init__(self, items: list[ItemEntry]) -> None:
         self.items = items
 
-    def take(self) -> Snapshot:
+    def take(self, scope: str = "full") -> Snapshot:
         return Snapshot(NOW, list(self.items))
 
     def tab_names(self) -> dict[str, str]:

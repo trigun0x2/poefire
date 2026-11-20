@@ -144,12 +144,23 @@ def test_holdings_are_cached_per_snapshot(tmp_path: Path, monkeypatch: pytest.Mo
         cache, b = BookCache(), book()
         first = overview.holdings(s, b, cache=cache)
         assert first["total_chaos"] == 8.0
-        monkeypatch.setattr(s, "latest_snapshot_items", lambda: pytest.fail("not cached"))
+        real = s.latest_snapshot
+
+        def without_items(*args: Any, **kw: Any) -> Any:
+            if kw.get("items", True):
+                pytest.fail("not cached")
+            return real(*args, **kw)
+
+        monkeypatch.setattr(s, "latest_snapshot", without_items)
         assert overview.holdings(s, b, cache=cache) == first
         assert overview.holdings(s, b, ["t1"], cache=cache)["total_chaos"] == 8.0
         monkeypatch.undo()
         s.add_snapshot(Snapshot(T, [item, item]), "manual", None)  # a new snapshot
         assert overview.holdings(s, b, cache=cache)["total_chaos"] == 16.0
+        inv = ItemEntry.from_api({"id": "2", "typeLine": "Orb", "frameType": 5, "stackSize": 1},
+                                 "inventory")  # fmt: skip
+        s.add_snapshot(Snapshot(T, [inv], scope="inventory"), "run_return", "r1")
+        assert overview.holdings(s, b, cache=cache)["total_chaos"] == 16.0  # tabs not read
 
 
 def test_prune_events(tmp_path: Path) -> None:

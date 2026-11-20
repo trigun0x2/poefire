@@ -109,13 +109,15 @@ class RunNotice:
 
 @dataclass(frozen=True)
 class SafeZoneEntered:
-    """Hook for Phase 2: take a stash/inventory snapshot and attribute it to `run_id`."""
+    """A hideout or town was entered: back from `run_id` when `left_run` (the loot snapshot
+    of the segment that started at `segment_start`)."""
 
     ts: datetime
     zone: str
     kind: ZoneKind
     run_id: str | None
     left_run: bool = False  # came straight from the run (not e.g. town -> hideout)
+    segment_start: datetime | None = None  # when you last went into the run (if left_run)
 
 
 type Notice = RunNotice | SafeZoneEntered
@@ -214,7 +216,10 @@ class RunTracker:
                 out.append(self._notice(NoticeKind.PAUSED, run))
             left_run = self.state.in_run and run is not None
             self.state.in_run = False
-            out.append(SafeZoneEntered(e.ts, e.zone, area.kind, run.id if run else None, left_run))
+            # the segment just closed (at this zone's load, or now) is the run's last one
+            seg_start = run.segments[-1].start if left_run and run and run.segments else None
+            out.append(SafeZoneEntered(e.ts, e.zone, area.kind, run.id if run else None, left_run,
+                                       seg_start))  # fmt: skip
         elif run is not None and (self.state.in_run or run.is_instance(area.area_id, area.seed)):
             self._resume(run, e.ts, out)  # back into the run, or a side area of it
         elif area.kind is ZoneKind.MAP:

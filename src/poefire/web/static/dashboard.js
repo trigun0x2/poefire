@@ -35,7 +35,9 @@ function renderStatus() {
   $("rate-banner").hidden = !limited;
   if (limited) {
     $("rate-banner").innerHTML = `<span><b>pathofexile.com is rate-limiting poefire</b> until ${esc(timeOf(l.rate_limited_until))}. ` +
-      "Loot snapshots wait until then: maps you finish meanwhile are counted together when it ends.</span>";
+      (l.mode === "interval"
+        ? "Snapshots wait until then; the next one counts everything since the last.</span>"
+        : "Reads of your inventory wait until then: a map you've left again by then has no loot data.</span>");
   }
   renderSessionBanner(l.session);
   renderLeagueBanners(s);
@@ -407,7 +409,7 @@ async function renderDetail() {
   $("detail-title").textContent = `Run loot · ${d.map_name}`;
   if (!d.loot_tracked) {
     $("detail").innerHTML = `<div class="empty">No loot data for this run. ${
-      status?.loot.enabled ? "A snapshot is taken when you return to your hideout." : esc(status?.loot.reason || "")}</div>`;
+      status?.loot.enabled ? "Your inventory is read as a map starts and when you're back in your hideout; one of those reads is missing (you left again before it could be made, or the website didn't answer)." : esc(status?.loot.reason || "")}</div>`;
     return;
   }
   const before = d.before.items.length

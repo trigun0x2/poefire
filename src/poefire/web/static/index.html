@@ -372,27 +372,24 @@
             <span class="hint" id="set-tabs-age"></span>
           </div>
           <div class="hint" id="set-tabs-cost"></div>
-          <div class="hint">Pick every tab your loot goes into, including the ones Ctrl+click sends items to
-            (currency, fragments…). Items moved to an unwatched tab count as lost.</div>
+          <div class="hint">What the Overview shows you hold. In the 10-minute mode they're also where loot is
+            counted: then pick every tab your loot goes into, including the ones Ctrl+click sends items to
+            (currency, fragments…); items moved to an unwatched tab count as lost.</div>
         </div>
         <label class="field narrow">
           <span>Tracking mode</span>
           <select id="set-loot-mode">
-            <option value="per_map">Per map: snapshots around each map</option>
+            <option value="per_map">Per map: your inventory, read around each map</option>
             <option value="interval">Every 10 minutes: session totals only</option>
           </select>
         </label>
         <div class="hint" id="set-loot-mode-hint"></div>
         <label class="check">
-          <input id="set-run-start" type="checkbox">
-          <span>Also snapshot when a map starts <span class="muted">— keeps hideout trading and crafting out of a map's loot</span></span>
-        </label>
-        <label class="check">
           <input id="set-trade-sales" type="checkbox">
-          <span>Don't count trade sales as loot <span class="muted">— reads your trade history at each snapshot and takes sold items' payments out of the map they show up in. More requests: the trade site rate-limits hard.</span></span>
+          <span>Don't count trade sales as loot <span class="muted">— 10-minute mode only (per map, a payment never comes into your inventory, so it never counts): reads your trade history at each snapshot and takes sold items' payments out of the change they show up in. More requests: the trade site rate-limits hard.</span></span>
         </label>
         <label class="field narrow">
-          <span>Wait before the hideout snapshot (seconds)</span>
+          <span>Wait after a zone change before reading your inventory (seconds)</span>
           <input id="set-delay" type="number" min="0" max="60" step="0.5">
         </label>
         <label class="field">
