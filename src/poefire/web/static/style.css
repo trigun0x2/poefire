@@ -588,5 +588,7 @@ main.interval-mode :is(.current, .detail, .maps-stats, .history, .per-map) { dis
 .shortcut-rows { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 8px; }
 .shortcut-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: center; }
 .shortcut-row.search { grid-template-columns: 150px 160px 1fr auto; }
+.shortcut-row.regex { grid-template-columns: 22px 160px 1fr auto; }
+.shortcut-row .pick { display: flex; justify-content: center; }
 .shortcut-row input { min-width: 0; }
 .shortcut-row .err { grid-column: 1 / -1; }

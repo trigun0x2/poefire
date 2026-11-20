@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
@@ -38,11 +39,19 @@ class SearchStringIn(BaseModel):
     text: str = Field(min_length=1, max_length=250)  # the game's search box takes 250
 
 
+class RegexIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    text: str = Field(min_length=1, max_length=250)
+
+
 class SettingsIn(BaseModel):
     """Partial update: fields left out keep their current value."""
 
     chat_commands: list[ChatCommandIn] | None = None
     search_strings: list[SearchStringIn] | None = None
+    regexes: list[RegexIn] | None = None
+    regex_active: str | None = None  # a name from regexes; "" = none
+    regex_hotkey: str | None = None
 
     log_path: str | None = None  # "" = detect automatically
     account_name: str | None = None
@@ -171,6 +180,9 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
             {"key": s.key, "name": s.name, "text": s.text}
             for s in gameinput.search_strings(cfg.search_strings)
         ],
+        "regexes": [{"name": r.name, "text": r.text} for r in gameinput.saved_regexes(cfg.regexes)],
+        "regex_active": cfg.regex_active,
+        "regex_hotkey": cfg.regex_hotkey,
         "game_hotkeys": rt.game_hotkeys_json(),
         "trade_sales": cfg.trade_sales,
         "loot_mode": cfg.loot_mode,
@@ -231,6 +243,44 @@ def _in_game_shortcuts(rt: AppRuntime, body: SettingsIn, changes: dict[str, Any]
     else:
         for s in gameinput.search_strings(rt.cfg.search_strings):
             key(s.key, f"search {s.name or s.text!r}")
+    _regexes(rt, body, changes, key, one_line)
+
+
+def _regexes(
+    rt: AppRuntime,
+    body: SettingsIn,
+    changes: dict[str, Any],
+    key: Callable[[str, str], str],
+    one_line: Callable[[str, str], str],
+) -> None:
+    """Saved regexes: names one line, unique, without "|"; the active one must be among them."""
+    hk = body.regex_hotkey if body.regex_hotkey is not None else rt.cfg.regex_hotkey
+    spec = key(hk, "regex hotkey")
+    if body.regex_hotkey is not None:
+        changes["regex_hotkey"] = spec
+    if body.regexes is None:
+        names = [r.name for r in gameinput.saved_regexes(rt.cfg.regexes)]
+    else:
+        out, names = [], []
+        for r in body.regexes:
+            name = one_line(r.name, "regex name")
+            if not name:
+                raise SettingsError("regex name is required")
+            if "|" in name:
+                raise SettingsError(f"regex {name!r}: the name can't contain |")
+            if name.casefold() in (n.casefold() for n in names):
+                raise SettingsError(f"regex {name!r}: two regexes have this name")
+            names.append(name)
+            out.append(gameinput.SavedRegex(name, one_line(r.text, f"regex {name!r}")).format())
+        changes["regexes"] = out
+    active = body.regex_active if body.regex_active is not None else rt.cfg.regex_active
+    active = active.strip()
+    if active and active not in names:
+        if body.regex_active is not None:
+            raise SettingsError(f"regex {active!r} isn't saved")
+        active = ""  # the active regex was removed
+    if active != rt.cfg.regex_active:
+        changes["regex_active"] = active
 
 
 def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:

@@ -272,13 +272,18 @@ game gets focus and lets them go when it loses it.
 - **Stash and vendor searches:** with the stash or a vendor open, the hotkey focuses its
   search box (Ctrl+F) and pastes the saved text, e.g. a map-mod regex like `"!ele|!reg"`. Give
   each a name, a hotkey and up to 250 characters.
+- **Regexes:** save as many named regexes as you like and pick one with its radio button; the
+  regex hotkey (Ctrl+Alt+F by default) pastes the picked one into the open stash or vendor
+  search box, the same way. Switch regexes by picking another and saving, no new hotkey needed.
 
 The text goes in by pasting (the clipboard is put back afterwards), never by typing letters:
 if chat didn't open, typed letters would land in the game as skill and panel keys. Hotkeys are
 sent after you let go of the hotkey's own modifiers. All hotkeys must differ from each other
 and from the campaign and overlay hotkeys; a letter or digit needs a modifier. In
 config.toml: `chat_commands = ["F5|/hideout", ...]` (hotkey | command) and
-`search_strings = ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text).
+`search_strings = ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text);
+`regexes = ["Bad maps|!ele|!reg"]` (name | text), `regex_active = "Bad maps"` and
+`regex_hotkey = "Ctrl+Alt+F"`.
 
 ## Build snapshots
 

@@ -17,6 +17,8 @@ like F5 still refreshes your browser when you're not playing.
 Config (config.toml), one entry per line: `chat_commands = ["F5|/hideout", "F9|/exit",
 "|/kingsmarch"]` (hotkey | command; an empty hotkey = off) and `search_strings =
 ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text; the text may contain "|").
+Saved regexes share one hotkey: `regexes = ["Bad maps|!ele|!reg"]` (name | text),
+`regex_active = "Bad maps"` picks the one `regex_hotkey` pastes into the search box.
 """
 
 from __future__ import annotations
@@ -75,6 +77,28 @@ class SearchString:
 
     def format(self) -> str:
         return f"{self.key}|{self.name}|{self.text}"
+
+
+@dataclass(frozen=True)
+class SavedRegex:
+    name: str  # unique, no "|"
+    text: str  # what goes in the search box (may contain "|")
+
+    @classmethod
+    def parse(cls, entry: str) -> SavedRegex:
+        name, _, text = entry.partition("|")
+        return cls(name.strip(), text)
+
+    def format(self) -> str:
+        return f"{self.name}|{self.text}"
+
+
+def saved_regexes(entries: Iterable[str]) -> list[SavedRegex]:
+    return [r for r in map(SavedRegex.parse, entries) if r.name and r.text]
+
+
+def active_regex(entries: Iterable[str], active: str) -> SavedRegex | None:
+    return next((r for r in saved_regexes(entries) if active and r.name == active), None)
 
 
 def chat_commands(entries: Iterable[str]) -> list[ChatCommand]:

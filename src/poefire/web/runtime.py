@@ -23,7 +23,13 @@ from poefire.api.session import SessionStore
 from poefire.builds import BuildWatcher
 from poefire.campaign import CampaignTracker
 from poefire.config import Config
-from poefire.gameinput import GameHotkeys, GameInput, chat_commands, search_strings
+from poefire.gameinput import (
+    GameHotkeys,
+    GameInput,
+    active_regex,
+    chat_commands,
+    search_strings,
+)
 from poefire.hotkey import GlobalHotkey, HotkeyError, beep, normalize
 from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.loot import sales
@@ -65,6 +71,7 @@ HOTKEY_FIELDS = {"campaign": "campaign_hotkey", "overlay": "overlay_toggle_hotke
                  "overlay_move": "overlay_move_hotkey"}  # fmt: skip
 HOTKEY_LABELS = {"campaign": "the campaign timer", "overlay": "the overlay toggle",
                  "overlay_move": "moving the overlay"}  # fmt: skip
+REGEX_ENTRY = "regex"  # the regex hotkey's key in game_hotkey_errors
 EXIT_GRACE = 15  # seconds the app gets to close before an update force-exits it
 
 
@@ -290,6 +297,8 @@ class AppRuntime:
         if self._started and (
             cfg.chat_commands != old.chat_commands
             or cfg.search_strings != old.search_strings
+            or (cfg.regexes, cfg.regex_active, cfg.regex_hotkey)
+            != (old.regexes, old.regex_active, old.regex_hotkey)
             or any(getattr(cfg, f) != getattr(old, f) for f in HOTKEY_FIELDS.values())
         ):
             self._build_game_hotkeys()
@@ -608,6 +617,8 @@ class AppRuntime:
             *((s.format(), s.key, self._search_action(s.text))
               for s in search_strings(self.cfg.search_strings)),
         ]  # fmt: skip
+        if regex := active_regex(self.cfg.regexes, self.cfg.regex_active):
+            actions.append((REGEX_ENTRY, self.cfg.regex_hotkey, self._search_action(regex.text)))
         for entry, key, action in actions:
             if not key:
                 continue

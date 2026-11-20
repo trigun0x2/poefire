@@ -193,3 +193,64 @@ def test_windows_backend_clipboard_round_trip() -> None:  # runs in CI's Windows
             b.set_clipboard(old)
     assert b.game_focused() is False  # no game on the CI runner
     assert b.key_down(gi.VK_CONTROL) is False
+
+
+def test_saved_regexes() -> None:
+    r = gi.SavedRegex.parse(" Bad maps |!ele|!reg")
+    assert r == gi.SavedRegex("Bad maps", "!ele|!reg") and gi.SavedRegex.parse(r.format()) == r
+    entries = ["Bad maps|!ele|!reg", "|nameless", "Empty|", "Rares|rare"]
+    assert [x.name for x in gi.saved_regexes(entries)] == ["Bad maps", "Rares"]
+    assert gi.active_regex(entries, "Rares") == gi.SavedRegex("Rares", "rare")
+    assert gi.active_regex(entries, "") is None and gi.active_regex(entries, "Gone") is None
+
+
+def test_settings_save_regexes_and_bind_the_active_one(tmp_path: Path) -> None:
+    from test_web import OfflineNinja
+
+    from poefire.pricing.service import PriceService
+    from poefire.store import Store
+    from poefire.web.app import create_app
+    from poefire.web.runtime import AppRuntime
+
+    db = tmp_path / "db"
+    rt = AppRuntime(Config(db_path=db, league="Keepers"),
+                    PriceService(OfflineNinja(), lambda: Store(db)), recorder=None,
+                    config_path=tmp_path / "config.toml")  # fmt: skip
+    client = TestClient(create_app(rt))
+    client.headers["host"] = "127.0.0.1:8460"
+    s = client.get("/api/settings").json()
+    assert s["regexes"] == [] and s["regex_active"] == "" and s["regex_hotkey"] == "Ctrl+Alt+F"
+
+    def post(**body: Any) -> Any:
+        return client.post("/api/settings", headers={"X-Poefire": "1"}, json=body)
+
+    two = [{"name": "Bad maps", "text": "!ele|!reg"}, {"name": "Rares", "text": "rare"}]
+    r = post(regexes=two, regex_active="Rares", regex_hotkey="ctrl+alt+g")
+    assert r.status_code == 200, r.text
+    assert rt.cfg.regexes == ["Bad maps|!ele|!reg", "Rares|rare"]
+    assert (rt.cfg.regex_active, rt.cfg.regex_hotkey) == ("Rares", "Ctrl+Alt+G")
+    assert client.get("/api/settings").json()["regexes"] == two
+
+    rt.game_input = sender(FakeGame(focused=False))  # nothing gets registered with Windows
+    rt._build_game_hotkeys()
+    assert rt.game_hotkeys is not None
+    rt.game_hotkeys.stop()
+    game = FakeGame()
+    rt.game_input = sender(game)  # the binding sends through the runtime's current sender
+    rt.game_hotkeys.bindings["Ctrl+Alt+G"]()
+    assert game.pasted == ["rare"]  # the active regex, into the search box
+
+    assert post(regexes=two[:1]).status_code == 200
+    assert rt.cfg.regex_active == ""  # the active one was removed
+    bads: list[tuple[dict[str, Any], str]] = [
+        ({"regexes": [two[0], {"name": "bad MAPS", "text": "x"}]}, "two regexes"),
+        ({"regexes": [{"name": "a|b", "text": "x"}]}, "can't contain"),
+        ({"regex_active": "Nope"}, "isn't saved"),
+        ({"regex_hotkey": "Ctrl+Alt+R"}, "already used"),  # the campaign hotkey
+        ({"search_strings": [{"key": "Ctrl+Alt+G", "name": "x", "text": "y"}],
+          "regex_hotkey": "Ctrl+Alt+G"}, "already used"),
+    ]  # fmt: skip
+    for bad, why in bads:
+        r = post(**bad)
+        assert r.status_code == 400 and why in r.text, (bad, r.text)
+    rt.stop()

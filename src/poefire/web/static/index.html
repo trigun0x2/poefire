@@ -445,6 +445,19 @@
         <div class="section-label">Stash and vendor searches <span class="muted">— e.g. a map-mod regex; the stash or vendor window must be open</span></div>
         <div class="shortcut-rows" id="set-search-rows"></div>
         <button type="button" class="btn small" id="set-search-add">Add search</button>
+        <div id="set-regex">
+          <div class="section-label">Regexes <span class="muted">— save several and pick the one the regex hotkey pastes into the open stash or vendor search</span></div>
+          <label class="field narrow">
+            <span>Regex hotkey</span>
+            <div class="row" style="margin-top:0">
+              <input id="set-regex-hotkey" class="hk" type="text" readonly placeholder="Click, then press keys" aria-describedby="set-regex-status">
+              <button type="button" class="btn" id="set-regex-hotkey-clear">Turn off</button>
+            </div>
+          </label>
+          <div class="hint" id="set-regex-status"></div>
+          <div class="shortcut-rows" id="set-regex-rows"></div>
+          <button type="button" class="btn small" id="set-regex-add">Add regex</button>
+        </div>
         <div class="hint" id="set-shortcuts-status"></div>
       </section>
 

@@ -68,6 +68,8 @@ async function loadSettings() {
   $("set-build-snapshots").checked = s.build_snapshots;
   $("set-build-stale").value = String(s.build_stale_hours ?? 24);
   renderShortcuts(s.chat_commands || [], s.search_strings || []);
+  $("set-regex-hotkey").value = s.regex_hotkey || "";
+  renderRegexes(s.regexes || [], s.regex_active || "");
   renderHotkeyStatus();
   $("set-update-channel").value = s.update_channel;
   $("set-delay").value = s.snapshot_delay;
@@ -243,6 +245,10 @@ function settingsBody() {
     search_strings: [...$("set-search-rows").querySelectorAll(".shortcut-row")].map((r) => ({
       key: r.querySelector(".hk").value, name: r.querySelector(".name").value.trim(), text: r.querySelector(".text").value,
     })).filter((x) => x.text.trim()),
+    regexes: regexRows().map((r) => ({ name: r.querySelector(".name").value.trim(), text: r.querySelector(".text").value }))
+      .filter((x) => x.text.trim()),
+    regex_active: activeRegexName(),
+    regex_hotkey: $("set-regex-hotkey").value,
     log_path: $("set-log").value,
     account_name: $("set-account").value,
     league: $("set-league").value.trim(),
@@ -283,7 +289,9 @@ const SETTING_FIELDS = {
   overlay_move_hotkey: ["set-overlay-move", "Overlay move hotkey"],
   build_snapshots: ["set-build-snapshots", "Build snapshots"],
   build_stale_hours: ["set-build-stale", "Stale-level snapshots"],
-  chat_commands: ["set-chat-rows", "Chat commands"], search_strings: ["set-search-rows", "Searches"], update_channel: ["set-update-channel", "Update channel"],
+  chat_commands: ["set-chat-rows", "Chat commands"], search_strings: ["set-search-rows", "Searches"],
+  regexes: ["set-regex-rows", "Regexes"], regex_active: ["set-regex-rows", "Active regex"],
+  regex_hotkey: ["set-regex-hotkey", "Regex hotkey"], update_channel: ["set-update-channel", "Update channel"],
 };
 
 function sameSetting(a, b) {
@@ -534,11 +542,8 @@ function renderShortcuts(chat, searches) {
     : gh?.last ? `Last sent: ${gh.last}` : "";
 }
 
-for (const [id, kind] of [["set-chat-rows", "chat"], ["set-search-rows", "search"]]) {
-  const box = $(id);
-  box.addEventListener("click", (e) => {
-    if (e.target.closest(".remove")) { e.target.closest(".shortcut-row").remove(); renderDirty(); }
-  });
+/** Click a `.hk` input inside `box`, then press keys (Esc cancels, Backspace/Delete clears). */
+function captureHotkeys(box, changed) {
   box.addEventListener("focusin", (e) => e.target.classList.contains("hk") && e.target.classList.add("capturing"));
   box.addEventListener("focusout", (e) => e.target.classList.remove("capturing"));
   box.addEventListener("keydown", (e) => {
@@ -547,15 +552,82 @@ for (const [id, kind] of [["set-chat-rows", "chat"], ["set-search-rows", "search
     e.preventDefault();
     if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
     if (e.key === "Escape") { input.blur(); return; }
-    if (e.key === "Backspace" || e.key === "Delete") { input.value = ""; renderDirty(); return; }
+    if (e.key === "Backspace" || e.key === "Delete") { input.value = ""; changed(); return; }
     const key = keyName(e);
     if (!key) return;
     const mods = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Win"].filter(Boolean);
     input.value = [...mods, key].join("+");
-    renderDirty();
+    changed();
   });
+}
+
+for (const [id, kind] of [["set-chat-rows", "chat"], ["set-search-rows", "search"]]) {
+  const box = $(id);
+  box.addEventListener("click", (e) => {
+    if (e.target.closest(".remove")) { e.target.closest(".shortcut-row").remove(); renderDirty(); }
+  });
+  captureHotkeys(box, renderDirty);
   $(kind === "chat" ? "set-chat-add" : "set-search-add").addEventListener("click", () => {
     box.append(shortcutRow(kind, { key: "", name: "", text: "" }));
     box.lastElementChild.querySelector(kind === "chat" ? ".text" : ".name").focus();
+  });
+}
+
+// --- saved regexes: several, one hotkey; the picked one is what the hotkey pastes ---
+
+function regexRows() { return [...$("set-regex-rows").querySelectorAll(".shortcut-row")]; }
+
+function activeRegexName() {
+  const row = regexRows().find((r) => r.querySelector(".pick input").checked);
+  return row ? row.querySelector(".name").value.trim() : "";
+}
+
+function regexRow(x, active) {
+  const row = document.createElement("div");
+  row.className = "shortcut-row regex";
+  row.innerHTML = `<label class="pick" title="Use this regex on the hotkey"><input type="radio" name="set-regex-active" aria-label="Use this regex"${active ? " checked" : ""}></label>` +
+    `<input class="name" type="text" placeholder="Name" value="${esc(x.name || "")}" maxlength="60">` +
+    `<input class="text" type="text" spellcheck="false" placeholder="regex, e.g. !ele|!reg" value="${esc(x.text || "")}" maxlength="250">` +
+    '<button type="button" class="btn link danger remove">Remove</button>';
+  return row;
+}
+
+function renderRegexes(list, active) {
+  $("set-regex-rows").replaceChildren(...list.map((x) => regexRow(x, x.name === active)));
+  renderRegexStatus();
+}
+
+function renderRegexStatus() {
+  const el = $("set-regex-status");
+  const key = $("set-regex-hotkey").value;
+  const name = activeRegexName();
+  const err = settings?.game_hotkeys?.errors?.regex;
+  const saved = settings && key === (settings.regex_hotkey || "") && name === (settings.regex_active || "");
+  let text = "", cls = "hint";
+  if (!key) text = "Off.";
+  else if (!regexRows().length) text = "Add a regex, then pick it.";
+  else if (!name) { text = "Pick the regex the hotkey pastes."; cls = "hint warn"; }
+  else if (!saved) text = "Save to apply.";
+  else if (err) { text = `✗ ${err}`; cls = "hint bad"; }
+  else text = `${key} pastes “${name}”.`;
+  el.className = cls;
+  el.textContent = text;
+}
+
+{
+  const box = $("set-regex");
+  const changed = () => { renderRegexStatus(); renderDirty(); };
+  captureHotkeys(box, changed);
+  $("set-regex-hotkey-clear").addEventListener("click", () => { $("set-regex-hotkey").value = ""; changed(); });
+  $("set-regex-rows").addEventListener("click", (e) => {
+    if (e.target.closest(".remove")) { e.target.closest(".shortcut-row").remove(); changed(); }
+  });
+  $("set-regex-rows").addEventListener("input", changed);
+  $("set-regex-rows").addEventListener("change", changed);
+  $("set-regex-add").addEventListener("click", () => {
+    const first = !regexRows().some((r) => r.querySelector(".pick input").checked);
+    $("set-regex-rows").append(regexRow({ name: "", text: "" }, first));
+    $("set-regex-rows").lastElementChild.querySelector(".name").focus();
+    changed();
   });
 }
