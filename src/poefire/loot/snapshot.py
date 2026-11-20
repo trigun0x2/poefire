@@ -17,14 +17,15 @@ log = logging.getLogger(__name__)
 SECTIONED_TAB_TYPES = frozenset({"MapStash", "UniqueStash"})
 
 
-# Of the map tab, only these sections are watched: tier 16 maps (originator maps included),
-# unique maps and the special maps. Lower tiers aren't counted (or fetched).
-MAP_TIER_KEPT = 16
+# Of the map tab, only these sections are watched: tier 16 (originator maps included) and
+# tier 17 maps, and the sections that aren't a tier (unique, special, nightmare...). Lower
+# tiers aren't counted (or fetched).
+MAP_MIN_TIER = 16
 
 
 def is_kept_map_section(section: Json) -> bool:
     m = re.fullmatch(r"Tier (\d+)", tab_display_name(section))
-    return m is None or int(m.group(1)) == MAP_TIER_KEPT
+    return m is None or int(m.group(1)) >= MAP_MIN_TIER
 
 
 class AccountApi(Protocol):

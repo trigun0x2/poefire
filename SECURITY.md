@@ -43,7 +43,7 @@ there.
 
 | Host | What for |
 | --- | --- |
-| `www.pathofexile.com`, `api.pathofexile.com` | your characters, stash tabs and trade sales, with your POESESSID or OAuth login |
+| `www.pathofexile.com`, `api.pathofexile.com` | your characters, stash tabs and trade sales, with your POESESSID or OAuth login; trade-site searches when you price check an item (Ctrl+D) |
 | `poe.ninja` | item prices |
 | `www.poewiki.net` | which game patch a campaign run was on |
 | `www.definitivguide.com` | CyclonDefinitiv's zone layout guides |
