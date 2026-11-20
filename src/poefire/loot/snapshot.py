@@ -17,6 +17,16 @@ log = logging.getLogger(__name__)
 SECTIONED_TAB_TYPES = frozenset({"MapStash", "UniqueStash"})
 
 
+# Of the map tab, only these sections are watched: tier 16 maps (originator maps included),
+# unique maps and the special maps. Lower tiers aren't counted (or fetched).
+MAP_TIER_KEPT = 16
+
+
+def is_kept_map_section(section: Json) -> bool:
+    m = re.fullmatch(r"Tier (\d+)", tab_display_name(section))
+    return m is None or int(m.group(1)) == MAP_TIER_KEPT
+
+
 class AccountApi(Protocol):
     def list_characters(self) -> list[Json]: ...
     def get_character(self, name: str) -> Json: ...
@@ -153,6 +163,8 @@ class Snapshotter:
                 # Folder -> its tabs; special tab (map/unique...) -> its sections only, so
                 # nothing is fetched (and counted) twice.
                 for child in children:
+                    if tab.get("type") == "MapStash" and not is_kept_map_section(child):
+                        continue
                     add(child, None if tab.get("type") == "Folder" else tab)
                 return
             if tab["id"] in seen:

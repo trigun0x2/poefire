@@ -175,7 +175,11 @@ inventory into a watched tab nets to zero.
 - Watch every tab your loot lands in, including ones that Ctrl+click affinities send it to.
   Moving an item into an unwatched tab counts as losing it.
 - Every watched tab costs one API request per snapshot. Special tabs (map, unique) cost one
-  request per section.
+  request per section. Of the map tab, only the Tier 16 (originator maps included), Unique and
+  Special sections are watched; lower tiers aren't counted. The Overview shows a tab's
+  sections as one chip (e.g. "Maps").
+- Map prices from poe.ninja with fewer than 10 listings are left out (a few sellers' asking
+  prices); a blighted map without its own price gets the cheapest blighted map of its tier.
 - The API shows current state only. Map runs replayed from the log after a restart get no
   snapshots, and a snapshot more than 2 hours after the previous one starts a fresh baseline.
 - A failed snapshot (rate limit, network) is skipped. The next good snapshot then covers both

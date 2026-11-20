@@ -61,7 +61,7 @@ PRICE_SOURCES: tuple[tuple[str, str], ...] = (
 type Json = dict[str, Any]
 
 _ITEM_FIELDS = ("name", "baseType", "chaosValue", "divineValue", "mapTier", "gemLevel",
-                "gemQuality", "corrupted", "links", "variant", "icon")  # fmt: skip
+                "gemQuality", "corrupted", "links", "variant", "icon", "listingCount")  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -76,6 +76,7 @@ class PriceLine:
     links: int | None = None
     variant: str | None = None
     icon: str | None = None
+    listings: int | None = None  # poe.ninja's listingCount: how many are for sale
 
     def to_json(self) -> Json:
         # Leave out what's unset. Not "falsy": 0 (a price of 0c, quality 0) is a value, and
@@ -177,6 +178,7 @@ class NinjaClient:
                         links=d["links"] or None,
                         variant=d["variant"] or None,
                         icon=d["icon"] or None,
+                        listings=d["listingCount"] if isinstance(d["listingCount"], int) else None,
                     )
                 )
             return out

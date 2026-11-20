@@ -319,7 +319,7 @@ function renderTabsCost() {
   const interval = $("set-loot-mode").value === "interval";
   const perMap = $("set-run-start").checked ? 2 : 1;
   const extra = [
-    sectioned ? `+1 per section of the ${sectioned === 1 ? "map/unique tab" : `${sectioned} map/unique tabs`}` : "",
+    sectioned ? `+1 per section of the ${sectioned === 1 ? "map/unique tab" : `${sectioned} map/unique tabs`} (map tab: Tier 16, Unique and Special only)` : "",
     folders ? `+1 per tab in the ${folders === 1 ? "folder" : `${folders} folders`}` : "",
   ].filter(Boolean).join(", ");
   const el = $("set-tabs-cost");

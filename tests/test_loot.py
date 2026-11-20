@@ -151,9 +151,17 @@ class FakeApi:
             ]},
             {"id": "m0", "name": "Maps", "type": "MapStash", "children": [
                 {"id": "m16", "name": "Tier 16", "type": "MapStash", "parent": "m0"},
+                {"id": "m15", "name": "", "type": "MapStash",
+                 "metadata": {"map": {"section": "tier15"}}},  # not watched
+                {"id": "mu", "name": "", "type": "MapStash",
+                 "metadata": {"map": {"section": "unique"}}},
+                {"id": "ms", "name": "", "type": "MapStash",
+                 "metadata": {"map": {"section": "special"}}},
             ]},
         ]  # fmt: skip
-        self.contents: dict[str, list[Json]] = {k: [] for k in ("t1", "t2", "t3", "t4", "m16")}
+        self.contents: dict[str, list[Json]] = {
+            k: [] for k in ("t1", "t2", "t3", "t4", "m16", "mu", "ms")
+        }
         self.calls: list[tuple[str, ...]] = []
         self.fail_on: str | None = None
 
@@ -193,6 +201,8 @@ def test_resolves_tabs_folders_and_special_sections() -> None:
         ("t2", None),
         ("t4", None),  # folder expanded to its tabs, fetched directly
         ("m16", "m0"),  # special tab sections fetched as substashes
+        ("mu", "m0"),  # map tab: tier 16, unique and special maps only
+        ("ms", "m0"),
     ]
     s.resolve_tabs()
     assert api.calls.count(("list_stashes", "Settlers")) == 1  # cached

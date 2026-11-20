@@ -200,3 +200,19 @@ def test_window_controls(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_window_api_exposes_only_controls() -> None:
     public = {n for n in dir(WindowControls) if not n.startswith("_")}
     assert public == {"minimize", "is_maximized", "toggle_maximize", "resize", "close"}
+
+
+def test_map_tab_sections_are_one_maps_chip(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    client, _, db = env
+    items = [stack("Divine Orb", 1, "m16"), stack("Divine Orb", 1, "mu"),
+             stack("Exalted Orb", 1, "tabB")]  # fmt: skip
+    with Store(db) as s, s.transaction():
+        s.add_snapshot(Snapshot(NOW, items), "manual", None)
+        s.set_json(TAB_NAMES_KEY, {"m16": "Maps / Tier 16", "mu": "Maps / Unique",
+                                   "tabB": "Dump"})  # fmt: skip
+    d = client.get("/api/overview/items").json()
+    assert [(t["id"], t["name"], t["chaos"]) for t in d["tabs"]] == [
+        ("m16,mu", "Maps", 400.0), ("tabB", "Dump", 10.0)]  # fmt: skip
+    assert d["items"][0]["tabs"] == ["Maps"]
+    only = client.get("/api/overview/items?tabs=m16%2Cmu").json()
+    assert only["total_chaos"] == 400.0

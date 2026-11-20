@@ -306,6 +306,27 @@ def test_blighted_maps_are_priced_per_tier() -> None:
     assert m("Blighted Strand Map", 10) is None  # no price for that tier
 
 
+def test_blighted_maps_per_map_and_thin_map_prices_left_out() -> None:
+    b = PriceBook([
+        ("item", "BlightedMap", [
+            PriceLine("Blighted Strand Map", 12.0, map_tier=16, listings=40),
+            PriceLine("Blighted Beach Map", 5.0, map_tier=16, listings=80),
+            PriceLine("Blighted Ashen Wood Map", 30056.0, map_tier=16, listings=7),  # 1 seller
+        ]),
+        ("item", "UniqueMap", [PriceLine("Mobilised Mire", 542152.0, map_tier=17, listings=2,
+                                         base_type="Burial Chambers Map")]),
+    ])  # fmt: skip
+
+    def m(type_line: str, frame: int = 0, name: str = "") -> float | None:
+        q = b.price({"name": name, "typeLine": type_line, "baseType": type_line, "frameType": frame,
+                     "properties": [{"name": "Map Tier", "values": [["16", 0]]}]})  # fmt: skip
+        return q.chaos_each if q else None
+
+    assert m("Blighted Strand Map") == 12.0  # its own price
+    assert m("Blighted Ashen Wood Map") == 5.0  # thin: the tier's cheapest instead
+    assert m("Burial Chambers Map", 3, "Mobilised Mire") is None
+
+
 def test_price_sources() -> None:
     from poefire.pricing.ninja import PRICE_SOURCES
 

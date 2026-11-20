@@ -103,7 +103,9 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
     saved: dict[str, str] = store.get_json(TAB_NAMES_KEY) or {}
 
     def name_of(src: str) -> str:
-        return saved.get(src) or ("Inventory" if src == "inventory" else "Unnamed tab")
+        """A tab's name; a section's (e.g. "Maps / Tier 16") is its tab's ("Maps")."""
+        name = saved.get(src) or ("Inventory" if src == "inventory" else "Unnamed tab")
+        return name.split(" / ", 1)[0]
 
     cpd = book.chaos_per_divine
     if latest is None:
@@ -111,15 +113,21 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
                 "total_divine": None, "chaos_per_divine": cpd}  # fmt: skip
     taken_at, entries, by_source, tab_values, held_all = latest
 
-    # per-source totals for the tab filter chips
-    order = sorted(tab_values, key=lambda src: (src != "inventory", -tab_values[src]))
-    tab_list = [
-        {"id": src, "name": name_of(src), "chaos": round(tab_values[src], 1),
-         "items": len(by_source[src])}
-        for src in order
+    # per-tab totals for the tab filter chips; a tab's sections (map tab: Tier 16, Unique,
+    # Special) are one chip, its id the sections' ids joined by ","
+    groups: dict[str, list[str]] = {}
+    for src in tab_values:
+        groups.setdefault(name_of(src), []).append(src)
+    chips = [
+        {"id": ",".join(sorted(srcs)), "name": name,
+         "chaos": round(sum(tab_values[s] for s in srcs), 1),
+         "items": sum(len(by_source[s]) for s in srcs), "inventory": "inventory" in srcs}
+        for name, srcs in groups.items()
     ]  # fmt: skip
+    chips.sort(key=lambda c: (not c.pop("inventory"), -c["chaos"]))
+    tab_list = chips
 
-    wanted = {t for t in tabs if t}
+    wanted = {s for t in tabs for s in t.split(",") if s}
     held = (value_holdings([e for e in entries if e.source in wanted], book) if wanted
             else held_all)  # fmt: skip
     total = sum(h.chaos_total or 0 for h in held)
@@ -141,7 +149,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
                 "divine_total": _round(h.chaos_total / cpd, 2) if cpd and h.chaos_total else None,
                 "share": round(h.chaos_total / total, 4) if total and h.chaos_total else 0,
                 "icon": h.icon,
-                "tabs": [name_of(s) for s in h.sources],
+                "tabs": list(dict.fromkeys(name_of(s) for s in h.sources)),
             }
             for h in shown[:limit]
         ],

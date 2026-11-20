@@ -34,6 +34,11 @@ def _int_prop(raw: Json, prop: str) -> int | None:
     return None
 
 
+def _tier_in_name(name: str) -> int | None:
+    m = re.search(r"\(Tier (\d+)\)", name)
+    return int(m.group(1)) if m else None
+
+
 def _links(raw: Json) -> int:
     groups: dict[int, int] = defaultdict(int)
     for s in raw.get("sockets") or ():
@@ -41,7 +46,14 @@ def _links(raw: Json) -> int:
     return max(groups.values(), default=0)
 
 
-_BLIGHTED_RE = re.compile(r"^(?P<kind>Blighted|Blight-ravaged) Map \(Tier (?P<tier>\d+)\)$")
+# poe.ninja names blighted maps per map ("Blighted Strand Map"); older data per tier
+# ("Blighted Map (Tier 16)").
+_BLIGHTED_RE = re.compile(r"^(?P<kind>Blighted|Blight-ravaged) ")
+_MAP_TYPES = frozenset({"Map", "UniqueMap", "BlightedMap", "BlightRavagedMap"})
+# Map lines with fewer listings than this are one or two sellers' asking prices (e.g. a
+# blighted map "worth" 160 divines): left out, so such a map isn't valued at all rather
+# than at a made-up price.
+MIN_MAP_LISTINGS = 10
 
 _versions = itertools.count(1)
 
@@ -56,18 +68,25 @@ class PriceBook:
         self.uniques: dict[str, list[tuple[PriceLine, str]]] = defaultdict(list)
         self.maps: dict[tuple[str, int | None], Quote] = {}
         self.gems: dict[str, list[PriceLine]] = defaultdict(list)
-        # blighted / blight-ravaged maps: one price per tier, whatever the map
+        # blighted / blight-ravaged maps: per map, and the cheapest of each tier as fallback
         self.blighted: dict[tuple[str, int], Quote] = {}
         exchange: dict[str, Quote] = {}
         for source, type_, lines in tables:
             for line in lines:
+                if (type_ in _MAP_TYPES and line.listings is not None
+                        and line.listings < MIN_MAP_LISTINGS):  # fmt: skip
+                    continue
                 if source == "exchange":
                     exchange[line.name] = Quote(line.chaos, f"exchange:{type_}")
                 elif type_.startswith("Unique"):
                     self.uniques[line.name].append((line, type_))
                 elif type_ in ("BlightedMap", "BlightRavagedMap"):
-                    if m := _BLIGHTED_RE.match(line.name):
-                        key = (m["kind"].lower(), int(m["tier"]))
+                    m = _BLIGHTED_RE.match(line.name)
+                    t = line.map_tier or _tier_in_name(line.name)
+                    if m and t:
+                        if "(Tier" not in line.name:
+                            self.maps.setdefault((line.name, t), Quote(line.chaos, type_))
+                        key = (m["kind"].lower(), t)
                         old = self.blighted.get(key)
                         if old is None or line.chaos < old.chaos_each:  # err low
                             self.blighted[key] = Quote(line.chaos, type_)
@@ -101,8 +120,8 @@ class PriceBook:
         tier = _int_prop(raw, "Map Tier")
         if tier is not None:
             for kind in ("blight-ravaged", "blighted"):
-                if kind in type_line.lower():
-                    return self.blighted.get((kind, tier))
+                if type_line.lower().startswith(kind):
+                    return self.maps.get((type_line, tier)) or self.blighted.get((kind, tier))
             q = self.maps.get((base, tier)) or self.maps.get((type_line, tier))
             if q:
                 return q

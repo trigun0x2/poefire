@@ -171,8 +171,9 @@ def test_snapshot_through_session_api_with_map_sections() -> None:
                        clock=lambda: datetime(2026, 11, 1)).take()  # fmt: skip
     assert snap.complete, snap.error
     assert sorted(e.name for e in snap.items) == [
-        "Chaos Orb", "Divine Orb", "Hubris Circlet", "Strand Map", "Strand Map"]  # fmt: skip
-    assert {e.source for e in snap.items} == {"inventory", "aaa", "bbb", "t16", "t15"}
+        "Chaos Orb", "Divine Orb", "Hubris Circlet", "Strand Map"]  # fmt: skip
+    # map tab: tier 16 only (and unique/special); tier 15 isn't fetched
+    assert {e.source for e in snap.items} == {"inventory", "aaa", "bbb", "t16"}
 
 
 def test_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
