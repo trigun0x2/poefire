@@ -162,7 +162,7 @@ class FakeApi:
             ]},
         ]  # fmt: skip
         self.contents: dict[str, list[Json]] = {
-            k: [] for k in ("t1", "t2", "t3", "t4", "m16", "mu", "ms")
+            k: [] for k in ("t1", "t2", "t3", "t4", "m16", "m17", "mu", "ms")
         }
         self.calls: list[tuple[str, ...]] = []
         self.fail_on: str | None = None
@@ -203,7 +203,8 @@ def test_resolves_tabs_folders_and_special_sections() -> None:
         ("t2", None),
         ("t4", None),  # folder expanded to its tabs, fetched directly
         ("m16", "m0"),  # special tab sections fetched as substashes
-        ("mu", "m0"),  # map tab: tier 16, unique and special maps only
+        ("m17", "m0"),  # map tab: tier 16 and 17, unique and special maps only
+        ("mu", "m0"),
         ("ms", "m0"),
     ]
     s.resolve_tabs()
