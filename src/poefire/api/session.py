@@ -48,6 +48,11 @@ CHARACTERS, ITEMS, PASSIVES = "characters", "items", "passives"
 STASH, STASH_API, TRADE = "stash", "stash-api", "trade"
 LOOT_BUCKETS = (ITEMS, STASH, STASH_API)  # what loot snapshots read
 INVENTORY_BUCKETS = (ITEMS,)  # what a map's inventory read uses
+# A public profile's characters and equipment answer without a login, its bags come back empty:
+# an inventory read can't tell an expired cookie from an empty inventory. So the cookie is
+# proven with a stash tab list (which needs the login) at most every PROVE_EVERY seconds: on
+# the first inventory read, after a character endpoint refused it, and when the bags are empty.
+PROVE_EVERY = 600.0
 
 type Json = dict[str, Any]
 
@@ -206,9 +211,12 @@ class SessionApi:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         on_auth: Callable[[bool], None] | None = None,
+        prove_login: bool = True,
     ) -> None:
         """`min_interval`: floor between requests on top of the header-driven limiter; these
-        endpoints have tight per-IP limits and GGG has banned tools that burst them."""
+        endpoints have tight per-IP limits and GGG has banned tools that burst them.
+        `prove_login`: check the cookie with a stash tab list when an inventory read can't
+        tell (see PROVE_EVERY)."""
         if not poesessid or not account_name:
             raise SessionError("POESESSID and account name are required")
         self._cookie = poesessid
@@ -225,6 +233,9 @@ class SessionApi:
         self._tab_index: dict[str, int] = {}
         # leagues the account's characters are in, as the character endpoints said
         self._leagues: set[str] = set()
+        self.prove_login = prove_login
+        self._doubt = True  # not proven since this client started, or refused since
+        self._proved_at = float("-inf")
         self._lock = threading.Lock()
 
     def __repr__(self) -> str:  # never show the cookie
@@ -277,9 +288,12 @@ class SessionApi:
             if not auth:
                 raise RefusedError(f"HTTP {resp.status_code} from {path}") from e
             self._report(False)
+            if not proves:  # maybe a passing hiccup: the next answer is proven again
+                self._doubt, self._proved_at = True, float("-inf")
             raise
         if proves:
             self._report(True)
+            self._doubt, self._proved_at = False, self.clock()
         return data
 
     def _report(self, ok: bool) -> None:
@@ -347,7 +361,22 @@ class SessionApi:
         char["inventory"] = [
             i for i in data.get("items") or () if "MainInventory" in str(i.get("inventoryId", ""))
         ]
+        if char.get("league") and (self._doubt or not char["inventory"]):
+            self._prove(str(char["league"]))
         return char
+
+    def _prove(self, league: str) -> None:
+        """Check the cookie with the league's stash tab list (see PROVE_EVERY). Raises
+        SessionExpiredError when it's refused; a rate limit or network error leaves it
+        unproven, for the next read."""
+        if not self.prove_login or self.clock() - self._proved_at < PROVE_EVERY:
+            return
+        try:
+            self.list_stashes(league)
+        except SessionExpiredError:
+            raise
+        except SessionError as e:
+            log.info("couldn't check the cookie with a stash tab list: %s", e)
 
     def get_build(self, name: str) -> Json:
         """Everything Path of Building's "Import from website" reads: equipped items with

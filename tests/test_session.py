@@ -380,21 +380,16 @@ def test_a_refused_stash_list_where_your_characters_are_is_an_expired_cookie() -
     """A public profile's characters and inventory are readable without a login: only the
     stash tells that the cookie expired."""
     site = Site()
-    auth: list[bool] = []
-    api, _ = make(site, on_auth=auth.append)
-    assert [i["id"] for i in api.get_character("xyz_bow")["inventory"]] == ["inv1"]
-    assert auth == []  # doesn't prove the cookie works
-    api.list_stashes("Keepers")
-    assert auth == [True]
 
     def refused(r: httpx.Request) -> httpx.Response:
         if r.url.path == "/character-window/get-stash-items":
             return httpx.Response(403, json={"error": {"code": 6, "message": "Forbidden"}})
         return site(r)
 
-    auth.clear()
-    api, _ = make(refused, on_auth=auth.append)
+    auth: list[bool] = []
+    api, _ = make(refused, on_auth=auth.append, prove_login=False)
     api.get_character("xyz_bow")  # in Keepers
+    assert auth == []  # an answer from the character endpoints doesn't prove the cookie
     with pytest.raises(SessionExpiredError, match=r"Keepers.*HTTP 403.*expired") as e:
         api.list_stashes("Keepers")
     assert auth == [False] and COOKIE not in str(e.value)
@@ -402,13 +397,79 @@ def test_a_refused_stash_list_where_your_characters_are_is_an_expired_cookie() -
     from poefire.api.session import LeagueError
 
     auth.clear()
-    api, _ = make(refused, on_auth=auth.append)
+    api, _ = make(refused, on_auth=auth.append, prove_login=False)
     api.list_characters()  # Standard and Keepers
     with pytest.raises(LeagueError):
         api.list_stashes("Typo League")
     with pytest.raises(SessionExpiredError):
         api.list_stashes("Standard")
     assert auth == [False]
+
+
+def paths(site: Site) -> list[str]:
+    return [r.url.path.rsplit("/", 1)[1] for r in site.requests]
+
+
+def test_the_cookie_is_proven_with_a_stash_list_when_the_inventory_cant_tell() -> None:
+    site = Site()
+    auth: list[bool] = []
+    api, clock = make(site, on_auth=auth.append)
+    api.get_character("xyz_bow")  # the first read: proven once
+    api.get_character("xyz_bow")
+    assert paths(site) == ["get-items", "get-stash-items", "get-items"] and auth == [True]
+
+    site.requests.clear()
+
+    def empty(r: httpx.Request) -> httpx.Response:  # empty bags: proven at most every 10 min
+        resp = site(r)
+        if r.url.path.endswith("get-items"):
+            return httpx.Response(
+                200, json={"character": {"name": "xyz_bow", "league": "Keepers"}, "items": []}
+            )
+        return resp
+
+    api.http = httpx.Client(transport=httpx.MockTransport(empty))
+    clock.t += 601
+    assert api.get_character("xyz_bow")["inventory"] == []
+    api.get_character("xyz_bow")
+    assert paths(site) == ["get-items", "get-stash-items", "get-items"]
+
+
+def test_an_expired_cookie_on_a_public_profile_isnt_an_empty_inventory() -> None:
+    """The website shows a public profile's equipment to anyone, not its bags."""
+
+    def public(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("get-items"):
+            return httpx.Response(
+                200,
+                json={
+                    "character": {"name": "Me", "league": "Keepers"},
+                    "items": [{"id": "eq", "inventoryId": "Weapon"}],
+                },
+            )
+        return httpx.Response(403, json={"error": {"code": 6, "message": "Forbidden"}})
+
+    auth: list[bool] = []
+    api, _ = make(public, on_auth=auth.append)
+    with pytest.raises(SessionExpiredError, match="expired"):
+        api.get_character("Me")
+    assert auth == [False]
+
+
+def test_a_refused_inventory_read_is_cleared_by_the_next_answer() -> None:
+    """One refusal (e.g. an edge-protection 403) marks the cookie expired; the next answer is
+    proven again, and the stash list clears it."""
+    site = Site()
+    auth: list[bool] = []
+    api, _ = make(site, on_auth=auth.append)
+    api.get_character("xyz_bow")
+    site.status = 403
+    with pytest.raises(SessionExpiredError):
+        api.get_character("xyz_bow")
+    site.status = None
+    site.requests.clear()
+    api.get_character("xyz_bow")
+    assert paths(site) == ["get-items", "get-stash-items"] and auth == [True, False, True]
 
 
 def test_a_penalty_on_the_map_sections_doesnt_hold_back_the_inventory() -> None:
