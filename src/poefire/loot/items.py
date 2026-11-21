@@ -53,13 +53,29 @@ _GEAR_ICON_RE = re.compile(
 
 
 def is_tracked(raw: Json) -> bool:
-    """Loot that counts toward a map's value: everything except gear. Every unique is ignored
-    (unique maps included), and so is normal/magic/rare equipment: weapons, armour,
-    jewellery, flasks, jewels. Currency, fragments, scarabs, cards, gems, maps, beasts,
-    logbooks... are all tracked."""
+    """Loot that counts toward a map's value: everything except gear. Uniques are ignored
+    (but unique maps), and so is normal/magic/rare equipment: weapons, armour, jewellery,
+    flasks, jewels. Currency, fragments, scarabs, cards, gems, maps, beasts, logbooks... are
+    all tracked."""
     if int(raw.get("frameType", 0)) == FRAME_UNIQUE:
-        return False
+        return is_map(raw)
     return not _is_gear(raw)
+
+
+# a map's base: "Map (Tier 16)", "Nightmare Map", "Valdo Map", "Strand Map" (older leagues)
+_MAP_BASE_RE = re.compile(r"\bMap(?: \(Tier \d+\))?$")
+
+
+def is_map(raw: Json) -> bool:
+    if _property(raw, "Map Tier") is not None:
+        return True
+    return bool(_MAP_BASE_RE.search(map_base(raw)))
+
+
+def map_base(raw: Json) -> str:
+    """The map without its mods: the base ("Map (Tier 16)", "Nightmare Map"), not a magic
+    map's affixed name or a rare map's name."""
+    return clean(raw.get("baseType", "") or raw.get("typeLine", ""))
 
 
 def _icon_path(icon: str) -> str:
@@ -93,6 +109,9 @@ def clean(text: str) -> str:
 
 
 def display_name(raw: Json) -> str:
+    if is_map(raw) and int(raw.get("frameType", 0)) != FRAME_UNIQUE:
+        extra = [w for w in ("corrupted", "mirrored") if raw.get(w)]
+        return map_base(raw) + (f" ({', '.join(extra)})" if extra else "")
     name = clean(raw.get("name", ""))
     type_line = clean(raw.get("typeLine", "") or raw.get("baseType", ""))
     return f"{name} {type_line}".strip() if name else type_line
@@ -107,7 +126,16 @@ def _property(raw: Json, prop: str) -> str | None:
 
 
 def item_key(raw: Json) -> str:
-    """Stable key for "the same kind of item", for aggregating and (later) pricing."""
+    """Stable key for "the same kind of item", for aggregating and (later) pricing. A map is
+    its name (a unique's, else its base) and whether it's corrupted or mirrored: its mods,
+    rarity and a rare map's name don't make it another kind."""
+    if is_map(raw):
+        unique = int(raw.get("frameType", 0)) == FRAME_UNIQUE
+        parts = ["map", clean(raw.get("name", "")) if unique else "", map_base(raw)]
+        tier = _property(raw, "Map Tier")
+        parts += [f"Map Tier={tier}"] if tier is not None else []
+        parts += [w for w in ("corrupted", "mirrored") if raw.get(w)]
+        return "|".join(parts)
     parts = [
         str(raw.get("frameType", 0)),
         clean(raw.get("name", "")),

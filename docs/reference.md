@@ -121,10 +121,10 @@ data.
 after a map starts: your stash can't change until you're back, so the tabs agree with each
 other and with the inventory. Reading them stops (and what was read is dropped) if you're
 back before they're all read, and waits when the website's rate limits are tight, so the
-inventory reads always have room. Each watched tab costs one request; of the map tab, each
-Tier 16, Tier 17 and special section (originator, nightmare, Valdo maps...) costs one, and
-lower tiers aren't read. The map tab's unique sections and unique tabs aren't read at all:
-uniques aren't counted. The Overview shows a tab's sections as one chip (e.g. "Maps").
+inventory reads always have room. Each watched tab costs one request; of the map tab, only
+the Tier 16, Special (nightmare, Valdo, guardian maps...) and Unique sections are read, one
+request each; the other tiers aren't. Unique tabs aren't read at all: of uniques only unique
+maps count. The Overview shows a tab's sections as one chip (e.g. "Maps").
 Changed in Settings, the watched tabs are read at the next map start.
 
 **Tracking mode** (Settings → Loot tracking, `loot_mode` in config.toml):
@@ -395,7 +395,13 @@ and polling it during the map would waste the rate limit. A map's value appears 
 return to the hideout. If you go back to the hideout during a map, what you've dumped so far
 shows as "so far".
 
-**Gear isn't loot.** Uniques (unique maps included) and normal, magic and rare equipment
+**Maps are priced by their name.** A map's mods, rarity and a rare map's name don't matter:
+"Oppressive Map of Rust (Tier 16)" and a rare "Gloom Hustle" are both a Map (Tier 16), at
+poe.ninja's price for it; a Nightmare Map is a Nightmare Map. Corrupted and mirrored maps are
+kept apart (listed as their own kind), at the same price, since poe.ninja has none for them.
+A unique map is priced by its own name.
+
+**Gear isn't loot.** Uniques (except unique maps) and normal, magic and rare equipment
 (weapons, armour, jewellery, flasks, jewels) are ignored between maps, so picking up, selling
 or vendoring gear doesn't change a map's value. Gear is recognized by the category in its icon
 path, or by level requirements and sockets. Everything else is tracked: currency, fragments,

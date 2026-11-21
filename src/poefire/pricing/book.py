@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from poefire.loot.items import clean
+from poefire.loot.items import clean, is_map, map_base
 from poefire.pricing.ninja import PriceLine
 
 type Json = dict[str, Any]
@@ -117,15 +117,24 @@ class PriceBook:
             return self._unique(name, base, raw)
         if frame == FRAME_GEM:
             return self._gem(type_line, raw)
-        tier = _int_prop(raw, "Map Tier")
-        if tier is not None:
-            for kind in ("blight-ravaged", "blighted"):
-                if type_line.lower().startswith(kind):
-                    return self.maps.get((type_line, tier)) or self.blighted.get((kind, tier))
-            q = self.maps.get((base, tier)) or self.maps.get((type_line, tier))
-            if q:
-                return q
+        if is_map(raw):
+            return self._map(raw, type_line)
         return self.fungible.get(type_line) or self.fungible.get(base)
+
+    def _map(self, raw: Json, type_line: str) -> Quote | None:
+        """By the map's name alone (its base: mods and a rare map's name don't matter), with
+        its tier from the "Map Tier" property or the name ("Map (Tier 16)")."""
+        base = map_base(raw)
+        tier = _int_prop(raw, "Map Tier") or _tier_in_name(base)
+        for kind in ("blight-ravaged", "blighted"):
+            for name in (type_line, base):
+                if name.lower().startswith(kind):
+                    q = self.maps.get((name, tier)) if tier else None
+                    return q or (self.blighted.get((kind, tier)) if tier else None)
+        for key in ((base, tier), (type_line, tier), (base, None)):
+            if (q := self.maps.get(key)) is not None:
+                return q
+        return self.fungible.get(base)
 
     def _unique(self, name: str, base: str, raw: Json) -> Quote | None:
         candidates = [(line, t) for line, t in self.uniques.get(name, ())

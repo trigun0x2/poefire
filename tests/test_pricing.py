@@ -349,3 +349,32 @@ def test_spending_is_not_counted_but_sales_are_taken_out() -> None:
     assert v.chaos == 2 * 180 and v.spent == 8
     only_spent = value_deltas([ItemDelta("a", "Divine Orb", 5, -1, div)], book())
     assert only_spent.chaos == 0 and only_spent.spent == 180  # never negative
+
+
+def test_maps_are_priced_by_name_not_mods() -> None:
+    """Current leagues: no "Map Tier" property, the tier is in the base ("Map (Tier 16)");
+    poe.ninja prices "Map (Tier 16)", "Nightmare Map"... without a tier."""
+    b = PriceBook([("item", "Map", [PriceLine("Map (Tier 16)", 2.0),
+                                    PriceLine("Nightmare Map", 70.0),
+                                    PriceLine("Shaper Guardian Map", 5.0)]),
+                   ("item", "BlightedMap", [PriceLine("Blighted Map (Tier 16)", 3.0)]),
+                   ("item", "UniqueMap", [PriceLine("Acton's Nightmare", 9.0,
+                                                    base_type="Map (Tier 16)")])])  # fmt: skip
+
+    def chaos(**raw: Any) -> float | None:
+        q = b.price(raw)
+        return q.chaos_each if q else None
+
+    assert chaos(typeLine="Oppressive Map of Rust (Tier 16)", baseType="Map (Tier 16)",
+                 frameType=1) == 2.0  # fmt: skip
+    assert chaos(name="Gloom Hustle", typeLine="Map (Tier 16)", baseType="Map (Tier 16)",
+                 frameType=2, corrupted=True) == 2.0  # fmt: skip
+    assert chaos(name="Oblivion Artifice", typeLine="Nightmare Map", baseType="Nightmare Map",
+                 frameType=2) == 70.0  # fmt: skip
+    assert chaos(name="Hidden Direction", typeLine="Shaper Guardian Map",
+                 baseType="Shaper Guardian Map", frameType=2) == 5.0  # fmt: skip
+    assert chaos(typeLine="Blighted Map (Tier 16)", baseType="Blighted Map (Tier 16)",
+                 frameType=0) == 3.0  # fmt: skip
+    assert chaos(name="Acton's Nightmare", typeLine="Map (Tier 16)", baseType="Map (Tier 16)",
+                 frameType=3) == 9.0  # fmt: skip
+    assert chaos(typeLine="Map (Tier 15)", baseType="Map (Tier 15)", frameType=0) is None

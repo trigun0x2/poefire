@@ -130,10 +130,36 @@ def test_gear_is_not_loot() -> None:
         gear("Headhunter", "Leather Belt", "hh", 3),  # unique
         gear("Ruin Loop", "Amethyst Ring", "r1", 2),  # rare
         gear("", "Hubris Circlet", "h1", 0),  # normal
-        {"id": "u", "name": "Maelström of Chaos", "typeLine": "Atoll Map", "frameType": 3,
-         "properties": [{"name": "Map Tier", "values": [["5", 0]]}]},  # unique map
     ])  # fmt: skip
     assert diff_items(before, after) == []
+
+
+def test_unique_maps_are_loot() -> None:
+    unique_map = {
+        "id": "u",
+        "name": "Maelström of Chaos",
+        "typeLine": "Atoll Map",
+        "frameType": 3,
+        "properties": [{"name": "Map Tier", "values": [["5", 0]]}],
+    }
+    assert {d.name: d.quantity for d in diff_items([], entries([unique_map]))} == {
+        "Maelström of Chaos Atoll Map": 1}  # fmt: skip
+
+
+def test_maps_are_one_kind_whatever_their_mods() -> None:
+    def t16(item_id: str, frame: int, name: str = "", type_line: str = "Map (Tier 16)",
+            **flags: bool) -> Json:  # fmt: skip
+        return {"id": item_id, "name": name, "typeLine": type_line, "baseType": "Map (Tier 16)",
+                "frameType": frame, **flags}  # fmt: skip
+
+    maps = [t16("a", 0), t16("b", 1, type_line="Oppressive Map of Rust (Tier 16)"),
+            t16("c", 2, "Gloom Hustle"), t16("d", 2, "Woe Nexus", corrupted=True),
+            t16("e", 1, mirrored=True),
+            {"id": "n", "name": "Oblivion Artifice", "typeLine": "Nightmare Map",
+             "baseType": "Nightmare Map", "frameType": 2}]  # fmt: skip
+    got = {d.name: d.quantity for d in diff_items([], entries(maps))}
+    assert got == {"Map (Tier 16)": 3, "Map (Tier 16) (corrupted)": 1,
+                   "Map (Tier 16) (mirrored)": 1, "Nightmare Map": 1}  # fmt: skip
 
 
 # --- snapshotter ---
@@ -207,7 +233,7 @@ def test_resolves_tabs_folders_and_special_sections() -> None:
         ("t2", None),
         ("t4", None),  # folder expanded to its tabs, fetched directly
         ("m16", "m0"),  # special tab sections fetched as substashes
-        ("m17", "m0"),  # map tab: tier 16 and 17 and special maps only (not unique ones)
+        ("mu", "m0"),  # map tab: Tier 16, Unique and Special only (not 15 or 17)
         ("ms", "m0"),
     ]
     s.resolve_tabs()
@@ -231,7 +257,7 @@ def test_tab_names_never_fall_back_to_the_tab_id() -> None:
     assert s.take().complete
     assert s.tab_names() == {
         "inventory": "Inventory", "a1b2c3": "Tab 5", "d4e5f6": "Currency",
-        "m0": "Maps", "s1": "Maps / Tier 16", "s2": "Unique",  # unique maps: not read
+        "m0": "Maps", "s1": "Maps / Tier 16", "s2": "Maps / Unique",
         "o9": "Other",  # unwatched tabs are named too
     }  # fmt: skip
 
@@ -264,13 +290,14 @@ def test_character_in_other_league_is_an_error() -> None:
     assert not snap.complete and "Settlers" in (snap.error or "")
 
 
-def test_unique_tabs_and_sections_are_never_read() -> None:
-    """Uniques are never counted: the map tab's unique sections and unique tabs cost nothing."""
+def test_unique_tabs_are_never_read() -> None:
+    """Of uniques only unique maps count: the map tab's Unique section is read, a unique tab
+    isn't."""
     api = FakeApi()
     api.tabs.append({"id": "u0", "name": "Uniques", "type": "UniqueStash", "children": [
         {"id": "u1", "name": "Flasks", "type": "UniqueStash"}]})  # fmt: skip
     s = make_snapshotter(api, ["Maps", "Uniques"])
-    assert [r.id for r in s.resolve_tabs()] == ["m16", "m17", "ms"]
+    assert [r.id for r in s.resolve_tabs()] == ["m16", "mu", "ms"]
     assert s.tab_requests() == 3
 
 
@@ -294,7 +321,7 @@ def test_the_tab_list_is_read_again_after_a_while() -> None:
     clock = [0.0]
     s = Snapshotter(api, "Settlers", ["Dump", "Maps"], "Me", monotonic=lambda: clock[0])
     s.resolve_tabs()
-    assert s.tab_requests() == 4  # Dump and Maps' 3 sections (tier 16, 17, special)
+    assert s.tab_requests() == 4  # Dump and Maps' 3 sections (Tier 16, Unique, Special)
     clock[0] = sn.TAB_LIST_EVERY
     assert s.tab_requests() == 5  # and the tab list
     s.resolve_tabs()
