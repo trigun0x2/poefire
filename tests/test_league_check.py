@@ -107,3 +107,44 @@ def test_setup_wizard_is_shown_until_done(tmp_path: Path) -> None:
         assert client.get("/api/settings").json()["onboarded"] is True
     finally:
         rt.stop()
+
+
+def test_a_failed_league_check_is_tried_again_soon(tmp_path: Path) -> None:
+    from poefire.web.runtime import LEAGUE_CHECK, LEAGUE_RETRY
+
+    rt = AppRuntime(Config(db_path=tmp_path / "db", league="Keepers"), recorder=None,
+                    log_path=tmp_path / "Client.txt")  # fmt: skip
+    calls: list[bool] = []
+    waits: list[float] = []
+
+    def check(tabs: bool = False) -> None:
+        calls.append(tabs)
+        if len(calls) == 1:
+            raise OSError("offline")
+
+    class Now:
+        def clear(self) -> None:
+            pass
+
+        def set(self) -> None:
+            pass
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            if len(waits) == 2:
+                rt._stop.set()
+            return False
+
+    rt._pick_default_league = lambda: None  # type: ignore[method-assign]
+    rt.check_league = check  # type: ignore[method-assign]
+    rt._league_check_now = Now()  # type: ignore[assignment]
+    rt._league_check_tabs = True  # Settings asked for the tabs to be checked
+    stop_wait = rt._stop.wait
+    rt._stop.wait = lambda timeout=None: False  # type: ignore[method-assign]
+    try:
+        rt._league_loop()
+    finally:
+        rt._stop.wait = stop_wait  # type: ignore[method-assign]
+        rt.stop()
+    assert waits == [LEAGUE_RETRY, LEAGUE_CHECK]
+    assert calls == [True, True]  # the tab check asked for isn't dropped by the failure

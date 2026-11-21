@@ -64,6 +64,7 @@ GAME_LOG_CHECK = 15.0  # seconds
 # seconds between checks of the league your characters play in (the watched tabs are
 # checked when they're read, and when the league or the tabs change)
 LEAGUE_CHECK = 60 * 60.0
+LEAGUE_RETRY = 5 * 60.0  # after a failed check (offline at boot, rate limited...)
 # Settings that loot tracking is built from: a change rebuilds it (others don't, so saving
 # e.g. a hotkey doesn't throw away what it knows, like the tab list)
 LOOT_FIELDS = ("auth", "account_name", "realm", "league", "stash_tabs", "character",
@@ -889,12 +890,15 @@ class AppRuntime:
         while not self._stop.is_set():
             self._league_check_now.clear()
             tabs, self._league_check_tabs = self._league_check_tabs, False
+            wait = LEAGUE_CHECK
             try:
                 self._pick_default_league()
                 self.check_league(tabs=tabs)
-            except Exception as e:  # offline, rate limited, cookie expired: try next time
+            except Exception as e:  # offline, rate limited, cookie expired: try again soon
                 log.info("league check skipped: %s", e)
-            self._league_check_now.wait(LEAGUE_CHECK)
+                self._league_check_tabs = self._league_check_tabs or tabs  # still wanted
+                wait = LEAGUE_RETRY
+            self._league_check_now.wait(wait)
             if self._stop.is_set():
                 return
 
