@@ -573,8 +573,7 @@ class LootRecorder:
                 if late is not None and snap.complete:
                     log.info("map %s: back in the hideout only briefly, its loot is read now",
                              late[0])  # fmt: skip
-                    inventory = [e for e in snap.items if e.source == "inventory"]
-                    end = Snapshot(snap.taken_at, inventory, scope=INVENTORY)
+                    end = Snapshot(snap.taken_at, snap.inventory(), scope=INVENTORY)
                     self._save_return(store, late[0], end, late[1])
                 sid = store.add_snapshot(snap, trigger.value, run_id)
                 if snap.complete:
@@ -608,7 +607,7 @@ class LootRecorder:
                      "loot isn't known", run_id)  # fmt: skip
             store.prune_snapshot_items()
             return LootResult(Trigger.RUN_RETURN, run_id, sid, True, True, scope=snap.scope)
-        deltas = diff_items(start.inventory(), [e for e in snap.items if e.source == "inventory"])
+        deltas = diff_items(start.inventory(), snap.inventory())
         store.add_loot(run_id, "run", start.id, sid, deltas)
         store.prune_snapshot_items()
         gains = sum(1 for d in deltas if d.quantity > 0)
@@ -641,7 +640,7 @@ class LootRecorder:
             return LootResult(trigger, None, sid, True, True, scope=snap.scope)
         both_full = prev.scope == FULL and snap.scope == FULL
         before = prev.items if both_full else prev.inventory()
-        after = snap.items if both_full else [e for e in snap.items if e.source == "inventory"]
+        after = snap.items if both_full else snap.inventory()
         deltas = diff_items(before, after)
         # in the interval mode, Snapshot now splits an interval: both parts count
         kind = "interval" if trigger is Trigger.INTERVAL or self.interval is not None else "manual"

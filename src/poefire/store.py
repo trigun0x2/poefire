@@ -17,7 +17,7 @@ from poefire.builds import BuildSnapshot
 from poefire.campaign import CampaignRun, Split
 from poefire.events import LogEvent, event_kind, event_payload_json
 from poefire.loot.diff import ItemDelta
-from poefire.loot.items import ItemEntry, is_tracked
+from poefire.loot.items import ItemEntry, inventory_items, is_tracked
 from poefire.loot.snapshot import Snapshot
 from poefire.pricing.ninja import PriceLine
 from poefire.tracker import Run, RunStatus, Segment
@@ -241,7 +241,7 @@ class StoredSnapshot:
     items: list[ItemEntry]
 
     def inventory(self) -> list[ItemEntry]:
-        return [e for e in self.items if e.source == "inventory"]
+        return inventory_items(self.items)
 
 
 def _chunks[T](items: list[T], size: int = 500) -> Iterator[list[T]]:

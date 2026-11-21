@@ -16,7 +16,7 @@ from typing import Protocol
 
 from poefire.api.oauth import NotLoggedInError
 from poefire.api.session import LeagueError, SessionExpiredError
-from poefire.loot.items import ItemEntry, Json, is_tracked
+from poefire.loot.items import INVENTORY_SOURCE, ItemEntry, Json, inventory_items, is_tracked
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +63,9 @@ class Snapshot:
     error: str | None = None
     scope: str = FULL  # FULL: the inventory and the watched tabs; INVENTORY: the inventory
     retry: bool = False  # failed for a reason that may go away (see retryable)
+
+    def inventory(self) -> list[ItemEntry]:
+        return inventory_items(self.items)
 
 
 @dataclass(frozen=True)
@@ -262,7 +265,9 @@ class Snapshotter:
                 f"character {char.get('name')} is in {char.get('league')}, not {self.league}"
             )
         return [
-            ItemEntry.from_api(i, "inventory") for i in char.get("inventory") or () if is_tracked(i)
+            ItemEntry.from_api(i, INVENTORY_SOURCE)
+            for i in char.get("inventory") or ()
+            if is_tracked(i)
         ]
 
     def read_tabs(self, keep_going: Callable[[], bool] | None = None) -> list[ItemEntry] | None:

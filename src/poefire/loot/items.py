@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,6 +45,14 @@ class ItemEntry:
             source=source,
             raw=raw,
         )
+
+
+INVENTORY_SOURCE = "inventory"  # an ItemEntry's source when it's in the character's bags
+
+
+def inventory_items(items: Iterable[ItemEntry]) -> list[ItemEntry]:
+    """The entries read from the character's inventory (not from a stash tab)."""
+    return [e for e in items if e.source == INVENTORY_SOURCE]
 
 
 FRAME_UNIQUE = 3
