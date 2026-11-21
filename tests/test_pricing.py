@@ -378,3 +378,5 @@ def test_maps_are_priced_by_name_not_mods() -> None:
     assert chaos(name="Acton's Nightmare", typeLine="Map (Tier 16)", baseType="Map (Tier 16)",
                  frameType=3) == 9.0  # fmt: skip
     assert chaos(typeLine="Map (Tier 15)", baseType="Map (Tier 15)", frameType=0) is None
+    # blighted on a plain base: the blighted price, not the plain map's
+    assert chaos(typeLine="Blighted Map (Tier 16)", baseType="Map (Tier 16)", frameType=0) == 3.0

@@ -146,6 +146,20 @@ def test_unique_maps_are_loot() -> None:
         "Maelström of Chaos Atoll Map": 1}  # fmt: skip
 
 
+def test_blighted_maps_arent_the_plain_map() -> None:
+    def strand(item_id: str, type_line: str) -> Json:  # the "Map Tier" shape: no blight in base
+        return {"id": item_id, "typeLine": type_line, "baseType": "Strand Map", "frameType": 0,
+                "properties": [{"name": "Map Tier", "values": [["16", 0]]}]}  # fmt: skip
+
+    maps = [strand("a", "Strand Map"), strand("b", "Blighted Strand Map"),
+            strand("c", "Blight-ravaged Strand Map"),
+            {"id": "d", "typeLine": "Blighted Map (Tier 16)", "baseType": "Map (Tier 16)",
+             "frameType": 0}]  # fmt: skip
+    got = {d.name: d.quantity for d in diff_items([], entries(maps))}
+    assert got == {"Strand Map": 1, "Blighted Strand Map": 1, "Blight-ravaged Strand Map": 1,
+                   "Blighted Map (Tier 16)": 1}  # fmt: skip
+
+
 def test_maps_are_one_kind_whatever_their_mods() -> None:
     def t16(item_id: str, frame: int, name: str = "", type_line: str = "Map (Tier 16)",
             **flags: bool) -> Json:  # fmt: skip

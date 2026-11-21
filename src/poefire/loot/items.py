@@ -78,6 +78,20 @@ def map_base(raw: Json) -> str:
     return clean(raw.get("baseType", "") or raw.get("typeLine", ""))
 
 
+_BLIGHT_RE = re.compile(r"\b(Blight-ravaged|Blighted)\b")
+
+
+def map_name(raw: Json) -> str:
+    """The map's kind: its base, with "Blighted" or "Blight-ravaged" kept when only the type
+    line has it ("Blighted Strand Map" on a "Strand Map" base): a blighted map isn't the
+    plain one."""
+    base = map_base(raw)
+    m = _BLIGHT_RE.search(clean(raw.get("typeLine", "")))
+    if m and not _BLIGHT_RE.search(base):
+        return f"{m.group(1)} {base}"
+    return base
+
+
 def _icon_path(icon: str) -> str:
     """The art path of an item icon. Newer icon URLs carry it base64-encoded:
     .../gen/image/<base64 of [w,h,{"f":"2DItems/Currency/..."}]>/<hash>/<file>.png"""
@@ -111,7 +125,7 @@ def clean(text: str) -> str:
 def display_name(raw: Json) -> str:
     if is_map(raw) and int(raw.get("frameType", 0)) != FRAME_UNIQUE:
         extra = [w for w in ("corrupted", "mirrored") if raw.get(w)]
-        return map_base(raw) + (f" ({', '.join(extra)})" if extra else "")
+        return map_name(raw) + (f" ({', '.join(extra)})" if extra else "")
     name = clean(raw.get("name", ""))
     type_line = clean(raw.get("typeLine", "") or raw.get("baseType", ""))
     return f"{name} {type_line}".strip() if name else type_line
@@ -131,7 +145,7 @@ def item_key(raw: Json) -> str:
     rarity and a rare map's name don't make it another kind."""
     if is_map(raw):
         unique = int(raw.get("frameType", 0)) == FRAME_UNIQUE
-        parts = ["map", clean(raw.get("name", "")) if unique else "", map_base(raw)]
+        parts = ["map", clean(raw.get("name", "")) if unique else "", map_name(raw)]
         tier = _property(raw, "Map Tier")
         parts += [f"Map Tier={tier}"] if tier is not None else []
         parts += [w for w in ("corrupted", "mirrored") if raw.get(w)]

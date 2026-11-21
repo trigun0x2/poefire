@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from poefire.loot.items import clean, is_map, map_base
+from poefire.loot.items import clean, is_map, map_base, map_name
 from poefire.pricing.ninja import PriceLine
 
 type Json = dict[str, Any]
@@ -126,11 +126,11 @@ class PriceBook:
         its tier from the "Map Tier" property or the name ("Map (Tier 16)")."""
         base = map_base(raw)
         tier = _int_prop(raw, "Map Tier") or _tier_in_name(base)
+        kind_name = map_name(raw)  # "Blighted Strand Map", "Blighted Map (Tier 16)"
         for kind in ("blight-ravaged", "blighted"):
-            for name in (type_line, base):
-                if name.lower().startswith(kind):
-                    q = self.maps.get((name, tier)) if tier else None
-                    return q or (self.blighted.get((kind, tier)) if tier else None)
+            if kind_name.lower().startswith(kind):
+                q = self.maps.get((kind_name, tier)) if tier else None
+                return q or (self.blighted.get((kind, tier)) if tier else None)
         for key in ((base, tier), (type_line, tier), (base, None)):
             if (q := self.maps.get(key)) is not None:
                 return q
