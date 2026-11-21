@@ -198,6 +198,7 @@ def test_a_penalty_on_the_stash_also_holds_back_the_inventory() -> None:
         api.get_stash("Keepers", "aaa", "child")
     api.list_characters()  # its own policy: not held back
     assert 295 < api.rate_limited_for() <= 300  # less the 1.5 s between requests
+    assert 295 < api.rate_limited_for(inventory=True) <= 300  # the same policy
     assert not api.fits(1)
     assert calls == [
         "/character-window/get-items",
@@ -408,3 +409,22 @@ def test_a_refused_stash_list_where_your_characters_are_is_an_expired_cookie() -
     with pytest.raises(SessionExpiredError):
         api.list_stashes("Standard")
     assert auth == [False]
+
+
+def test_a_penalty_on_the_map_sections_doesnt_hold_back_the_inventory() -> None:
+    """The map sections (/api/stash) have a policy of their own."""
+
+    def site(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("get-items"):
+            return httpx.Response(
+                200, json={"items": []}, headers=limits("item", "1:60:0,5:1800:0")
+            )
+        return httpx.Response(429, headers={**limits("stash", "2:60:0,6:1800:300"),
+                                            "Retry-After": "300"})  # fmt: skip
+
+    api, _ = make(site)
+    api.get_character("Me")
+    with pytest.raises(SessionError, match="rate limited"):
+        api.get_stash("Keepers", "aaa", "child")
+    assert api.rate_limited_for() > 290
+    assert api.rate_limited_for(inventory=True) == 0

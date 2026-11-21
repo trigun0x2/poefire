@@ -349,7 +349,7 @@ class LootRecorder:
                 snap = Snapshot(self.snapshotter.clock(), [], False, ZONE_CHANGED, INVENTORY)
                 self._finish(req, snap)
                 return
-            wait = self._rate_wait()
+            wait = self._rate_wait(inventory=True)
             if wait > WAIT_FIRST:  # wait it out here, not inside the request (holding it up)
                 self._requeue(req, wait, req.tries)
                 return
@@ -403,10 +403,14 @@ class LootRecorder:
     def _api(self) -> object:
         return getattr(self.snapshotter, "api", None)
 
-    def _rate_wait(self) -> float:
+    def _rate_wait(self, inventory: bool = False) -> float:
+        """Seconds the rate limits hold back loot reads; with `inventory`, just an inventory
+        read (the stash limits don't apply to it)."""
         wait = getattr(self._api(), "rate_limited_for", None)
         try:
-            return float(wait()) if wait is not None else 0.0
+            if wait is None:
+                return 0.0
+            return float(wait(inventory=True) if inventory else wait())
         except Exception:
             return 0.0
 

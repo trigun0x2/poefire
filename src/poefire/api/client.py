@@ -24,6 +24,7 @@ API_BASE = "https://api.pathofexile.com"
 # rate-limit buckets, one per endpoint (see poefire.api.ratelimit)
 CHARACTER_LIST, CHARACTER, STASH_LIST, STASH = "character-list", "character", "stash-list", "stash"
 LOOT_BUCKETS = (CHARACTER, STASH_LIST, STASH)
+INVENTORY_BUCKETS = (CHARACTER,)  # what a map's inventory read uses
 
 type Json = dict[str, Any]
 
@@ -55,9 +56,11 @@ class PoeApi:
         segs = [root, *([self.realm] if self.realm else []), *parts]
         return "/" + "/".join(quote(s, safe="") for s in segs)
 
-    def rate_limited_for(self) -> float:
-        """Seconds until loot snapshots may make requests again (0 when they can)."""
-        return max(self.limiter.wait_time(b) for b in LOOT_BUCKETS)
+    def rate_limited_for(self, inventory: bool = False) -> float:
+        """Seconds until loot snapshots may make requests again (0 when they can); with
+        `inventory`, until an inventory read may (a stash penalty doesn't hold it up)."""
+        buckets = INVENTORY_BUCKETS if inventory else LOOT_BUCKETS
+        return max(self.limiter.wait_time(b) for b in buckets)
 
     def fits(self, n: int, reserve: int = 0) -> bool:
         """Whether `n` more loot requests fit in the rate limits right now, with `reserve`

@@ -413,10 +413,13 @@ class Limits:
 
     def __init__(self) -> None:
         self.wait = 0.0
+        self.inventory_wait: float | None = None  # None: the same as `wait`
         self.room = True
         self.asked: list[tuple[int, int]] = []
 
-    def rate_limited_for(self) -> float:
+    def rate_limited_for(self, inventory: bool = False) -> float:
+        if inventory and self.inventory_wait is not None:
+            return self.inventory_wait
         return self.wait
 
     def fits(self, n: int, reserve: int = 0) -> bool:
@@ -691,6 +694,20 @@ def test_a_rate_limit_is_waited_out_before_reading(tmp_path: Path) -> None:
     p.account.api.wait = 0.0
     p.settle(100)
     assert p.account.reads[0] == "inventory" and p.snapshots()[0][:2] == ("run_start", 1)
+
+
+def test_a_stash_penalty_doesnt_hold_up_the_inventory_reads(tmp_path: Path) -> None:
+    """The map sections have a limit of their own: a penalty there isn't the inventory's."""
+    p = Play(tmp_path)
+    p.account.tabs = {}
+    p.account.api.wait, p.account.api.inventory_wait = 300.0, 0.0
+    p.account.inventory = [currency("Chaos Orb", 1, "c")]
+    p.enter_map("run1")
+    p.settle()
+    p.account.inventory = [currency("Chaos Orb", 4, "c")]
+    p.back_home()
+    p.settle()
+    assert p.loot() == {"Chaos Orb": 3} and p.account.reads == ["inventory", "inventory"]
 
 
 def test_the_tabs_are_read_every_30_minutes_while_mapping(tmp_path: Path) -> None:
