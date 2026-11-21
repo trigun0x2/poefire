@@ -251,11 +251,9 @@ def _regexes(
     key: Callable[[str, str], str],
     one_line: Callable[[str, str], str],
 ) -> None:
-    """Saved regexes: names one line, unique, without "|"; the active one must be among them."""
-    hk = body.regex_hotkey if body.regex_hotkey is not None else rt.cfg.regex_hotkey
-    spec = key(hk, "regex hotkey")
-    if body.regex_hotkey is not None:
-        changes["regex_hotkey"] = spec
+    """Saved regexes: names one line, unique, without "|"; the active one must be among them.
+    The regex hotkey only counts against the other hotkeys while a regex is picked: without
+    one it isn't registered, so it can't be in the way."""
     if body.regexes is None:
         names = [r.name for r in gameinput.saved_regexes(rt.cfg.regexes)]
     else:
@@ -279,6 +277,16 @@ def _regexes(
         active = ""  # the active regex was removed
     if active != rt.cfg.regex_active:
         changes["regex_active"] = active
+    hk = body.regex_hotkey if body.regex_hotkey is not None else rt.cfg.regex_hotkey
+    if active:
+        spec = key(hk, "regex hotkey")
+    else:
+        try:
+            spec = hotkey.normalize(hk.strip()) if hk.strip() else ""
+        except hotkey.HotkeyError as e:
+            raise SettingsError(f"regex hotkey: {e}") from e
+    if body.regex_hotkey is not None:
+        changes["regex_hotkey"] = spec
 
 
 def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:

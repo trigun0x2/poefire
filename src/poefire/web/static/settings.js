@@ -580,9 +580,11 @@ for (const [id, kind] of [["set-chat-rows", "chat"], ["set-search-rows", "search
 
 function regexRows() { return [...$("set-regex-rows").querySelectorAll(".shortcut-row")]; }
 
+/** The picked regex's name; "" when none is picked or the picked one has no text yet (a row
+ * without text isn't saved, so it can't be the active one). */
 function activeRegexName() {
   const row = regexRows().find((r) => r.querySelector(".pick input").checked);
-  return row ? row.querySelector(".name").value.trim() : "";
+  return row && row.querySelector(".text").value.trim() ? row.querySelector(".name").value.trim() : "";
 }
 
 function regexRow(x, active) {
@@ -609,7 +611,7 @@ function renderRegexStatus() {
   let text = "", cls = "hint";
   if (!key) text = "Off.";
   else if (!regexRows().length) text = "Add a regex, then pick it.";
-  else if (!name) { text = "Pick the regex the hotkey pastes."; cls = "hint warn"; }
+  else if (!name) { text = "Pick the regex the hotkey pastes (one with text)."; cls = "hint warn"; }
   else if (!saved) text = "Save to apply.";
   else if (err) { text = `✗ ${err}`; cls = "hint bad"; }
   else text = `${key} pastes “${name}”.`;
