@@ -59,6 +59,11 @@ class SessionExpiredError(SessionError):
     """The website rejected the POESESSID: it expired, or you logged out on pathofexile.com."""
 
 
+class RefusedError(SessionError):
+    """The website refused a request that doesn't by itself prove the cookie bad (401, 403,
+    the login page)."""
+
+
 class LeagueError(SessionError):
     """The website wouldn't list stash tabs in this league (the cookie itself is fine)."""
 
@@ -217,6 +222,8 @@ class SessionApi:
         self.sleep = sleep
         self._last_request = float("-inf")
         self._tab_index: dict[str, int] = {}
+        # leagues the account's characters are in, as the character endpoints said
+        self._leagues: set[str] = set()
         self._lock = threading.Lock()
 
     def __repr__(self) -> str:  # never show the cookie
@@ -225,9 +232,11 @@ class SessionApi:
     # --- transport ---
 
     def _get(self, bucket: str, path: str, params: dict[str, str | int] | None = None,
-             auth: bool = True, block: bool = True) -> Any:  # fmt: skip
+             auth: bool = True, block: bool = True, proves: bool = True) -> Any:  # fmt: skip
         """`auth`: whether a refusal means the cookie is bad (False for endpoints that can
-        refuse for other reasons, like the trade site). `block`: whether to wait out this
+        refuse for other reasons, like the trade site: RefusedError then). `proves`: whether
+        an answer means the cookie works (False for the character endpoints, which answer
+        without a login when the profile's characters are public). `block`: whether to wait out this
         bucket's rate limit; False raises at once instead. Waiting holds the connection, so
         every other request waits too: only the loot and build requests may do that, never
         an optional one (the trade site hands out penalties of many minutes)."""
@@ -265,10 +274,11 @@ class SessionApi:
             data = self._check(resp, path)
         except SessionExpiredError as e:
             if not auth:
-                raise SessionError(f"HTTP {resp.status_code} from {path}") from e
+                raise RefusedError(f"HTTP {resp.status_code} from {path}") from e
             self._report(False)
             raise
-        self._report(True)
+        if proves:
+            self._report(True)
         return data
 
     def _report(self, ok: bool) -> None:
@@ -314,17 +324,24 @@ class SessionApi:
     # --- AccountApi ---
 
     def list_characters(self) -> list[Json]:
-        chars = self._get(CHARACTERS, "/character-window/get-characters", self._common())
+        chars = self._get(CHARACTERS, "/character-window/get-characters", self._common(),
+                          proves=False)  # fmt: skip
         if not isinstance(chars, list):
             raise SessionError("unexpected get-characters response")
+        self._leagues.update(str(c["league"]) for c in chars if c.get("league"))
         # Same shape the OAuth API uses for "the character you're playing".
         return [{**c, "current": bool(c.get("lastActive"))} for c in chars]
 
     def get_character(self, name: str) -> Json:
         data = self._get(
-            ITEMS, "/character-window/get-items", {**self._common(), "character": name}
+            ITEMS,
+            "/character-window/get-items",
+            {**self._common(), "character": name},
+            proves=False,
         )
         char: Json = dict(data.get("character") or {"name": name})
+        if char.get("league"):
+            self._leagues.add(str(char["league"]))
         # get-items mixes equipment and bags; keep the bags (OAuth's `inventory`).
         char["inventory"] = [
             i for i in data.get("items") or () if "MainInventory" in str(i.get("inventoryId", ""))
@@ -335,12 +352,16 @@ class SessionApi:
         """Everything Path of Building's "Import from website" reads: equipped items with
         their socketed gems, and the passive tree with jewels, masteries and bandit."""
         items = self._get(
-            ITEMS, "/character-window/get-items", {**self._common(), "character": name}
+            ITEMS,
+            "/character-window/get-items",
+            {**self._common(), "character": name},
+            proves=False,
         )
         passives = self._get(
             PASSIVES,
             "/character-window/get-passive-skills",
             {**self._common(), "character": name},
+            proves=False,
         )
         return {"source": "website", "items": items, "passives": passives}
 
@@ -360,9 +381,11 @@ class SessionApi:
                          block=False)  # fmt: skip
 
     def list_stashes(self, league: str) -> list[Json]:
-        """The league's stash tabs. A refusal here is about the league (misspelled, or one
-        the account has nothing in), not the cookie: the character calls catch an expired
-        one. So it raises LeagueError and never marks the cookie as bad."""
+        """The league's stash tabs. A refusal in a league the account has characters in
+        means the cookie expired: the character endpoints answer without a login when the
+        profile is public, so they can't tell. In any other league a refusal is about the
+        league (misspelled, or one the account has nothing in): LeagueError, and the cookie
+        isn't marked as bad."""
         try:
             data = self._get(
                 STASH,
@@ -370,6 +393,15 @@ class SessionApi:
                 {**self._common(), "league": league, "tabs": 1, "tabIndex": 0},
                 auth=False,
             )
+        except RefusedError as e:
+            if league in self._leagues:
+                self._report(False)
+                raise SessionExpiredError(
+                    f"The website refused to list your stash tabs in {league}, where your "
+                    f"characters are ({e}): your POESESSID has expired or was logged out. "
+                    f"{EXPIRED_HELP}"
+                ) from e
+            raise LeagueError(league, str(e)) from e
         except SessionError as e:
             if "rate limited" in str(e) or "network error" in str(e):
                 raise

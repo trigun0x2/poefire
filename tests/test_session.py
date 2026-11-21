@@ -85,7 +85,9 @@ class Site:
         return httpx.Response(404)
 
 
-def make(site: Site, **kw: Any) -> tuple[SessionApi, FakeClock]:
+def make(
+    site: Callable[[httpx.Request], httpx.Response], **kw: Any
+) -> tuple[SessionApi, FakeClock]:
     clock = FakeClock()
     api = SessionApi(
         COOKIE, "Exile#1234", UA,
@@ -190,7 +192,7 @@ def test_a_penalty_on_the_stash_also_holds_back_the_inventory() -> None:
         return httpx.Response(429, headers={**limits("item", "2:60:0,6:1800:300"),
                                             "Retry-After": "300"})  # fmt: skip
 
-    api, _ = make(site)  # type: ignore[arg-type]
+    api, _ = make(site)
     api.get_character("Me")
     with pytest.raises(SessionError, match="rate limited"):
         api.get_stash("Keepers", "aaa", "child")
@@ -342,7 +344,7 @@ def test_auth_results_are_reported(response: httpx.Response, expired: bool | Non
                      clock=clock, sleep=clock.sleep, on_auth=reports.append)  # fmt: skip
     if expired is False:
         api.list_characters()
-        assert reports == [True]
+        assert reports == []  # a public profile lists its characters without a login
     elif expired:
         with pytest.raises(SessionExpiredError, match="Settings") as e:
             api.list_characters()
@@ -365,9 +367,44 @@ def test_a_wrong_league_never_blames_the_cookie() -> None:
         return httpx.Response(200, json=[])
 
     auth: list[bool] = []
-    api, _ = make(site, on_auth=auth.append)  # type: ignore[arg-type]
+    api, _ = make(site, on_auth=auth.append)
     with pytest.raises(LeagueError, match=r"league 'Nope'.*HTTP 403"):
         api.list_stashes("Nope")
     with pytest.raises(LeagueError, match="Resource not found"):
         api.list_stashes("Old")
     assert False not in auth  # the cookie isn't marked as expired
+
+
+def test_a_refused_stash_list_where_your_characters_are_is_an_expired_cookie() -> None:
+    """A public profile's characters and inventory are readable without a login: only the
+    stash tells that the cookie expired."""
+    site = Site()
+    auth: list[bool] = []
+    api, _ = make(site, on_auth=auth.append)
+    assert [i["id"] for i in api.get_character("xyz_bow")["inventory"]] == ["inv1"]
+    assert auth == []  # doesn't prove the cookie works
+    api.list_stashes("Keepers")
+    assert auth == [True]
+
+    def refused(r: httpx.Request) -> httpx.Response:
+        if r.url.path == "/character-window/get-stash-items":
+            return httpx.Response(403, json={"error": {"code": 6, "message": "Forbidden"}})
+        return site(r)
+
+    auth.clear()
+    api, _ = make(refused, on_auth=auth.append)
+    api.get_character("xyz_bow")  # in Keepers
+    with pytest.raises(SessionExpiredError, match=r"Keepers.*HTTP 403.*expired") as e:
+        api.list_stashes("Keepers")
+    assert auth == [False] and COOKIE not in str(e.value)
+
+    from poefire.api.session import LeagueError
+
+    auth.clear()
+    api, _ = make(refused, on_auth=auth.append)
+    api.list_characters()  # Standard and Keepers
+    with pytest.raises(LeagueError):
+        api.list_stashes("Typo League")
+    with pytest.raises(SessionExpiredError):
+        api.list_stashes("Standard")
+    assert auth == [False]

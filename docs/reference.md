@@ -169,6 +169,9 @@ measures it instead of guessing. Settings shows when the current cookie was save
 worked and how long it has worked, plus how long your previous cookies lasted. When the website
 rejects the cookie (HTTP 401/403, or a redirect to the login page), loot tracking pauses. A
 banner and the sidebar then say it expired, and how long it worked, and point you to Settings.
+A public profile's characters and inventory can be read without a login, so only a stash read
+shows the cookie works: a refused stash list in a league your characters are in means it
+expired (in another league, the league name is wrong).
 
 **What the cookie means.** POESESSID is your whole logged-in website session, not a
 read-only key. Anyone who has it can act as you on pathofexile.com, so never share it or

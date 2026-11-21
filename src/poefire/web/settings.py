@@ -16,7 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from poefire import gameinput, hotkey
-from poefire.api.session import LeagueError, SessionStore
+from poefire.api.session import LeagueError, SessionExpiredError, SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config, newest_existing
 from poefire.leagues import is_private
 from poefire.store import Store
@@ -413,7 +413,7 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
     try:
         api = (rt.recorder.snapshotter.api if rt.recorder is not None
                else wiring.account_api(rt.cfg, rt.web_limiter))  # fmt: skip
-        chars = api.list_characters()  # this is the cookie check
+        chars = api.list_characters()  # a public profile answers without a login
         rt.note_account_leagues(str(c.get("league") or "") for c in chars)
     except Exception as e:  # shown to the user as is (never contains the cookie)
         return {"ok": False, "error": str(e)}
@@ -425,6 +425,8 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
     for league in dict.fromkeys((rt.league, rt.default_league(), "Standard")):
         try:
             tabs = api.list_stashes(league)
+        except SessionExpiredError as e:  # the stash list is what needs the login
+            return {"ok": False, "error": str(e)}
         except LeagueError as e:
             note = note or str(e)
             continue

@@ -238,6 +238,21 @@ def test_check_account_with_a_wrong_league(
         assert r["tabs"] == [] and acc.asked == ["Typo League", "Keepers", "Standard"]
 
 
+def test_check_account_with_an_expired_cookie(
+    env: tuple[TestClient, AppRuntime, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from poefire.api.session import SessionExpiredError
+
+    class Expired(FakeAccount):
+        def list_stashes(self, league: str) -> list[dict[str, Any]]:
+            raise SessionExpiredError("your POESESSID has expired")
+
+    client, _, _ = env
+    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg, limiter=None: Expired())
+    r = client.post("/api/settings/check-account", headers=H).json()
+    assert r == {"ok": False, "error": "your POESESSID has expired"}
+
+
 def test_first_start_picks_the_newest_league(
     env: tuple[TestClient, AppRuntime, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
