@@ -292,21 +292,23 @@ Settings → In-game shortcuts: hotkeys that send **one action** to the game per
 do what they normally do (F5 still refreshes your browser): poefire registers them when the
 game gets focus and lets them go when it loses it.
 
-- **Chat commands:** open chat, paste the command, press Enter. Built in: F5 /hideout and
-  F9 /exit, plus /kingsmarch, /menagerie and /delve without a key. Change any hotkey or
+Every in-game shortcut is off until you give it a hotkey.
+
+- **Chat commands:** open chat, paste the command, press Enter. Built in, without a key:
+  /hideout, /exit, /kingsmarch, /menagerie and /delve. Give any of them a hotkey, change the
   command, remove them, or add your own (any one line of chat).
 - **Stash and vendor searches:** with the stash or a vendor open, the hotkey focuses its
   search box (Ctrl+F) and pastes the saved text, e.g. a map-mod regex like `"!ele|!reg"`. Give
   each a name, a hotkey and up to 250 characters.
 - **Regexes:** save as many named regexes as you like and pick one with its radio button; the
-  regex hotkey (Ctrl+B by default) pastes the picked one into the open stash or vendor
-  search box, the same way. Switch regexes by picking another and saving, no new hotkey needed.
+  regex hotkey (Ctrl+B by default, live only once a regex is picked) pastes the picked one
+  into the open stash or vendor search box, the same way. Switch regexes by picking another and saving, no new hotkey needed.
 
 The text goes in by pasting (the clipboard is put back afterwards), never by typing letters:
 if chat didn't open, typed letters would land in the game as skill and panel keys. Hotkeys are
 sent after you let go of the hotkey's own modifiers. All hotkeys must differ from each other
 and from the campaign and overlay hotkeys; a letter or digit needs a modifier. In
-config.toml: `chat_commands = ["F5|/hideout", ...]` (hotkey | command) and
+config.toml: `chat_commands = ["F5|/hideout", "|/exit", ...]` (hotkey | command; no hotkey = off) and
 `search_strings = ["Ctrl+Shift+1|Bad maps|!ele|!reg"]` (hotkey | name | text);
 `regexes = ["Bad maps|!ele|!reg"]` (name | text), `regex_active = "Bad maps"` and
 `regex_hotkey = "Ctrl+B"`.

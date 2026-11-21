@@ -43,7 +43,7 @@ STEP = 0.03  # seconds between key events (the game reads input per frame)
 RESTORE_AFTER = 0.3  # seconds before the clipboard is put back
 RELEASE_WAIT = 0.6  # seconds to wait for the hotkey's modifiers to be let go
 
-DEFAULT_CHAT_COMMANDS = ["F5|/hideout", "F9|/exit", "|/kingsmarch", "|/menagerie", "|/delve"]
+DEFAULT_CHAT_COMMANDS = ["|/hideout", "|/exit", "|/kingsmarch", "|/menagerie", "|/delve"]
 
 
 # --- config entries ---

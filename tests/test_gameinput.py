@@ -88,7 +88,8 @@ def test_entries_round_trip() -> None:
     assert gi.chat_commands(["|/kingsmarch", "F5|", "bad"]) == [ChatCommand("", "/kingsmarch")]
     cfg = Config(search_strings=[s.format()])
     assert Config.from_dict({"search_strings": cfg.search_strings}).search_strings == [s.format()]
-    assert Config().chat_commands[:2] == ["F5|/hideout", "F9|/exit"]
+    assert Config().chat_commands[:2] == ["|/hideout", "|/exit"]  # off by default
+    assert all(not c.key for c in gi.chat_commands(Config().chat_commands))
 
 
 class FakeHotkey:
@@ -144,7 +145,7 @@ def test_settings_validate_shortcuts(tmp_path: Path) -> None:
     client.headers["host"] = "127.0.0.1:8460"
     h = {"X-Poefire": "1"}
     s = client.get("/api/settings").json()
-    assert s["chat_commands"][0] == {"key": "F5", "text": "/hideout"}
+    assert s["chat_commands"][0] == {"key": "", "text": "/hideout"}
     assert s["search_strings"] == [] and "available" in s["game_hotkeys"]
 
     def post(**body: Any) -> Any:
@@ -246,11 +247,16 @@ def test_settings_save_regexes_and_bind_the_active_one(tmp_path: Path) -> None:
         ({"regexes": [two[0], {"name": "bad MAPS", "text": "x"}]}, "two regexes"),
         ({"regexes": [{"name": "a|b", "text": "x"}]}, "can't contain"),
         ({"regex_active": "Nope"}, "isn't saved"),
-        ({"regex_hotkey": "Ctrl+Alt+R"}, "already used"),  # the campaign hotkey
+        ({"regex_hotkey": "Ctrl+Alt+R", "regex_active": "Bad maps"},
+         "already used"),  # the campaign hotkey
         ({"search_strings": [{"key": "Ctrl+Alt+G", "name": "x", "text": "y"}],
-          "regex_hotkey": "Ctrl+Alt+G"}, "already used"),
+          "regex_hotkey": "Ctrl+Alt+G", "regex_active": "Bad maps"}, "already used"),
+        ({"regex_hotkey": "Ctrl+Nope"}, "regex hotkey"),  # checked even when not in use
     ]  # fmt: skip
     for bad, why in bads:
         r = post(**bad)
         assert r.status_code == 400 and why in r.text, (bad, r.text)
+    # no regex picked: its hotkey isn't registered, so it doesn't block another shortcut's
+    r = post(search_strings=[{"key": "Ctrl+Alt+G", "name": "x", "text": "y"}])
+    assert r.status_code == 200, r.text
     rt.stop()
