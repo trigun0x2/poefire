@@ -325,9 +325,9 @@ function renderTabsCost() {
   const tabs = picked.length - uniques;
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const extra = [
-    maps ? `+1 per Tier 16–17 or special section of the map tab${maps === 1 ? "" : "s"} (not the unique maps)` : "",
+    maps ? `+1 per Tier 16, Special or Unique section of the map tab${maps === 1 ? "" : "s"}` : "",
     folders ? `+1 per tab in the ${folders === 1 ? "folder" : `${folders} folders`}` : "",
-    uniques ? "unique tabs aren't read: uniques aren't counted" : "",
+    uniques ? "unique tabs aren't read: of uniques only unique maps count" : "",
   ].filter(Boolean).join("; ");
   const el = $("set-tabs-cost");
   const perRead = 1 + tabs + (sales ? 1 : 0);

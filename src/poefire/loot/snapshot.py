@@ -24,22 +24,19 @@ FULL, INVENTORY = "full", "inventory"  # Snapshot.scope
 
 # Tabs whose items live only in sections (each section is fetched separately).
 SECTIONED_TAB_TYPES = frozenset({"MapStash", "UniqueStash"})
-# Unique tabs hold nothing but uniques, and uniques are never counted (see is_tracked): they
-# aren't read at all, saving a request per section.
+# Unique tabs aren't read at all, saving a request per section: of uniques only unique maps
+# count (see is_tracked), and those are read in the map tab.
 UNREAD_TAB_TYPES = frozenset({"UniqueStash"})
 TAB_LIST_EVERY = 1800.0  # seconds: the tab list (ids, positions, sections) is read again
 
 
-# Of the map tab, only these sections are watched: tier 16 (originator maps included) and
-# tier 17 maps, and the sections that aren't a tier (special, nightmare...), except the
-# unique maps (uniques aren't counted). Lower tiers aren't counted (or fetched).
-MAP_MIN_TIER = 16
+# Of the map tab, only these sections are read: Tier 16 (originator maps included), Special
+# (nightmare, Valdo, guardian maps...) and Unique. The others (lower tiers, Tier 17) aren't.
+KEPT_MAP_SECTIONS = frozenset({"Tier 16", "Special", "Unique"})
 
 
 def is_kept_map_section(section: Json) -> bool:
-    name = tab_display_name(section)
-    m = re.fullmatch(r"Tier (\d+)", name)
-    return int(m.group(1)) >= MAP_MIN_TIER if m else name != "Unique"
+    return tab_display_name(section) in KEPT_MAP_SECTIONS
 
 
 def retryable(e: Exception) -> bool:
