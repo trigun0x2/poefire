@@ -847,6 +847,46 @@ def test_worker_processes_and_coalesces(tmp_path: Path) -> None:
     assert {d.name: d.quantity for d in store.run_loot("run1")} == {"Chaos Orb": 2}
 
 
+def test_snapshots_from_before_a_loot_rules_change_are_a_baseline(tmp_path: Path) -> None:
+    """Snapshots stored by an older version (no unique maps then) aren't diffed against."""
+    from poefire.loot.recorder import LOOT_RULES_KEY
+
+    old = Play(tmp_path)
+    old.account.inventory = [currency("Chaos Orb", 1, "c")]
+    old.rec.record(Trigger.MANUAL)
+    old.store.set_json(LOOT_RULES_KEY, {"version": 1, "before": 0})  # as an older version left it
+
+    p = Play(tmp_path)  # the upgraded app
+    p.account.inventory = [currency("Chaos Orb", 1, "c"),
+                           {"id": "u", "name": "Maelström of Chaos", "typeLine": "Atoll Map",
+                            "frameType": 3}]  # fmt: skip
+    assert p.rec.record(Trigger.MANUAL).baseline
+    p.account.inventory.append(currency("Divine Orb", 1, "d"))
+    r = p.rec.record(Trigger.MANUAL)
+    assert not r.baseline and {d.name: d.quantity for d in r.deltas} == {"Divine Orb": 1}
+
+
+def test_a_map_started_before_a_loot_rules_change_isnt_measured(tmp_path: Path) -> None:
+    from poefire.loot.recorder import LOOT_RULES_KEY
+
+    old = Play(tmp_path)
+    old.enter_map("run1")
+    old.settle()
+    old.store.set_json(LOOT_RULES_KEY, {"version": 1, "before": 0})
+    p = Play(tmp_path)
+    p.run, p.clock.t = old.run, old.clock.t
+    p.account.inventory = [currency("Chaos Orb", 3, "c")]
+    p.back_home()
+    p.settle()
+    assert p.loot() == {} and p.snapshots()[-1][0] == "run_return_unpaired"
+    p.enter_map("run1")
+    p.settle()
+    p.account.inventory = [currency("Chaos Orb", 5, "c")]
+    p.back_home()
+    p.settle()
+    assert p.loot() == {"Chaos Orb": 2}  # maps started since are measured
+
+
 def test_snapshot_now_counts_the_change_and_keeps_the_map_going(tmp_path: Path) -> None:
     p = Play(tmp_path)
     c = "Chaos Orb"

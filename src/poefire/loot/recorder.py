@@ -48,6 +48,11 @@ log = logging.getLogger(__name__)
 
 
 TAB_NAMES_KEY = "tab_names"
+# What counts as loot and how items are keyed (poefire.loot.items). Snapshots stored under
+# other rules aren't diffed against: the first one after a change is a new baseline, so e.g.
+# unique maps (not kept before rules 2) don't all show up as gained.
+LOOT_RULES = 2
+LOOT_RULES_KEY = "loot_rules"  # {"version": LOOT_RULES, "before": newest snapshot id then}
 
 type SnapshotValue = tuple[str, float, float | None, int]  # league, chaos, chaos/divine, unpriced
 
@@ -167,6 +172,7 @@ class LootRecorder:
         self._full_known = False  # _last_full loaded from the store
         self._stash_after = float("-inf")  # monotonic: no tab reads before (after no room/failing)
         self._store: Store | None = None
+        self._rules_floor: int | None = None  # snapshots up to this id: other loot rules
         self._pending: list[_Request] = []
         self._cond = threading.Condition()
         self._stop = threading.Event()
@@ -505,6 +511,17 @@ class LootRecorder:
             self._store = self.store_factory()
         return self._store
 
+    def _rules_before(self, store: Store) -> int:
+        """Snapshots with ids up to this one were stored under other loot rules (0: none)."""
+        if self._rules_floor is None:
+            saved = store.get_json(LOOT_RULES_KEY) or {}
+            if saved.get("version") != LOOT_RULES:
+                last = store.latest_snapshot(items=False)
+                saved = {"version": LOOT_RULES, "before": last.id if last else 0}
+                store.set_json(LOOT_RULES_KEY, saved)
+            self._rules_floor = int(saved.get("before") or 0)
+        return self._rules_floor
+
     def _record_full(self, store: Store, snapshot_id: int, snap: Snapshot) -> None:
         """A read of the watched tabs: their names, and the value for the Overview."""
         self._last_full, self._full_known = snap.taken_at, True
@@ -547,6 +564,7 @@ class LootRecorder:
         # network I/O outside the DB transaction
         sales = self._fetch_sales() if changes and snap.complete and snap.scope == FULL else None
         with store.transaction():
+            self._rules_before(store)  # before this process stores any snapshot
             if trigger is Trigger.RUN_RETURN:
                 return self._save_return(store, run_id, snap, segment)
             if not changes:  # a segment's start
@@ -575,6 +593,7 @@ class LootRecorder:
         start = store.latest_snapshot((*SEGMENT_STARTS, *SEGMENT_ENDS))
         paired = (
             start is not None
+            and start.id > self._rules_before(store)
             and start.trigger in SEGMENT_STARTS
             and start.run_id == run_id
             and (segment is None or start.taken_at >= segment)
@@ -603,6 +622,7 @@ class LootRecorder:
         """Snapshot now and the interval mode: the change since the previous snapshot (only
         the inventory's, when either of them didn't read the tabs)."""
         prev = store.latest_snapshot()
+        before_rules = self._rules_before(store)
         sid = store.add_snapshot(snap, trigger.value, None)
         if not snap.complete:
             return LootResult(trigger, None, sid, False, False, error=snap.error, scope=snap.scope)
@@ -614,7 +634,9 @@ class LootRecorder:
             book = SaleBook.from_json(saved)
             book.add(sales, first_fetch=saved is None)
             store.set_json(SALES_KEY, book.to_json())
-        if prev is None or snap.taken_at - prev.taken_at > self.max_gap:
+        if prev is not None and prev.id <= before_rules:
+            log.info("loot snapshot: the first since what counts as loot changed, a new baseline")
+        if prev is None or prev.id <= before_rules or snap.taken_at - prev.taken_at > self.max_gap:
             store.prune_snapshot_items()
             return LootResult(trigger, None, sid, True, True, scope=snap.scope)
         both_full = prev.scope == FULL and snap.scope == FULL
