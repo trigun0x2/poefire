@@ -420,6 +420,14 @@ class LootRecorder:
         except Exception:
             return 0.0
 
+    def _capacity(self) -> int | None:
+        capacity = getattr(self._api(), "capacity", None)
+        try:
+            cap = capacity() if capacity is not None else None
+            return int(cap) if cap is not None else None
+        except Exception:
+            return None
+
     def _fits(self, n: int, reserve: int) -> bool:
         fits = getattr(self._api(), "fits", None)
         try:
@@ -456,12 +464,32 @@ class LootRecorder:
         if last is not None and self.now() - last < self.stash_every:
             return False
         n = self.snapshotter.tab_requests()
+        if (cap := self._capacity()) is not None and n + STASH_RESERVE > cap:
+            n = self._known_tab_requests(n)
+            if n + STASH_RESERVE > cap:
+                log.warning("the watched tabs take about %d requests: more than the website "
+                            "allows between maps (about %d every 30 minutes, %d of them kept "
+                            "for the maps' inventory reads). Watch fewer tabs, or use the "
+                            "every-10-minutes mode", n, cap, STASH_RESERVE)  # fmt: skip
+                self._stash_after = self.monotonic() + self.stash_every.total_seconds()
+                return False
         if not self._fits(n, STASH_RESERVE):
             log.info("watched tabs not read now: %d requests don't fit in the website's rate "
                      "limits", n)  # fmt: skip
             self._stash_after = self.monotonic() + STASH_RETRY
             return False
         return True
+
+    def _known_tab_requests(self, guess: int) -> int:
+        """tab_requests from the tab list itself when it was only guessed so far."""
+        if getattr(self.snapshotter, "tabs_known", True):
+            return guess
+        try:
+            self.snapshotter.resolve_tabs()
+        except Exception as e:
+            log.info("reading the stash tab list failed: %s", e)
+            return guess
+        return int(self.snapshotter.tab_requests())
 
     def _last_full_at(self) -> datetime | None:
         if not self._full_known:

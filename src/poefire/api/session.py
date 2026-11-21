@@ -407,6 +407,11 @@ class SessionApi:
         hits to spare (see RateLimiter.fits)."""
         return self.limiter.fits(LOOT_BUCKETS, n, reserve)
 
+    def capacity(self) -> int | None:
+        """The most loot requests the rate limits allow in their long windows (None while
+        they're not known yet)."""
+        return self.limiter.capacity(LOOT_BUCKETS)
+
     def trade_history(self, league: str) -> Any:
         """Your sales from merchant tabs in `league`: {"result": [{time, item_id, item,
         price: {amount, currency}}, ...]} (see poefire.loot.sales)."""

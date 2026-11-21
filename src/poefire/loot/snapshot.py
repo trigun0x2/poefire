@@ -162,6 +162,11 @@ class Snapshotter:
             self._listed_names = {}
             self.character = self._configured_character
 
+    @property
+    def tabs_known(self) -> bool:
+        """Whether the watched tabs have been resolved (tab_requests is a guess until then)."""
+        return self._tabs is not None
+
     def tab_requests(self) -> int:
         """About how many requests reading the watched tabs takes now (the tab list too when
         it's due), for planning around the rate limits."""

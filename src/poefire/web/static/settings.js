@@ -331,10 +331,13 @@ function renderTabsCost() {
   ].filter(Boolean).join("; ");
   const el = $("set-tabs-cost");
   const perRead = 1 + tabs + (sales ? 1 : 0);
-  el.className = `hint ${interval && (perRead > 15 || maps) ? "warn" : ""}`;
+  // per map: the tabs are read between two inventory reads, ~20 of the ~90 kept for those
+  const tooMany = !interval && tabs > 70;
+  el.className = `hint ${(interval && (perRead > 15 || maps)) || tooMany ? "warn" : ""}`;
   el.textContent = interval
     ? `About ${plural(perRead, "request")} every 10 minutes while mapping (inventory + ${plural(tabs, "tab")}${sales ? " + trade history" : ""}${extra ? `; ${extra}` : ""}). pathofexile.com allows about 100 every 30 minutes: fewer tabs mean fewer waits.`
-    : `2 requests per map (your inventory). The ${plural(tabs, "watched tab")}: about ${plural(tabs, "request")}${extra ? ` (${extra})` : ""} every 30 minutes while you map, and only when the website's rate limits have room.`;
+    : `2 requests per map (your inventory). The ${plural(tabs, "watched tab")}: about ${plural(tabs, "request")}${extra ? ` (${extra})` : ""} every 30 minutes while you map, and only when the website's rate limits have room.` +
+      (tooMany ? " That's more than the website allows between maps: they won't be read. Watch fewer, or use the every-10-minutes mode." : "");
 }
 
 function renderDirty() {

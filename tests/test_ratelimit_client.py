@@ -136,6 +136,18 @@ def test_fits() -> None:
     assert not rl.fits(["items"], 1)  # restricted: nothing fits
 
 
+def test_more_than_ever_fits_waits_for_an_empty_window() -> None:
+    rl, clock = limiter()
+    assert rl.capacity(["items"]) is None  # not known yet
+    rl.acquire("items")
+    rl.update("items", headers("item", Account=("30:60:60,100:1800:600", "1:60:0,1:1800:0")),
+              200)  # fmt: skip
+    assert rl.capacity(["items", "stash"]) == 90  # the 30-minute window (the minute's is short)
+    assert not rl.fits(["items"], 95)  # one hit in the window: never fits otherwise
+    clock.t += 1801
+    assert rl.fits(["items"], 95) and rl.fits(["items"], 80, reserve=20)
+
+
 def test_state_survives_a_restart() -> None:
     wall = [1_000_000.0]
     clock = FakeClock()

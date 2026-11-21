@@ -162,7 +162,9 @@ class RateLimiter:
         with `reserve` hits to spare in each; and no penalty is in force. Windows of up to
         `short` seconds don't count: they only space the requests out (short waits). Each
         policy behind the buckets is counted for all `n` (exact when they share one,
-        cautious when they don't); a bucket whose policy isn't known yet doesn't count."""
+        cautious when they don't); a bucket whose policy isn't known yet doesn't count.
+        Requests too many to ever fit with their reserve fit once the window is empty: they
+        then wait their way through it, rather than never being sent."""
         with self._lock:
             now = self.clock()
             policies = set()
@@ -180,9 +182,22 @@ class RateLimiter:
                     if period <= short:
                         continue
                     recent = sum(1 for t in st.history if t > now - period)
-                    if recent + n + reserve > self.allowed(max_hits):
+                    allowed = self.allowed(max_hits)
+                    if recent + min(n + reserve, allowed) > allowed:
                         return False
             return True
+
+    def capacity(self, buckets: Sequence[str], short: float = SHORT_WINDOW) -> int | None:
+        """The most requests on `buckets` the long windows allow (see allowed); None while
+        no policy behind them is known."""
+        with self._lock:
+            caps = [
+                self.allowed(max_hits)
+                for policy in {self._bucket_policy.get(b) for b in buckets} - {None}
+                for max_hits, period in self._policies[str(policy)].windows
+                if period > short
+            ]
+        return min(caps) if caps else None
 
     def acquire(self, bucket: str) -> None:
         """Block until a request on `bucket` is allowed, then record it."""

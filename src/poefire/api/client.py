@@ -67,6 +67,11 @@ class PoeApi:
         hits to spare (see RateLimiter.fits)."""
         return self.limiter.fits(LOOT_BUCKETS, n, reserve)
 
+    def capacity(self) -> int | None:
+        """The most loot requests the rate limits allow in their long windows (None while
+        they're not known yet)."""
+        return self.limiter.capacity(LOOT_BUCKETS)
+
     def _get(self, bucket: str, path: str) -> Json:
         refreshed = False
         for _attempt in range(self.max_retries + 1):

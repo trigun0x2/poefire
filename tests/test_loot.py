@@ -429,6 +429,7 @@ class Limits:
         self.wait = 0.0
         self.inventory_wait: float | None = None  # None: the same as `wait`
         self.room = True
+        self.cap: int | None = None
         self.asked: list[tuple[int, int]] = []
 
     def rate_limited_for(self, inventory: bool = False) -> float:
@@ -439,6 +440,9 @@ class Limits:
     def fits(self, n: int, reserve: int = 0) -> bool:
         self.asked.append((n, reserve))
         return self.room
+
+    def capacity(self) -> int | None:
+        return self.cap
 
 
 class Account:
@@ -722,6 +726,30 @@ def test_a_stash_penalty_doesnt_hold_up_the_inventory_reads(tmp_path: Path) -> N
     p.back_home()
     p.settle()
     assert p.loot() == {"Chaos Orb": 3} and p.account.reads == ["inventory", "inventory"]
+
+
+def test_tabs_too_many_to_read_between_maps_arent_started(tmp_path: Path) -> None:
+    """More requests than the limits allow with the maps' reserve: not read (and not tried
+    again every 10 minutes), rather than read part way and dropped."""
+    p = Play(tmp_path)
+    p.account.tabs = {f"t{i}": [] for i in range(80)}
+    p.account.api.cap = 90
+    p.enter_map("run1")
+    p.settle()
+    assert p.account.reads == ["inventory"] and p.snapshots() == [("run_start", 1, "inventory")]
+    p.back_home()
+    p.settle()
+    p.clock.tick(700)
+    p.enter_map("run2")
+    p.settle()
+    assert not any(r.startswith("tab") for r in p.account.reads)
+    p.account.tabs = {"dump": []}  # fewer tabs, after the 30 minutes
+    p.back_home()
+    p.settle()
+    p.clock.tick(1800)
+    p.enter_map("run3")
+    p.settle()
+    assert p.account.reads[-1] == "tab dump"
 
 
 def test_the_tabs_are_read_every_30_minutes_while_mapping(tmp_path: Path) -> None:
