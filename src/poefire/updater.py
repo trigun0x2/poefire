@@ -46,6 +46,11 @@ class UpdateError(Exception):
     pass
 
 
+class ReleaseGoneError(UpdateError):
+    """A release file answered 404: the release was replaced since it was found (the rolling
+    beta is recreated, with a new zip name, on every push to dev)."""
+
+
 def parse_version(text: str) -> Version | None:
     """ "0.6.0" -> (0, 6, 0, 1, 0); "0.6.0-dev.12" -> (0, 6, 0, 0, 12). A release sorts after
     its own dev builds. None for anything else."""
@@ -150,6 +155,8 @@ class Updater:
         digest = hashlib.sha256()
         try:
             with self.http.stream("GET", info.zip_url, headers=self.headers) as r:
+                if r.status_code == 404:
+                    raise ReleaseGoneError(f"{info.zip_name} is no longer published")
                 if r.status_code != 200:
                     raise UpdateError(f"download failed: HTTP {r.status_code}")
                 total = int(r.headers.get("content-length") or info.size or 0)
@@ -163,6 +170,8 @@ class Updater:
                             progress(done, total)
             if info.sha256_url:
                 r2 = self.http.get(info.sha256_url, headers=self.headers)
+                if r2.status_code == 404:
+                    raise ReleaseGoneError(f"{info.zip_name}'s checksum is no longer published")
                 expected = r2.text.split()[0].lower() if r2.status_code == 200 and r2.text else ""
                 if expected != digest.hexdigest():
                     raise UpdateError("the download doesn't match its published checksum")
@@ -172,6 +181,8 @@ class Updater:
                     "download it from the releases page instead"
                 )
             r3 = self.http.get(info.attestation_url, headers=self.headers)
+            if r3.status_code == 404:
+                raise ReleaseGoneError(f"{info.zip_name}'s attestation is no longer published")
             if r3.status_code != 200:
                 raise UpdateError(f"couldn't download the build attestation: HTTP {r3.status_code}")
             try:

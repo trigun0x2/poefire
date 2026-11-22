@@ -45,6 +45,7 @@ from poefire.service import TrackerService
 from poefire.store import Store
 from poefire.tracker import Notice, RunStatus, TrackerState
 from poefire.updater import (
+    ReleaseGoneError,
     UpdateError,
     UpdateInfo,
     Updater,
@@ -813,13 +814,27 @@ class AppRuntime:
             folder = install_dir()
             try:
                 assert folder is not None
-                staged = self.updater.stage(
-                    info, staging_root(),
-                    progress=lambda done, total: setattr(self.update, "progress", (done, total)),
-                )  # fmt: skip
+                # The release found by the last check may have been replaced since (the beta
+                # is, on every push to dev): install what's published now, and if that is
+                # replaced while it downloads, look once more.
+                for last in (False, True):
+                    current = self._fresh_update(info)
+                    try:
+                        staged = self.updater.stage(
+                            current, staging_root(),
+                            progress=lambda done, total: setattr(self.update, "progress",
+                                                                 (done, total)),
+                        )  # fmt: skip
+                        break
+                    except ReleaseGoneError:
+                        if last:
+                            raise
+                        log.info("update %s was replaced while downloading; checking again",
+                                 current.version)  # fmt: skip
                 self.update.stage = "installing"
                 start_install(staged, folder, staging_root() / "update.log")
             except (UpdateError, OSError, AssertionError) as e:
+                log.warning("update failed: %s", e)
                 self.update.stage, self.update.error = "failed", str(e) or type(e).__name__
                 return
             if self.request_exit is not None:
@@ -829,6 +844,19 @@ class AppRuntime:
             threading.Timer(EXIT_GRACE, self.hard_exit).start()
 
         threading.Thread(target=run, name="update", daemon=True).start()
+
+    def _fresh_update(self, found: UpdateInfo) -> UpdateInfo:
+        """The release to install now: the newest one published (it replaces `found` in the
+        state), or `found` when GitHub can't be asked (rate limited, offline)."""
+        try:
+            fresh = self.updater.check(include_prereleases=self.cfg.update_channel == "beta")
+        except UpdateError as e:
+            log.info("update: couldn't check again (%s); installing %s", e, found.version)
+            return found
+        if fresh is None:
+            raise UpdateError(f"{found.version} is no longer published and nothing newer is")
+        self.update.available = fresh
+        return fresh
 
     def hard_exit(self) -> None:
         log.warning("still running %ss after the update asked to exit; exiting now", EXIT_GRACE)

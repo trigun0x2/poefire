@@ -350,3 +350,78 @@ def test_stage_checks_the_build_attestation(tmp_path: Path) -> None:
     unsigned = replace(info, attestation_url=None)
     with pytest.raises(UpdateError, match="no build attestation"):
         make_updater(GitHub([])).stage(unsigned, tmp_path / "c")
+
+
+class RollingBeta(GitHub):
+    """The beta replaced by a newer build after the app found it; with `swap_after`, replaced
+    again once that many of the newer build's downloads started."""
+
+    def __init__(self, found: str, now: list[str], swap_after: int = 0) -> None:
+        super().__init__([release(found, prerelease=True)])
+        self.builds, self.swap_after, self.started = now, swap_after, 0
+
+    def publish(self) -> None:
+        self.releases = [release(self.builds.pop(0), prerelease=True)]
+
+    def __call__(self, r: httpx.Request) -> httpx.Response:
+        self.requests.append(r)
+        if r.url.host == "api.github.com":
+            return httpx.Response(200, json=self.releases)
+        published = self.releases[0]["assets"][0]["name"]
+        if not r.url.path.split("/")[-1].startswith(published):
+            return httpx.Response(404)
+        if r.url.path.endswith(".zip"):
+            self.started += 1
+            if self.swap_after and self.started == self.swap_after:
+                self.publish()
+                return httpx.Response(404)
+        return super().__call__(r)
+
+
+def install_with(rt: AppRuntime, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                 client: TestClient) -> list[tuple[Path, Path]]:  # fmt: skip
+    rt.update.can_install = True
+    installed = tmp_path / "app"
+    installed.mkdir()
+    swaps: list[tuple[Path, Path]] = []
+    done = threading.Event()
+    monkeypatch.setattr("poefire.web.runtime.install_dir", lambda: installed)
+    monkeypatch.setattr("poefire.web.runtime.staging_root", lambda: tmp_path / "updates")
+    monkeypatch.setattr("poefire.web.runtime.start_install",
+                        lambda staged, target, log: swaps.append((staged, target)))  # fmt: skip
+    monkeypatch.setattr("poefire.web.runtime.EXIT_GRACE", 3600)
+    rt.request_exit = done.set
+    client.post("/api/update/install", headers=H)
+    for _ in range(100):
+        if done.is_set() or rt.update.stage == "failed":
+            break
+        threading.Event().wait(0.05)
+    return swaps
+
+
+def test_install_takes_the_beta_published_now(
+    app: tuple[TestClient, AppRuntime], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, rt = app
+    rt.cfg.update_channel = "beta"
+    gh = RollingBeta("0.7.0-dev.1", ["0.7.0-dev.4"])
+    rt.updater = make_updater(gh)
+    client.post("/api/update/check", headers=H)
+    gh.publish()  # a push to dev replaced the beta after the check
+    swaps = install_with(rt, tmp_path, monkeypatch, client)
+    assert rt.update.error is None
+    assert swaps == [(tmp_path / "updates" / "0.7.0-dev.4", tmp_path / "app")]
+    assert rt.update.available is not None and rt.update.available.version == "0.7.0-dev.4"
+
+
+def test_install_looks_again_when_the_beta_is_replaced_while_downloading(
+    app: tuple[TestClient, AppRuntime], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, rt = app
+    rt.cfg.update_channel = "beta"
+    gh = RollingBeta("0.7.0-dev.1", ["0.7.0-dev.2"], swap_after=1)
+    rt.updater = make_updater(gh)
+    client.post("/api/update/check", headers=H)
+    swaps = install_with(rt, tmp_path, monkeypatch, client)
+    assert rt.update.error is None
+    assert swaps == [(tmp_path / "updates" / "0.7.0-dev.2", tmp_path / "app")]
