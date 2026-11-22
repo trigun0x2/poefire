@@ -229,6 +229,11 @@ details.hint ol { margin: 6px 0; padding-left: 20px; }
 .tabs-list input { accent-color: var(--accent); margin: 0; }
 .row-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .tabs-list .type { color: var(--muted); font-size: 11.5px; }
+.tabs-leagues { display: flex; flex-direction: column; gap: 8px; }
+.tabs-league { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.tabs-league summary { cursor: pointer; font-size: 13px; font-weight: 600; padding: 2px 0; }
+.tabs-league summary .muted { font-weight: 400; }
+.tabs-league .tabs-list { margin: 6px 0 4px; }
 .save-bar {
   position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; margin: 0 -18px -90px;
   padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--line);

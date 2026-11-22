@@ -132,24 +132,70 @@ function renderAccountPickers() {
   }
   $("set-character").innerHTML = opts.join("");
 
-  // saved entries (names or ids, any case) -> as saved, so an unchanged pick saves the same
-  const chosen = new Map(s.stash_tabs.map((t) => [t.toLowerCase(), t]));
-  const tabs = account?.tabs || [];
-  const known = new Set();
-  let html = tabs.map((t) => {
-    const saved = chosen.get(String(t.name).toLowerCase()) ?? chosen.get(String(t.id).toLowerCase());
-    const on = saved != null;
-    if (on) { known.add(String(t.name).toLowerCase()); known.add(String(t.id).toLowerCase()); }
-    return `<label><input type="checkbox" value="${esc(saved ?? t.name)}" data-type="${esc(t.type || "")}"${on ? " checked" : ""}>${esc(t.name)}<span class="type">${esc(String(t.type || "").replace(/Stash$/, ""))}</span></label>`;
-  }).join("");
-  // tabs saved earlier but not in the loaded list (or nothing loaded yet)
-  html += s.stash_tabs.filter((t) => !known.has(t.toLowerCase())).map((t) =>
-    `<label><input type="checkbox" value="${esc(t)}" checked>${esc(t)}</label>`).join("");
-  $("set-tabs").innerHTML = html || '<span class="hint">Press Refresh tabs to load your stash tabs.</span>';
-  $("set-tabs-age").textContent = account?.fetched_at
-    ? `Tab list from ${ago(account.fetched_at)}${account.tabs_league ? ` (${account.tabs_league})` : ""}. Refresh after adding or renaming tabs.`
-    : "";
+  renderTabLeagues();
   renderDirty();
+}
+
+/** The saved watched tabs of `league`: its own picks, else the ones for every league. */
+function picksFor(league) {
+  const own = settings?.league_tabs || {};
+  return Object.hasOwn(own, league) ? own[league] : settings?.stash_tabs || [];
+}
+
+/** The leagues whose tabs Settings shows: the selected one first, then each league your
+ * characters are in (from the last check), then leagues picked before but not listed now. */
+function tabLeagues() {
+  const current = $("set-league").value.trim() || settings?.league || "";
+  const groups = account?.leagues
+    || (account?.tabs_league ? [{ league: account.tabs_league, tabs: account.tabs || [] }] : []);
+  const listed = new Map(groups.map((g) => [g.league, g.tabs]));
+  const names = [current, ...listed.keys(), ...Object.keys(settings?.league_tabs || {})].filter(Boolean);
+  return [...new Set(names)].map((league) => ({ league, tabs: listed.get(league), current: league === current }));
+}
+
+function renderTabLeagues() {
+  const typeOf = (t) => esc(String(t.type || "").replace(/Stash$/, ""));
+  $("set-tabs").innerHTML = tabLeagues().map((g) => {
+    // saved entries (names or ids, any case) -> as saved, so an unchanged pick saves the same
+    const saved = picksFor(g.league);
+    const chosen = new Map(saved.map((t) => [t.toLowerCase(), t]));
+    const known = new Set();
+    let html = (g.tabs || []).map((t) => {
+      const pick = chosen.get(String(t.name).toLowerCase()) ?? chosen.get(String(t.id).toLowerCase());
+      if (pick != null) { known.add(String(t.name).toLowerCase()); known.add(String(t.id).toLowerCase()); }
+      return `<label><input type="checkbox" value="${esc(pick ?? t.name)}" data-type="${esc(t.type || "")}"${pick != null ? " checked" : ""}>${esc(t.name)}<span class="type">${typeOf(t)}</span></label>`;
+    }).join("");
+    // tabs saved earlier but not in the loaded list (or nothing loaded yet)
+    html += saved.filter((t) => !known.has(t.toLowerCase())).map((t) =>
+      `<label><input type="checkbox" value="${esc(t)}" checked>${esc(t)}</label>`).join("");
+    if (!html) {
+      html = `<span class="hint">${g.tabs ? "No stash tabs in this league." : "Press Refresh tabs to load this league's stash tabs."}</span>`;
+    }
+    const count = saved.length ? ` · ${saved.length} watched` : "";
+    return `<details class="tabs-league" data-league="${esc(g.league)}"${g.current ? " data-current open" : ""}>` +
+      `<summary>${esc(g.league)}${g.current ? ' <span class="chip ok">selected league</span>' : ""}<span class="muted">${count}</span></summary>` +
+      `<div class="tabs-list">${html}</div></details>`;
+  }).join("") || '<span class="hint">Press Refresh tabs to load your stash tabs.</span>';
+  $("set-tabs-age").textContent = account?.fetched_at
+    ? `Tab lists from ${ago(account.fetched_at)}. Only the selected league's tabs are read; each league keeps its own picks. Refresh after adding or renaming tabs.`
+    : "";
+}
+
+/** league -> the ticked tabs, for every league shown (`changed`: only where they differ from
+ * what's saved, so a league left alone keeps following the shared picks). */
+function tabPicks(changed = false) {
+  const out = {};
+  for (const g of $("set-tabs").querySelectorAll(".tabs-league")) {
+    const tabs = [...g.querySelectorAll("input:checked")].map((i) => i.value);
+    if (!changed || !sameSetting(tabs, picksFor(g.dataset.league))) out[g.dataset.league] = tabs;
+  }
+  return out;
+}
+
+/** The ticked tabs of the selected league: the only ones read. */
+function currentTabInputs() {
+  const g = $("set-tabs").querySelector(".tabs-league[data-current]");
+  return g ? [...g.querySelectorAll("input:checked")] : [];
 }
 
 async function checkAccount() {
@@ -181,7 +227,16 @@ function showWarnings(r, okText) {
 }
 
 $("set-log-use").addEventListener("click", () => { $("set-log").value = settings.log_path_detected; });
-$("set-league").addEventListener("input", () => { renderLeagueHints(); renderAccountPickers(); });
+$("set-league").addEventListener("input", () => {
+  const picks = tabPicks(); // keep unsaved ticks while the league is being typed
+  renderLeagueHints();
+  renderAccountPickers();
+  for (const g of $("set-tabs").querySelectorAll(".tabs-league")) {
+    const want = picks[g.dataset.league];
+    if (want) for (const i of g.querySelectorAll("input")) i.checked = want.includes(i.value);
+  }
+  renderDirty();
+});
 
 $("set-session-save").addEventListener("click", async () => {
   const value = $("set-session").value.trim();
@@ -254,7 +309,7 @@ function settingsBody() {
     price_league: $("set-price-league").value.trim(),
     character: $("set-character").value,
     characters: $("set-deaths").value.split(",").map((x) => x.trim()).filter(Boolean),
-    stash_tabs: [...$("set-tabs").querySelectorAll("input:checked")].map((i) => i.value),
+    league_tabs: tabPicks(true),
     loot_mode: $("set-loot-mode").value,
     trade_sales: $("set-trade-sales").checked,
     snapshot_delay: Number($("set-delay").value || 0),
@@ -279,7 +334,7 @@ const SETTING_FIELDS = {
   log_path: ["set-log", "Game log"], account_name: ["set-account", "Account name"],
   league: ["set-league", "League"], price_league: ["set-price-league", "Prices from"],
   character: ["set-character", "Character"], characters: ["set-deaths", "Deaths counted"],
-  stash_tabs: ["set-tabs", "Stash tabs"],
+  league_tabs: ["set-tabs", "Stash tabs"],
   trade_sales: ["set-trade-sales", "Trade sales"], loot_mode: ["set-loot-mode", "Tracking mode"],
   snapshot_delay: ["set-delay", "Snapshot delay"], check_updates: ["set-check-updates", "Update checks"],
   campaign_hotkey: ["set-hotkey", "Campaign hotkey"], campaign_hotkey_sound: ["set-hotkey-sound", "Hotkey sound"],
@@ -302,7 +357,9 @@ function sameSetting(a, b) {
 function changedSettings() {
   if (!settings || $("settings-view").hidden) return [];
   const body = settingsBody();
-  return Object.keys(SETTING_FIELDS).filter((k) => !sameSetting(body[k], settings[k] ?? (Array.isArray(body[k]) ? [] : "")));
+  return Object.keys(SETTING_FIELDS).filter((k) => k === "league_tabs"
+    ? Object.entries(body.league_tabs).some(([league, tabs]) => !sameSetting(tabs, picksFor(league)))
+    : !sameSetting(body[k], settings[k] ?? (Array.isArray(body[k]) ? [] : "")));
 }
 
 function renderLootModeHint() {
@@ -316,7 +373,7 @@ $("set-loot-mode").addEventListener("change", renderLootModeHint);
 
 /** What the watched tabs cost: GGG rate-limits these requests (about 100 per 30 minutes). */
 function renderTabsCost() {
-  const picked = [...$("set-tabs").querySelectorAll("input:checked")];
+  const picked = currentTabInputs(); // only the selected league's tabs are read
   const maps = picked.filter((i) => i.dataset.type === "MapStash").length;
   const uniques = picked.filter((i) => i.dataset.type === "UniqueStash").length;
   const folders = picked.filter((i) => i.dataset.type === "Folder").length;

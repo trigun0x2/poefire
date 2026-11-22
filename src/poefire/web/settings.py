@@ -5,6 +5,7 @@ The POESESSID is write-only here: the API reports whether one is saved, never it
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
@@ -22,7 +23,10 @@ from poefire.leagues import is_private
 from poefire.store import Store
 from poefire.web.runtime import AppRuntime
 
+log = logging.getLogger(__name__)
+
 POESESSID_RE = re.compile(r"[0-9a-fA-F]{32}")
+MAX_TAB_LEAGUES = 6  # leagues whose stash tabs a connection check lists (a request each)
 
 
 ONBOARDED_KEY = "onboarded"
@@ -60,6 +64,7 @@ class SettingsIn(BaseModel):
     character: str | None = None  # "" = the account's current character
     characters: list[str] | None = None  # whose deaths count; [] = everyone's
     stash_tabs: list[str] | None = None
+    league_tabs: dict[str, list[str]] | None = None  # league -> its watched tabs
     snapshot_delay: float | None = Field(default=None, ge=0, le=60)
     check_updates: bool | None = None
     update_channel: Literal["stable", "beta"] | None = None
@@ -99,7 +104,10 @@ def account_cache(rt: AppRuntime) -> dict[str, Any] | None:
         data = json.loads(_account_cache_path(rt).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or data.get("league") != rt.league:
+    if not isinstance(data, dict):
+        return None
+    listed = {str(g.get("league")) for g in data.get("leagues") or () if isinstance(g, dict)}
+    if data.get("league") != rt.league and rt.league not in listed:
         return None
     return data
 
@@ -163,6 +171,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "characters": cfg.characters,
         "log_characters": log_characters(rt),
         "stash_tabs": cfg.stash_tabs,
+        "league_tabs": cfg.own_league_tabs(),  # leagues picked one by one; others: stash_tabs
         "account_cache": account_cache(rt),
         "snapshot_delay": cfg.snapshot_delay,
         "loot": {"enabled": rt.loot.enabled, "reason": rt.loot.reason},
@@ -344,6 +353,16 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["characters"] = names
     if body.stash_tabs is not None:
         changes["stash_tabs"] = list(dict.fromkeys(t.strip() for t in body.stash_tabs if t.strip()))
+    if body.league_tabs is not None:
+        picks: dict[str, list[str]] = {}
+        for league, tabs in body.league_tabs.items():
+            name = league.strip()
+            if not name or len(name) > 100 or "|" in name or "\n" in name:
+                raise SettingsError(f"stash tabs: bad league name {league!r}")
+            picks[name] = list(dict.fromkeys(t.strip() for t in tabs if t.strip()))
+        merged = rt.cfg.with_league_tabs(picks)
+        if merged != rt.cfg.league_tabs:
+            changes["league_tabs"] = merged
     if body.check_updates is not None:
         changes["check_updates"] = body.check_updates
     if body.update_channel is not None:
@@ -447,6 +466,25 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
         note = None
     elif tabs_league is not None:
         note = f"{note} Showing the stash tabs of {tabs_league} instead."
+
+    def listed(tabs: list[Any]) -> list[dict[str, Any]]:
+        return [{"id": t.get("id"), "name": t.get("name"), "type": t.get("type")} for t in tabs]
+
+    # the tabs of each league your characters are in (a request each), to pick per league
+    groups = [{"league": tabs_league, "tabs": listed(tabs)}] if tabs_league is not None else []
+    for league in dict.fromkeys(str(c.get("league") or "") for c in chars):
+        if not league or league == tabs_league or len(groups) >= MAX_TAB_LEAGUES:
+            continue
+        try:
+            more = api.list_stashes(league)
+        except SessionExpiredError as e:
+            return {"ok": False, "error": str(e)}
+        except LeagueError:
+            continue
+        except Exception as e:  # network, rate limit: the rest can wait for the next refresh
+            log.info("stash tabs of %s not listed: %s", league, e)
+            break
+        groups.append({"league": league, "tabs": listed(more)})
     result: dict[str, Any] = {
         "ok": True,
         "tabs_league": tabs_league,
@@ -456,8 +494,8 @@ def check_account(rt: AppRuntime) -> dict[str, Any]:
              "class": c.get("class"), "current": bool(c.get("current"))}
             for c in chars
         ],
-        "tabs": [{"id": t.get("id"), "name": t.get("name"), "type": t.get("type")}
-                 for t in tabs],
+        "tabs": listed(tabs),
+        "leagues": groups,
     }  # fmt: skip
     if tabs_league is not None:
         _save_account_cache(rt, result)

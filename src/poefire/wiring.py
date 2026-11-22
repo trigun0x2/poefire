@@ -67,9 +67,10 @@ def account_api(cfg: Config, limiter: RateLimiter | None = None) -> AccountApi:
 def snapshotter(cfg: Config, poe: AccountApi) -> Snapshotter:
     if not cfg.league:
         raise ConfigError("set league in config.toml")
-    if not cfg.stash_tabs:
+    tabs = cfg.tabs_for(cfg.league)
+    if not tabs:
         print("warning: no stash_tabs configured; only the inventory is tracked")
-    return Snapshotter(poe, cfg.league, cfg.stash_tabs, cfg.character)
+    return Snapshotter(poe, cfg.league, tabs, cfg.character)
 
 
 def recorder(cfg: Config, poe: AccountApi) -> LootRecorder:

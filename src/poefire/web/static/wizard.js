@@ -73,7 +73,9 @@ function wzLeagues() {
 
 function wzTabs() {
   const tabs = wz.account?.tabs || [];
-  const saved = new Set((wz.settings.stash_tabs || []).map((t) => t.toLowerCase()));
+  const own = wz.settings.league_tabs || {};
+  const picks = Object.hasOwn(own, wz.league) ? own[wz.league] : wz.settings.stash_tabs || [];
+  const saved = new Set(picks.map((t) => t.toLowerCase()));
   const keep = tabs.some((t) => saved.has(String(t.name).toLowerCase()) || saved.has(String(t.id).toLowerCase()));
   $("wz-tabs").innerHTML = tabs.map((t) => {
     const on = keep ? saved.has(String(t.name).toLowerCase()) || saved.has(String(t.id).toLowerCase())
@@ -123,7 +125,7 @@ async function wzNext() {
     } else if (wz.step === 3) {
       const tabs = [...$("wz-tabs").querySelectorAll("input:checked")].map((i) => i.value);
       if (tabs.length) {
-        await api("/api/settings", { method: "POST", body: JSON.stringify({ stash_tabs: tabs }) });
+        await api("/api/settings", { method: "POST", body: JSON.stringify({ league_tabs: { [wz.league]: tabs } }) });
       }
       const st = await api("/api/status");
       $("wz-summary").innerHTML = [

@@ -468,12 +468,12 @@ def create_app(rt: AppRuntime) -> FastAPI:
 
     @app.post("/api/settings")
     def post_settings(body: settings.SettingsIn) -> dict[str, Any]:
-        tabs_before = sorted(t.casefold() for t in rt.cfg.stash_tabs)
+        tabs_before = sorted(t.casefold() for t in rt.cfg.tabs_for(rt.league))
         try:
             warnings = settings.update_settings(rt, body)
         except settings.SettingsError as e:
             raise HTTPException(400, str(e)) from e
-        tabs_after = sorted(t.casefold() for t in rt.cfg.stash_tabs)
+        tabs_after = sorted(t.casefold() for t in rt.cfg.tabs_for(rt.league))
         snapped = tabs_after != tabs_before and rt.watched_tabs_changed()
         return {**settings.settings_json(rt), "warnings": warnings, "snapshot": snapped}
 

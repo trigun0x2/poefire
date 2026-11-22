@@ -70,6 +70,8 @@ account_name = "Exile#1234"          # full account name, with the #1234 part
 league = "Keepers"
 character = "MyWitch"                # default: the account's current character in the league
 stash_tabs = ["Dump", "Currency"]    # tab names or ids: the Overview (and the 10-minute mode)
+league_tabs = ["Keepers|Dump"]       # picked per league ("League|tab"; "League|" = none);
+                                     # a league without entries uses stash_tabs
 snapshot_delay = 3.0                 # seconds after a zone change before the inventory is read
 # realm = "pc"                       # or "xbox" / "sony"
 # contact = "you@example.com"        # optional; added to the User-Agent
@@ -125,7 +127,12 @@ inventory reads always have room. Each watched tab costs one request; of the map
 the Tier 16, Special (nightmare, Valdo, guardian maps...) and Unique sections are read, one
 request each; the other tiers aren't. Unique tabs aren't read at all: of uniques only unique
 maps count. The Overview shows a tab's sections as one chip (e.g. "Maps").
-Changed in Settings, the watched tabs are read at the next map start.
+Changed in Settings, the watched tabs are read at the next map start. Settings lists the tabs
+of each league your characters are in (a request per league when you press Refresh tabs) under
+its own heading, and each league keeps its own picks: switching league watches that league's
+tabs. Only the selected league's tabs are ever read. A league you haven't picked tabs for uses
+the tabs picked before this existed (`stash_tabs`). Too many to read between two maps (about
+70 requests) and they aren't read: Settings and the log say so.
 
 **Tracking mode** (Settings → Loot tracking, `loot_mode` in config.toml):
 

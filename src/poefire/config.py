@@ -15,6 +15,8 @@ Example `config.toml`:
     league = "Settlers"
     character = "MyWitch"                # default: the account's current character
     stash_tabs = ["Dump", "Currency"]    # names or ids of tabs to include in snapshots
+    league_tabs = ["Settlers|Dump"]      # per league ("League|tab"; "League|" = none); a
+                                         # league without entries uses stash_tabs
 """
 
 from __future__ import annotations
@@ -94,7 +96,9 @@ class Config:
     price_league: str | None = None  # poe.ninja league to price from; None = automatic
     realm: str = "pc"
     character: str | None = None
-    stash_tabs: list[str] = field(default_factory=list)
+    stash_tabs: list[str] = field(default_factory=list)  # leagues without picks of their own
+    # the watched tabs picked per league: "League|tab", "League|" = none (see tabs_for)
+    league_tabs: list[str] = field(default_factory=list)
     snapshot_delay: float = 3.0  # seconds after a zone change before the inventory is read
     check_updates: bool = True
     update_channel: str = "stable"  # "stable": public releases; "beta": also pre-releases
@@ -177,6 +181,27 @@ class Config:
         tmp.write_text(self.to_toml(), encoding="utf-8")
         tmp.replace(path)
         return path
+
+    def own_league_tabs(self) -> dict[str, list[str]]:
+        """League -> its watched tabs, for the leagues picked one by one (league_tabs)."""
+        out: dict[str, list[str]] = {}
+        for entry in self.league_tabs:
+            league, sep, tab = entry.partition("|")
+            if sep and league:
+                out.setdefault(league, [])
+                if tab and tab not in out[league]:
+                    out[league].append(tab)
+        return out
+
+    def tabs_for(self, league: str | None) -> list[str]:
+        """The watched tabs in `league`: its own picks, else stash_tabs."""
+        own = self.own_league_tabs()
+        return list(own[league]) if league in own else list(self.stash_tabs)
+
+    def with_league_tabs(self, picks: dict[str, list[str]]) -> list[str]:
+        """league_tabs with `picks` (league -> tabs) replacing those leagues' entries."""
+        own = {**self.own_league_tabs(), **picks}
+        return [f"{league}|{tab}" for league, tabs in own.items() for tab in (tabs or [""])]
 
     def zone_rules(self) -> ZoneRules:
         return ZoneRules.with_extras(

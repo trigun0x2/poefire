@@ -148,3 +148,19 @@ def test_a_failed_league_check_is_tried_again_soon(tmp_path: Path) -> None:
         rt.stop()
     assert waits == [LEAGUE_RETRY, LEAGUE_CHECK]
     assert calls == [True, True]  # the tab check asked for isn't dropped by the failure
+
+
+def test_switching_league_watches_that_leagues_tabs(tmp_path: Path) -> None:
+    cfg = Config(db_path=tmp_path / "db", league="Keepers", stash_tabs=["Dump"],
+                 league_tabs=["Newleague|1", "Newleague|2"])  # fmt: skip
+    rt = AppRuntime(cfg, recorder=None, log_path=tmp_path / "Client.txt")
+    rt.refresh_prices = lambda force=False: None  # type: ignore[method-assign]
+    snapshotter = Snapshotter(Account(), "Keepers", ["Dump"])
+    rt.recorder = SimpleNamespace(snapshotter=snapshotter, stop=lambda: None)  # type: ignore[assignment]
+    try:
+        rt.set_league("Newleague")
+        assert snapshotter.wanted == ["1", "2"] and snapshotter.league == "Newleague"
+        rt.set_league("Keepers")
+        assert snapshotter.wanted == ["Dump"]  # no picks of its own: stash_tabs
+    finally:
+        rt.stop()

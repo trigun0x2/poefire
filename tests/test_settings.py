@@ -235,7 +235,7 @@ def test_check_account_with_a_wrong_league(
         assert r["tabs"][0]["name"] == f"{tabs_league} dump"
         assert r["league_note"].endswith(f"Showing the stash tabs of {tabs_league} instead.")
     else:
-        assert r["tabs"] == [] and acc.asked == ["Typo League", "Keepers", "Standard"]
+        assert r["tabs"] == [] and acc.asked[:3] == ["Typo League", "Keepers", "Standard"]
 
 
 def test_check_account_with_an_expired_cookie(
@@ -283,7 +283,7 @@ def test_trade_sales_is_off_by_default(env: tuple[TestClient, AppRuntime, Path])
         api = Api()
         league = "Keepers"
 
-        def set_league(self, league: str) -> None:
+        def set_league(self, league: str, tabs: Any = None) -> None:
             pass
 
     def installed(enabled: bool, mode: str = "interval") -> LootRecorder:
@@ -317,10 +317,64 @@ def test_interval_mode_setting(env: tuple[TestClient, AppRuntime, Path]) -> None
         api = None
         league = "Keepers"
 
-        def set_league(self, league: str) -> None:
+        def set_league(self, league: str, tabs: Any = None) -> None:
             pass
 
     rec = LootRecorder(Snap(), lambda: Store(rt.cfg.db_path))  # type: ignore[arg-type]
     rt._install_recorder(rec)
     assert rec.interval == INTERVAL
     assert client.post("/api/settings", headers=H, json={"loot_mode": "hourly"}).status_code == 422
+
+
+def test_watched_tabs_are_picked_per_league(
+    env: tuple[TestClient, AppRuntime, Path],
+) -> None:
+    client, rt, _ = env
+    path = rt.config_path
+    assert path is not None
+    rt.cfg.stash_tabs = ["$$$"]  # from before: every league without picks of its own
+    rt.set_league("Keepers")
+    r = client.post("/api/settings", headers=H, json={
+        "league_tabs": {"Keepers": ["Dump", "Maps"], "Standard": []}}).json()  # fmt: skip
+    assert r["league_tabs"] == {"Keepers": ["Dump", "Maps"], "Standard": []}
+    assert rt.cfg.tabs_for("Keepers") == ["Dump", "Maps"]
+    assert rt.cfg.tabs_for("Standard") == [] and rt.cfg.tabs_for("Newleague") == ["$$$"]
+    assert "Keepers|Dump" in path.read_text() and "Standard|" in path.read_text()
+    # a save of one league keeps the others' picks
+    client.post("/api/settings", headers=H, json={"league_tabs": {"Standard": ["Old"]}})
+    assert rt.cfg.own_league_tabs() == {"Keepers": ["Dump", "Maps"], "Standard": ["Old"]}
+    bad = client.post("/api/settings", headers=H, json={"league_tabs": {"a|b": ["x"]}})
+    assert bad.status_code == 400 and "league" in bad.json()["detail"]
+
+
+def test_check_account_lists_the_tabs_of_each_league(
+    env: tuple[TestClient, AppRuntime, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from poefire.api.session import LeagueError
+
+    class Leagues(FakeAccount):
+        def __init__(self) -> None:
+            self.asked: list[str] = []
+
+        def list_characters(self) -> list[dict[str, Any]]:
+            return [{"name": "a", "league": "Newleague", "level": 3},
+                    {"name": "b", "league": "Keepers", "level": 90},
+                    {"name": "c", "league": "Gone", "level": 9}]  # fmt: skip
+
+        def list_stashes(self, league: str) -> list[dict[str, Any]]:
+            self.asked.append(league)
+            if league == "Gone":
+                raise LeagueError(league, "HTTP 403")
+            return [{"id": league[0], "name": f"{league} dump", "type": "PremiumStash"}]
+
+    client, rt, _ = env
+    rt.set_league("Keepers")
+    acc = Leagues()
+    monkeypatch.setattr("poefire.wiring.account_api", lambda cfg, limiter=None: acc)
+    r = client.post("/api/settings/check-account", headers=H).json()
+    assert r["ok"] and acc.asked == ["Keepers", "Newleague", "Gone"]
+    assert [(g["league"], [t["name"] for t in g["tabs"]]) for g in r["leagues"]] == [
+        ("Keepers", ["Keepers dump"]), ("Newleague", ["Newleague dump"])]  # fmt: skip
+    rt.set_league("Newleague")  # the cached check still has this league's tabs
+    assert client.get("/api/settings").json()["account_cache"]["leagues"][1]["league"] == (
+        "Newleague")  # fmt: skip

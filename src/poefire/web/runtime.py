@@ -67,7 +67,7 @@ LEAGUE_CHECK = 60 * 60.0
 LEAGUE_RETRY = 5 * 60.0  # after a failed check (offline at boot, rate limited...)
 # Settings that loot tracking is built from: a change rebuilds it (others don't, so saving
 # e.g. a hotkey doesn't throw away what it knows, like the tab list)
-LOOT_FIELDS = ("auth", "account_name", "realm", "league", "stash_tabs", "character",
+LOOT_FIELDS = ("auth", "account_name", "realm", "league", "stash_tabs", "league_tabs", "character",
                "snapshot_delay", "loot_mode", "trade_sales", "session_path", "token_path",
                "oauth_client_id", "oauth_redirect_uri", "contact", "db_path")  # fmt: skip
 DISMISSED_LEAGUES_KEY = "league_hint_dismissed"
@@ -276,7 +276,7 @@ class AppRuntime:
         rec.handlers.append(self._on_loot)
         rec.valuer = self.value_snapshot
         rec.interval = INTERVAL if self.interval_mode else None
-        rec.snapshotter.set_league(self._league)
+        rec.snapshotter.set_league(self._league, self.cfg.tabs_for(self._league))
         api = getattr(rec.snapshotter, "api", None)
         # Only the interval mode counts what lands in the tabs: per map, a sale's payment
         # never comes into your inventory, so it's never counted as loot anyway.
@@ -364,7 +364,7 @@ class AppRuntime:
         with Store(self.cfg.db_path) as store, store.transaction():  # own connection: thread
             store.set_json(LEAGUE_KEY, league)
         if self.recorder is not None:
-            self.recorder.snapshotter.set_league(league)
+            self.recorder.snapshotter.set_league(league, self.cfg.tabs_for(league))
         self.league_hint = self.tabs_hint = None
         self._league_check_tabs = True
         self._league_check_now.set()  # check the new league's tabs

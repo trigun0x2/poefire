@@ -154,10 +154,13 @@ class Snapshotter:
         self._listed_names: dict[str, str] = {}
         self.missing_tabs: list[str] = []  # watched names/ids the league's tab list lacks
 
-    def set_league(self, league: str) -> None:
-        """Switch leagues: tab ids and the auto-picked character are per league."""
-        if league != self.league:
+    def set_league(self, league: str, tabs: Iterable[str] | None = None) -> None:
+        """Switch leagues: tab ids and the auto-picked character are per league. `tabs`: the
+        watched tabs there (the same ones when not given)."""
+        wanted = [t for t in tabs if t] if tabs is not None else self.wanted
+        if league != self.league or wanted != self.wanted:
             self.league = league
+            self.wanted = wanted
             self._tabs = None
             self._listed_names = {}
             self.character = self._configured_character
