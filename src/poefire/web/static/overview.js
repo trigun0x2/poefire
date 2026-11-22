@@ -166,13 +166,14 @@ function renderHoldings() {
   const d = ovItems;
   const cpd = d.chaos_per_divine;
   const hiddenNote = d.hidden ? ` · ${d.hidden} with no price or ~0c hidden` : "";
+  $("ov-league").textContent = d.league ? ` in ${d.league}` : ""; // each league has its own
   $("ov-asof").textContent = d.taken_at ? `· as of ${new Date(d.taken_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, current prices${hiddenNote}` : "";
   const chips = [`<button type="button" data-tab=""${ovTabs.size === 0 ? ' class="on"' : ""}>All tabs</button>`]
     .concat(d.tabs.map((t) => `<button type="button" data-tab="${esc(t.id)}"${ovTabs.has(t.id) ? ' class="on"' : ""}>${esc(t.name)}<span class="v">${money(t.chaos, cpd ? t.chaos / cpd : null)}</span></button>`));
   $("ov-tabs").innerHTML = d.tabs.length ? chips.join("") : "";
   $("ov-items-empty").hidden = d.items.length > 0;
   $("ov-items-empty").innerHTML = !d.taken_at
-    ? (d.loot_enabled ? "No snapshot yet. Press Snapshot now, or finish a map." : 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a>.')
+    ? (d.loot_enabled ? `No snapshot in ${esc(d.league || "this league")} yet. Press Snapshot now, or start a map.` : 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a>.')
     : "No items in the selected tabs.";
   $("ov-items-body").innerHTML = sortRows(d.items, itemsSort.key, itemsSort.dir).map((i) => {
     const icon = i.icon

@@ -102,6 +102,12 @@ INTERVAL_RESERVE = 5
 _OLDEST = datetime.min
 
 
+def _same_league(a: str | None, b: str | None) -> bool:
+    """Whether two snapshots were read in the same league (unknown counts as the same: older
+    snapshots didn't record it)."""
+    return a is None or b is None or a == b
+
+
 @dataclass(frozen=True)
 class LootResult:
     trigger: Trigger
@@ -170,6 +176,7 @@ class LootRecorder:
         self._late_end: tuple[str, datetime | None] | None = None
         self._last_full: datetime | None = None  # when the watched tabs were last read
         self._full_known = False  # _last_full loaded from the store
+        self._full_league: str | None = None  # ... for this league
         self._stash_after = float("-inf")  # monotonic: no tab reads before (after no room/failing)
         self._store: Store | None = None
         self._rules_floor: int | None = None  # snapshots up to this id: other loot rules
@@ -492,9 +499,12 @@ class LootRecorder:
         return int(self.snapshotter.tab_requests())
 
     def _last_full_at(self) -> datetime | None:
-        if not self._full_known:
-            latest = self._get_store().latest_snapshot(scope=FULL, items=False)
+        """When the watched tabs were last read in the league you're in."""
+        league = getattr(self.snapshotter, "league", None)
+        if not self._full_known or self._full_league != league:
+            latest = self._get_store().latest_snapshot(scope=FULL, items=False, league=league)
             self._last_full, self._full_known = (latest.taken_at if latest else None), True
+            self._full_league = league
         return self._last_full
 
     def _read_tabs(self, since: datetime | None) -> list[ItemEntry] | None:
@@ -553,6 +563,7 @@ class LootRecorder:
     def _record_full(self, store: Store, snapshot_id: int, snap: Snapshot) -> None:
         """A read of the watched tabs: their names, and the value for the Overview."""
         self._last_full, self._full_known = snap.taken_at, True
+        self._full_league = snap.league
         # merged, so tabs dropped from the watch list keep their names in older data
         names = {**(store.get_json(TAB_NAMES_KEY) or {}), **self.snapshotter.tab_names()}
         store.set_json(TAB_NAMES_KEY, names)
@@ -563,8 +574,10 @@ class LootRecorder:
         except Exception:
             log.exception("valuing snapshot failed")
             return
-        if v is not None:
-            store.add_snapshot_value(snapshot_id, snap.taken_at, *v)
+        if v is not None:  # under the league it was read in (the valuer's may have moved on)
+            league, chaos, cpd, unpriced = v
+            store.add_snapshot_value(snapshot_id, snap.taken_at, snap.league or league, chaos,
+                                     cpd, unpriced)  # fmt: skip
 
     def _fetch_sales(self) -> list[Sale] | None:
         """The trade history, at most once a minute (once per 30 min after a failure)."""
@@ -588,6 +601,8 @@ class LootRecorder:
     def _save(self, trigger: Trigger, run_id: str | None, snap: Snapshot,
               segment: datetime | None) -> LootResult:  # fmt: skip
         store = self._get_store()
+        if snap.league is None:
+            snap = replace(snap, league=getattr(self.snapshotter, "league", None))
         changes = trigger in (Trigger.MANUAL, Trigger.INTERVAL)
         # network I/O outside the DB transaction
         sales = self._fetch_sales() if changes and snap.complete and snap.scope == FULL else None
@@ -601,7 +616,9 @@ class LootRecorder:
                 if late is not None and snap.complete:
                     log.info("map %s: back in the hideout only briefly, its loot is read now",
                              late[0])  # fmt: skip
-                    end = Snapshot(snap.taken_at, snap.inventory(), scope=INVENTORY)
+                    end = Snapshot(
+                        snap.taken_at, snap.inventory(), scope=INVENTORY, league=snap.league
+                    )
                     self._save_return(store, late[0], end, late[1])
                 sid = store.add_snapshot(snap, trigger.value, run_id)
                 if snap.complete:
@@ -621,6 +638,7 @@ class LootRecorder:
         paired = (
             start is not None
             and start.id > self._rules_before(store)
+            and _same_league(start.league, snap.league)
             and start.trigger in SEGMENT_STARTS
             and start.run_id == run_id
             and (segment is None or start.taken_at >= segment)
@@ -663,7 +681,12 @@ class LootRecorder:
             store.set_json(SALES_KEY, book.to_json())
         if prev is not None and prev.id <= before_rules:
             log.info("loot snapshot: the first since what counts as loot changed, a new baseline")
-        if prev is None or prev.id <= before_rules or snap.taken_at - prev.taken_at > self.max_gap:
+        if (
+            prev is None
+            or prev.id <= before_rules
+            or not _same_league(prev.league, snap.league)
+            or snap.taken_at - prev.taken_at > self.max_gap
+        ):
             store.prune_snapshot_items()
             return LootResult(trigger, None, sid, True, True, scope=snap.scope)
         both_full = prev.scope == FULL and snap.scope == FULL

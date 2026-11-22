@@ -915,6 +915,20 @@ def test_a_map_started_before_a_loot_rules_change_isnt_measured(tmp_path: Path) 
     assert p.loot() == {"Chaos Orb": 2}  # maps started since are measured
 
 
+def test_snapshots_in_another_league_arent_diffed_against(tmp_path: Path) -> None:
+    p = Play(tmp_path)
+    p.account.league = "Covens"  # type: ignore[attr-defined]
+    p.account.inventory = [currency("Chaos Orb", 50, "c")]
+    p.rec.record(Trigger.MANUAL)
+    p.account.league = "Hardcore Covens"  # type: ignore[attr-defined]
+    p.account.inventory = [currency("Chaos Orb", 2, "c")]  # another character's
+    assert p.rec.record(Trigger.MANUAL).baseline
+    assert [s["league"] for s in reversed(p.store.list_snapshots())] == [
+        "Covens",
+        "Hardcore Covens",
+    ]
+
+
 def test_snapshot_now_counts_the_change_and_keeps_the_map_going(tmp_path: Path) -> None:
     p = Play(tmp_path)
     c = "Chaos Orb"

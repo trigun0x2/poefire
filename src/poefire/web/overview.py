@@ -71,16 +71,17 @@ def _round(v: float | None, nd: int = 2) -> float | None:
     return None if v is None else round(v, nd)
 
 
-def _latest(store: Store, book: PriceBook, cache: BookCache | None) -> Any:
+def _latest(store: Store, book: PriceBook, cache: BookCache | None, league: str | None) -> Any:
     """(taken_at, entries, {source: (entries, chaos)}, all held items) of the latest complete
-    snapshot of the inventory and the watched tabs (not an inventory-only one), valued; kept
-    in `cache` until there's a new one or new prices."""
-    head = store.latest_snapshot(scope=FULL, items=False)
+    snapshot of the inventory and the watched tabs (not an inventory-only one) read in
+    `league` (any, when None), valued; kept in `cache` until there's a new one or new
+    prices."""
+    head = store.latest_snapshot(scope=FULL, items=False, league=league)
     if head is None:
         return None
     if cache is not None and (hit := cache.get(book, ("holdings", head.id))) is not None:
         return hit
-    latest = store.latest_snapshot(scope=FULL)
+    latest = store.latest_snapshot(scope=FULL, league=league)
     if latest is None:
         return None
     taken_at, entries = latest.taken_at, latest.items
@@ -98,10 +99,10 @@ def _latest(store: Store, book: PriceBook, cache: BookCache | None) -> Any:
 
 
 def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int = 500,
-             cache: BookCache | None = None) -> Json:  # fmt: skip
-    """Latest snapshot's items, valued at current prices. `tabs` filters by source id
-    (a stash tab id, or "inventory"); empty = everything."""
-    latest = _latest(store, book, cache)
+             cache: BookCache | None = None, league: str | None = None) -> Json:  # fmt: skip
+    """The latest snapshot's items (of `league`, when given), valued at current prices. `tabs`
+    filters by source id (a stash tab id, or "inventory"); empty = everything."""
+    latest = _latest(store, book, cache, league)
     saved: dict[str, str] = store.get_json(TAB_NAMES_KEY) or {}
 
     def name_of(src: str) -> str:
@@ -112,7 +113,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
     cpd = book.chaos_per_divine
     if latest is None:
         return {"taken_at": None, "tabs": [], "items": [], "total_chaos": None,
-                "total_divine": None, "chaos_per_divine": cpd}  # fmt: skip
+                "total_divine": None, "chaos_per_divine": cpd, "league": league}  # fmt: skip
     taken_at, entries, by_source, tab_values, held_all = latest
 
     # per-tab totals for the tab filter chips; a tab's sections (map tab: Tier 16, Unique,
@@ -136,6 +137,7 @@ def holdings(store: Store, book: PriceBook, tabs: Iterable[str] = (), limit: int
     shown = [h for h in held if is_worth_showing(h.chaos_total)]
     return {
         "taken_at": taken_at.isoformat(),
+        "league": league,
         "tabs": tab_list,
         "total_chaos": round(total, 1),
         "total_divine": _round(total / cpd) if cpd else None,

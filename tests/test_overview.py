@@ -86,7 +86,7 @@ def seed_holdings(db: Path) -> None:
         stack("Exalted Orb", 5, "tabB"),
         stack("Mystery Orb", 9, "tabB"),
     ]
-    snap = Snapshot(NOW, items)
+    snap = Snapshot(NOW, items, league="Keepers")
     with Store(db) as s, s.transaction():
         s.add_snapshot(snap, "manual", None)
         s.set_json(TAB_NAMES_KEY, {"inventory": "Inventory", "tabA": "Currency", "tabB": "Dump"})
@@ -151,7 +151,9 @@ def test_recorder_values_each_snapshot(env: tuple[TestClient, AppRuntime, Path])
 def test_holdings_never_show_a_raw_tab_id(env: tuple[TestClient, AppRuntime, Path]) -> None:
     client, _, db = env
     with Store(db) as s, s.transaction():
-        s.add_snapshot(Snapshot(NOW, [stack("Divine Orb", 1, "9f3a1c77e2")]), "manual", None)
+        s.add_snapshot(
+            Snapshot(NOW, [stack("Divine Orb", 1, "9f3a1c77e2")], league="Keepers"), "manual", None
+        )
     d = client.get("/api/overview/items").json()
     assert [t["name"] for t in d["tabs"]] == ["Unnamed tab"]
     assert d["items"][0]["tabs"] == ["Unnamed tab"]
@@ -207,7 +209,7 @@ def test_map_tab_sections_are_one_maps_chip(env: tuple[TestClient, AppRuntime, P
     items = [stack("Divine Orb", 1, "m16"), stack("Divine Orb", 1, "mu"),
              stack("Exalted Orb", 1, "tabB")]  # fmt: skip
     with Store(db) as s, s.transaction():
-        s.add_snapshot(Snapshot(NOW, items), "manual", None)
+        s.add_snapshot(Snapshot(NOW, items, league="Keepers"), "manual", None)
         s.set_json(TAB_NAMES_KEY, {"m16": "Maps / Tier 16", "mu": "Maps / Unique",
                                    "tabB": "Dump"})  # fmt: skip
     d = client.get("/api/overview/items").json()
@@ -216,3 +218,41 @@ def test_map_tab_sections_are_one_maps_chip(env: tuple[TestClient, AppRuntime, P
     assert d["items"][0]["tabs"] == ["Maps"]
     only = client.get("/api/overview/items?tabs=m16%2Cmu").json()
     assert only["total_chaos"] == 400.0
+
+
+def test_each_league_has_its_own_overview(env: tuple[TestClient, AppRuntime, Path]) -> None:
+    client, rt, db = env
+    with Store(db) as s, s.transaction():
+        s.add_snapshot(Snapshot(NOW, [stack("Divine Orb", 1, "a")], league="Covens"),
+                       "manual", None)  # fmt: skip
+        s.add_snapshot(Snapshot(NOW, [stack("Exalted Orb", 2, "b")], league="Hardcore Covens"),
+                       "manual", None)  # fmt: skip
+        for _ in range(3):  # newer inventory-only reads: both leagues' holdings are kept
+            s.add_snapshot(Snapshot(NOW, [], scope="inventory", league="Covens"), "run_start",
+                           None)  # fmt: skip
+        s.prune_snapshot_items()
+    rt.set_league("Covens")  # (no prices for these leagues here: the tabs tell them apart)
+    assert [t["id"] for t in client.get("/api/overview/items").json()["tabs"]] == ["a"]
+    rt.set_league("Hardcore Covens")
+    d = client.get("/api/overview/items").json()
+    assert [t["id"] for t in d["tabs"]] == ["b"] and d["league"] == "Hardcore Covens"
+    rt.set_league("Keepers")
+    assert client.get("/api/overview/items").json()["taken_at"] is None
+
+
+def test_older_snapshots_get_the_league_of_their_value(tmp_path: Path) -> None:
+    import sqlite3
+
+    db = tmp_path / "db"
+    with Store(db) as s, s.transaction():
+        sid = s.add_snapshot(Snapshot(NOW), "manual", None)
+        s.add_snapshot_value(sid, NOW, "Covens", 5.0, 200.0, 0)
+        s.add_snapshot(Snapshot(NOW), "run_start", None)
+    conn = sqlite3.connect(db)  # as a version before leagues were recorded left it
+    conn.execute("UPDATE snapshots SET league = NULL")
+    conn.execute("PRAGMA user_version = 13")
+    conn.execute("ALTER TABLE snapshots DROP COLUMN league")
+    conn.commit()
+    conn.close()
+    with Store(db) as s:
+        assert [x["league"] for x in reversed(s.list_snapshots())] == ["Covens", None]

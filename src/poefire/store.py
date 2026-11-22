@@ -24,7 +24,7 @@ from poefire.tracker import Run, RunStatus, Segment
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -214,6 +214,14 @@ ALTER TABLE snapshots ADD COLUMN scope TEXT NOT NULL DEFAULT 'full'
 SEGMENT_STARTS = ("run_start", "run_resume")
 SEGMENT_ENDS = ("run_return", "run_return_unpaired")
 
+_SCHEMA_V14 = """
+-- The league a snapshot was read in: the Overview and loot diffs stay within one league.
+-- Older snapshots get the league their value was recorded under, when there is one.
+ALTER TABLE snapshots ADD COLUMN league TEXT;
+UPDATE snapshots SET league = (SELECT v.league FROM snapshot_values v
+                               WHERE v.snapshot_id = snapshots.id)
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -228,6 +236,7 @@ _MIGRATIONS = (
     _SCHEMA_V11,
     _SCHEMA_V12,
     _SCHEMA_V13,
+    _SCHEMA_V14,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -239,6 +248,7 @@ class StoredSnapshot:
     run_id: str | None
     scope: str  # "full" or "inventory" (see poefire.loot.snapshot)
     items: list[ItemEntry]
+    league: str | None = None  # None: read before snapshots recorded it
 
     def inventory(self) -> list[ItemEntry]:
         return inventory_items(self.items)
@@ -402,9 +412,9 @@ class Store:
     def add_snapshot(self, snap: Snapshot, trigger: str, run_id: str | None) -> int:
         cur = self.conn.execute(
             "INSERT INTO snapshots (taken_at, trigger, run_id, complete, item_count, error, "
-            "scope) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "scope, league) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (snap.taken_at.isoformat(), trigger, run_id, int(snap.complete),
-             len(snap.items), snap.error, snap.scope),
+             len(snap.items), snap.error, snap.scope, snap.league),
         )  # fmt: skip
         snapshot_id = cur.lastrowid
         assert snapshot_id is not None
@@ -421,11 +431,18 @@ class Store:
         return snapshot_id
 
     def latest_snapshot(
-        self, triggers: Sequence[str] = (), scope: str | None = None, items: bool = True
+        self,
+        triggers: Sequence[str] = (),
+        scope: str | None = None,
+        items: bool = True,
+        league: str | None = None,
     ) -> StoredSnapshot | None:
-        """The newest complete snapshot (of one of `triggers`, and of `scope`, when given),
-        with its items unless `items` is False."""
+        """The newest complete snapshot (of one of `triggers`, of `scope` and read in
+        `league`, when given), with its items unless `items` is False."""
         sql, args = "SELECT * FROM snapshots WHERE complete = 1", []
+        if league is not None:
+            sql += " AND league = ?"
+            args.append(league)
         if triggers:
             sql += f" AND trigger IN ({','.join('?' * len(triggers))})"
             args += list(triggers)
@@ -449,7 +466,7 @@ class Store:
             ]  # fmt: skip
         return StoredSnapshot(int(row["id"]), datetime.fromisoformat(row["taken_at"]),
                               str(row["trigger"]), row["run_id"], str(row["scope"]),
-                              entries)  # fmt: skip
+                              entries, row["league"])  # fmt: skip
 
     def add_snapshot_value(
         self,
@@ -489,14 +506,15 @@ class Store:
 
     def prune_snapshot_items(self, keep: int = 2) -> None:
         """Only the items still needed are kept: the newest `keep` complete snapshots' (the
-        next diff), the newest full snapshot's (the Overview's holdings) and the newest map
-        segment snapshot's (the start of the segment you may be in)."""
+        next diff), each league's newest full snapshot's (its Overview's holdings) and the
+        newest map segment snapshot's (the start of the segment you may be in)."""
         segment = (*SEGMENT_STARTS, *SEGMENT_ENDS)
         self.conn.execute(
             "WITH keep(id) AS ("
             " SELECT id FROM (SELECT id FROM snapshots WHERE complete = 1 ORDER BY id DESC"
             "  LIMIT ?)"
             " UNION SELECT MAX(id) FROM snapshots WHERE complete = 1 AND scope = 'full'"
+            "  GROUP BY league"
             " UNION SELECT MAX(id) FROM snapshots WHERE complete = 1 AND trigger IN"
             f"  ({','.join('?' * len(segment))})"
             ") DELETE FROM snapshot_items WHERE snapshot_id NOT IN"

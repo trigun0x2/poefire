@@ -63,6 +63,7 @@ class Snapshot:
     error: str | None = None
     scope: str = FULL  # FULL: the inventory and the watched tabs; INVENTORY: the inventory
     retry: bool = False  # failed for a reason that may go away (see retryable)
+    league: str | None = None  # the league it was read in
 
     def inventory(self) -> list[ItemEntry]:
         return inventory_items(self.items)
@@ -303,7 +304,7 @@ class Snapshotter:
     def take(self, scope: str = FULL) -> Snapshot:
         """A snapshot of the inventory (INVENTORY), or of the inventory and the watched tabs
         (FULL); a failure anywhere makes it incomplete (unusable for diffing)."""
-        snap = Snapshot(taken_at=self.clock(), scope=scope)
+        snap = Snapshot(taken_at=self.clock(), scope=scope, league=self.league)
         try:
             # Inventory first: it is the part that can change while you are in a map.
             snap.items.extend(self.read_inventory())

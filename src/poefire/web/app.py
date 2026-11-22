@@ -418,7 +418,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
         book = rt.prices.book(rt.price_league)
         with store() as s:
             return {
-                **overview.holdings(s, book, tabs.split(","), cache=rt.values),
+                **overview.holdings(s, book, tabs.split(","), cache=rt.values, league=rt.league),
                 "loot_enabled": rt.loot.enabled,
             }
 
