@@ -118,3 +118,13 @@ def test_runs_and_history_include_rates(app: TestClient) -> None:  # noqa: F811
     assert "chaos_per_hour" in data["session"] and data["maps"]
     assert {m["map_name"] for m in data["maps"]} <= {r["map_name"] for r in data["runs"]}
     assert "chaos_per_hour" in app.get("/api/sessions").json()["sessions"][0]
+
+
+def test_a_past_sessions_loot_summary(app: TestClient) -> None:  # noqa: F811
+    app.post("/api/sessions/new", headers=HEADERS)
+    loot = app.get("/api/sessions/0/loot").json()
+    old = next(h for h in app.get("/api/sessions").json()["sessions"] if h["id"] == 0)
+    assert loot["maps"] == 1 and loot["chaos"] == old["chaos"] == 220.0  # matches the total
+    assert [(i["name"], i["quantity"]) for i in loot["items"]] == [("Divine Orb", 1),
+                                                                    ("Chaos Orb", 20)]  # fmt: skip
+    assert app.get("/api/sessions/99/loot").status_code == 404

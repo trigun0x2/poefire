@@ -188,6 +188,17 @@ def create_app(rt: AppRuntime) -> FastAPI:
             return {"chaos_per_divine": book.chaos_per_divine,
                     "sessions": sessions.history(s, book, rt.now(), rt.values)}  # fmt: skip
 
+    @app.get("/api/sessions/{session_id}/loot")
+    def session_loot(session_id: int) -> dict[str, Any]:
+        """Everything a session's maps gained, per item kind (the past session's page)."""
+        book = rt.prices.book(rt.price_league)
+        with store() as s:
+            span = sessions.find(s, session_id)
+            if span is None:
+                raise HTTPException(404, "no such session")
+            rows = views.run_rows(s, book, sessions.runs_of(s, span), rt.now(), rt.values)
+            return sessions.loot_summary(s, book, span, rows, rt.interval_mode)
+
     @app.post("/api/sessions/new")
     def new_session() -> dict[str, Any]:
         return {"id": rt.new_session()}

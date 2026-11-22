@@ -575,6 +575,12 @@ main.interval-mode { grid-template-areas: "session session session session sessi
 main.interval-mode :is(.current, .detail, .maps-stats, .history, .per-map) { display: none; }
 @media (max-width: 1250px) { main.interval-mode { grid-template-areas: "session" "runs"; } }
 .interval-loot { margin-top: 14px; }
+/* a past session: its totals and everything its maps gained, not the map-by-map cards */
+main.past-session { grid-template-areas: "session session session session session" "history history history history history"; }
+main.past-session :is(.current, .runs, .detail, .maps-stats, .interval-loot) { display: none; }
+main.past-session .history { display: block; }
+@media (max-width: 1250px) { main.past-session { grid-template-areas: "session" "history"; } }
+.session-loot { margin-top: 14px; }
 
 /* builds: several snapshots at one level, and what changed since the previous one */
 .bd-same { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 2px; font-size: 12.5px; }

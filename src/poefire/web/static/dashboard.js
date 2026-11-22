@@ -275,6 +275,23 @@ function renderIntervalSession(s, iv, past) {
     : '<div class="empty">Nothing yet: the first snapshot is a starting point; changes show from the second.</div>';
 }
 
+/** A past session: everything its maps gained, the page's main content. */
+function renderSessionLoot() {
+  const l = sessionLoot;
+  $("dashboard").classList.toggle("past-session", !!l);
+  $("session-loot").hidden = !l;
+  if (!l) return;
+  const notes = [
+    l.maps ? `${money0(l.chaos)} from ${l.maps} map${l.maps === 1 ? "" : "s"} with loot data` : "",
+    l.spent ? `${money0(l.spent)} used up, not counted` : "",
+  ].filter(Boolean).join(" · ");
+  $("session-loot-sub").textContent = notes ? `· ${notes}` : "";
+  $("session-loot-items").innerHTML = (l.items.length
+    ? itemList(l.items, 200)
+    : `<div class="empty">${l.maps ? "Nothing worth showing." : "No loot data for this session's maps."}</div>`) +
+    (l.hidden ? `<div class="note">${l.hidden} item kind${l.hidden === 1 ? "" : "s"} with no price or worth under 0.05c hidden.</div>` : "");
+}
+
 function renderSession() {
   const s = runsData.session;
   const r = runsData.recent;
@@ -447,6 +464,7 @@ async function pollStatus() {
 }
 
 let viewSession = null; // a past session's id; null = the current session
+let sessionLoot = null; // the shown past session's loot summary
 let currentRuns = null; // the current session (the sidebar always shows it)
 let sessionsData = null;
 
@@ -455,7 +473,9 @@ let sessionsData = null;
 async function pollRuns({ sessions = true } = {}) {
   currentRuns = await api("/api/runs?limit=200");
   runsData = viewSession == null ? currentRuns : await api(`/api/runs?session=${viewSession}&limit=500`);
+  sessionLoot = viewSession == null ? null : await api(`/api/sessions/${viewSession}/loot`);
   renderSession();
+  renderSessionLoot();
   renderLastMap();
   renderSidebarStats();
   renderRuns();

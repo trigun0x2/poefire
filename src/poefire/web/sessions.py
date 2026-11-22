@@ -9,11 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from poefire.loot.diff import ItemDelta
 from poefire.pricing.book import PriceBook
+from poefire.pricing.valuation import value_deltas
 from poefire.store import Store
 from poefire.tracker import Run, RunStatus
 from poefire.web.cache import SETTLED_AFTER, BookCache
-from poefire.web.views import Json, RunRow, _iso, _round, per_hour, run_rows
+from poefire.web.views import Json, RunRow, _iso, _round, per_hour, run_rows, valuation_json
 
 INIT_KEY = "sessions_initialized"
 
@@ -166,3 +168,29 @@ def interval_totals(store: Store, book: PriceBook, span: Span, rows: list[RunRow
             for i in shown[:12]
         ],
     }  # fmt: skip
+
+
+def loot_summary(store: Store, book: PriceBook, span: Span, rows: list[RunRow],
+                 interval: bool) -> Json:  # fmt: skip
+    """All the loot of one session, per item kind. Per map: what each map gained, added up
+    (what a map used up is counted apart, as in each map's own loot), so the total matches
+    the session's total loot. In the "every 10 minutes" mode: the session's net change."""
+    cpd = book.chaos_per_divine
+    if interval:
+        deltas, _ = store.loot_between("interval", span.start, span.end)
+        return {**valuation_json(value_deltas(deltas, book), cpd), "maps": len(rows)}
+    tracked = [r.run.id for r in rows if r.tracked]
+    gained: dict[str, ItemDelta] = {}
+    used: dict[str, ItemDelta] = {}
+    for deltas in store.runs_loot(tracked).values():
+        for d in deltas:
+            into = gained if d.quantity > 0 else used
+            old = into.get(d.key)
+            into[d.key] = (
+                d
+                if old is None
+                else ItemDelta(d.key, d.name, d.frame_type, old.quantity + d.quantity, d.sample)
+            )
+    v = value_deltas(gained.values(), book)
+    spent = value_deltas(used.values(), book)
+    return {**valuation_json(v, cpd), "spent": round(spent.spent, 1), "maps": len(tracked)}
