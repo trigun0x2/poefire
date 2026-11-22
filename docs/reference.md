@@ -228,7 +228,8 @@ your inventory and a watched tab nets to zero (in the 10-minute mode, where tabs
 per map, the runs table and the sidebar only cover maps from then on. A map you're inside at
 that moment moves into the new session. Earlier sessions stay in the **Sessions** table with
 their length, maps, average map time, average loot per map (finished maps) and total loot; click
-one to look at its maps again, or delete it (with its maps) with ✕. On the first start with
+one to see its totals and everything its maps gained, added up per item kind (in the 10-minute
+mode, the session's net change), or delete it (with its maps) with ✕. On the first start with
 sessions, the maps you played in the last sitting (no more than 30 minutes apart) form the
 current session.
 
@@ -377,6 +378,16 @@ Changes apply immediately, with no restart. They're saved to `config.toml` in th
 (`%APPDATA%\poefire`), which you can also edit by hand. Saving from the page rewrites the
 file, so any comments in it are lost.
 
+### Switching league
+
+poefire checks which league your newest character plays in: shortly after it starts, every
+hour, as a map starts when the last check is 10 minutes old, and at once when your inventory
+read finds the character in another league (one character list request each time, on its
+own rate limit). When it's another league, a banner offers to switch ("Not now" stops
+suggesting that league). With **Switch league automatically** (Settings → Loot tracking,
+`league_autoswitch` in config.toml) it switches by itself and a banner says so. Loot, the
+watched tabs (each league keeps its own picks), prices and the Overview follow the league.
+
 ### Private leagues
 
 Enter the private league's full name, for example `Fire Party (PL12345)`, either in Settings
@@ -451,6 +462,9 @@ selector. The sidebar switches between three tabs and stays visible from any tab
   the chart fills in as you play.
 - the most valuable items from the latest snapshot at current prices, with quantity, price
   each, total and share. You can filter by tab or inventory.
+- each league has its own: the value history and the holdings are the selected league's
+  (Hardcore Covens and Covens apart). Snapshots from before leagues were recorded count for
+  the league their value was recorded under.
 
 **Settings** (see above)
 

@@ -37,7 +37,7 @@ from poefire.leagues import default_price_league, is_private, latest_league
 from poefire.loot import sales
 from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import INTERVAL, LootRecorder, LootResult, Trigger
-from poefire.loot.snapshot import FULL, Snapshotter
+from poefire.loot.snapshot import FULL, OTHER_LEAGUE, Snapshotter
 from poefire.pricing.ninja import NinjaClient
 from poefire.pricing.service import PriceService
 from poefire.pricing.valuation import value_holdings
@@ -65,6 +65,11 @@ GAME_LOG_CHECK = 15.0  # seconds
 # checked when they're read, and when the league or the tabs change)
 LEAGUE_CHECK = 60 * 60.0
 LEAGUE_RETRY = 5 * 60.0  # after a failed check (offline at boot, rate limited...)
+# While you map, the league is checked again as a map starts once this long has passed
+# (one character list request: its own rate limit, not the loot's), and at once when an
+# inventory read finds the character in another league (not more often than LEAGUE_MIN_GAP).
+LEAGUE_CHECK_MAPPING = 10 * 60.0
+LEAGUE_MIN_GAP = 2 * 60.0
 # Settings that loot tracking is built from: a change rebuilds it (others don't, so saving
 # e.g. a hotkey doesn't throw away what it knows, like the tab list)
 LOOT_FIELDS = ("auth", "account_name", "realm", "league", "stash_tabs", "league_tabs", "character",
@@ -153,6 +158,9 @@ class AppRuntime:
         # set by the league check: your newest character plays in another league / none of
         # the watched stash tabs exist in this league
         self.league_hint: dict[str, Any] | None = None
+        # set when the league was switched by itself (league_autoswitch), for a banner
+        self.league_switched: dict[str, Any] | None = None
+        self._league_checked_at = float("-inf")  # monotonic: the last league check that ran
         self.tabs_hint: dict[str, Any] | None = None
         self._league_check_now = threading.Event()
         self._league_check_tabs = False  # the next league check also checks the tabs
@@ -430,6 +438,11 @@ class AppRuntime:
     def _on_loot(self, result: LootResult) -> None:
         self.loot.last = result
         self.loot.last_at = self.now()
+        since = time.monotonic() - self._league_checked_at
+        if (result.trigger is Trigger.RUN_START and since >= LEAGUE_CHECK_MAPPING) or (
+            OTHER_LEAGUE in (result.error or "") and since >= LEAGUE_MIN_GAP
+        ):
+            self._league_check_now.set()  # a new league's character: noticed while mapping
         rec = self.recorder
         if result.complete and result.scope == FULL and rec is not None:
             self._set_tabs_hint(rec.snapshotter)  # the tab list was just read
@@ -862,6 +875,15 @@ class AppRuntime:
         newest = next((c for c in chars if c.get("current")), None)
         dismissed = set(self._kv_get(DISMISSED_LEAGUES_KEY) or [])
         other = newest.get("league") if newest else None
+        if newest and other and other != league and self.cfg.league_autoswitch:
+            log.info("league switched to %s: your newest character %s plays there", other,
+                     newest.get("name"))  # fmt: skip
+            self.set_league(str(other))  # also checks the new league's tabs, soon
+            self.league_switched = {
+                "league": other, "previous": league,
+                "character": newest.get("name"), "level": newest.get("level"),
+            }  # fmt: skip
+            return
         if newest and other and other != league and other not in dismissed:
             self.league_hint = {
                 "league": other, "current": league,
@@ -893,6 +915,7 @@ class AppRuntime:
             wait = LEAGUE_CHECK
             try:
                 self._pick_default_league()
+                self._league_checked_at = time.monotonic()
                 self.check_league(tabs=tabs)
             except Exception as e:  # offline, rate limited, cookie expired: try again soon
                 log.info("league check skipped: %s", e)

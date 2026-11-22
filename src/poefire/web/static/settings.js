@@ -54,6 +54,7 @@ async function loadSettings() {
   $("set-loot-mode").value = s.loot_mode || "per_map";
   renderLootModeHint();
   $("set-trade-sales").checked = s.trade_sales;
+  $("set-league-autoswitch").checked = s.league_autoswitch;
   $("set-version").textContent = `v${s.version}`;
   $("set-check-updates").checked = s.check_updates;
   $("set-hotkey").value = s.campaign_hotkey || "";
@@ -312,6 +313,7 @@ function settingsBody() {
     league_tabs: tabPicks(true),
     loot_mode: $("set-loot-mode").value,
     trade_sales: $("set-trade-sales").checked,
+    league_autoswitch: $("set-league-autoswitch").checked,
     snapshot_delay: Number($("set-delay").value || 0),
     check_updates: $("set-check-updates").checked,
     campaign_hotkey: $("set-hotkey").value,
@@ -335,7 +337,7 @@ const SETTING_FIELDS = {
   league: ["set-league", "League"], price_league: ["set-price-league", "Prices from"],
   character: ["set-character", "Character"], characters: ["set-deaths", "Deaths counted"],
   league_tabs: ["set-tabs", "Stash tabs"],
-  trade_sales: ["set-trade-sales", "Trade sales"], loot_mode: ["set-loot-mode", "Tracking mode"],
+  trade_sales: ["set-trade-sales", "Trade sales"], league_autoswitch: ["set-league-autoswitch", "Switch league automatically"], loot_mode: ["set-loot-mode", "Tracking mode"],
   snapshot_delay: ["set-delay", "Snapshot delay"], check_updates: ["set-check-updates", "Update checks"],
   campaign_hotkey: ["set-hotkey", "Campaign hotkey"], campaign_hotkey_sound: ["set-hotkey-sound", "Hotkey sound"],
   overlay_enabled: ["set-overlay", "Overlay"], overlay_toggle_hotkey: ["set-overlay-key", "Overlay hotkey"],

@@ -120,6 +120,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             "overlay": rt.overlay_json(),
             "campaign": rt.campaign_brief(),
             "league_hint": rt.league_hint,
+            "league_switched": rt.league_switched,
             "tabs_hint": rt.tabs_hint,
             "value": value,
             "prices": {
@@ -392,6 +393,11 @@ def create_app(rt: AppRuntime) -> FastAPI:
     @app.post("/api/league/hint/dismiss")
     def dismiss_league_hint() -> dict[str, Any]:
         rt.dismiss_league_hint()
+        return {"ok": True}
+
+    @app.post("/api/league/switched/dismiss")
+    def dismiss_league_switched() -> dict[str, Any]:
+        rt.league_switched = None
         return {"ok": True}
 
     @app.post("/api/prices/refresh")

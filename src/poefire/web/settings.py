@@ -72,6 +72,7 @@ class SettingsIn(BaseModel):
     build_snapshots: bool | None = None
     build_stale_hours: int | None = Field(default=None, ge=0, le=24 * 30)
     trade_sales: bool | None = None
+    league_autoswitch: bool | None = None
     loot_mode: Literal["per_map", "interval"] | None = None
     overlay_enabled: bool | None = None
     overlay_toggle_hotkey: str | None = None
@@ -192,6 +193,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "regex_hotkey": cfg.regex_hotkey,
         "game_hotkeys": rt.game_hotkeys_json(),
         "trade_sales": cfg.trade_sales,
+        "league_autoswitch": cfg.league_autoswitch,
         "loot_mode": cfg.loot_mode,
         "overlay_enabled": cfg.overlay_enabled,
         "overlay_toggle_hotkey": cfg.overlay_toggle_hotkey,
@@ -398,6 +400,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["build_stale_hours"] = body.build_stale_hours
     if body.trade_sales is not None:
         changes["trade_sales"] = body.trade_sales
+    if body.league_autoswitch is not None:
+        changes["league_autoswitch"] = body.league_autoswitch
     if body.loot_mode is not None:
         changes["loot_mode"] = body.loot_mode
     if body.campaign_hotkey_sound is not None:

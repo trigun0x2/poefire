@@ -158,7 +158,19 @@ $("update-row").addEventListener("click", () => {
 
 // A new league: your newest character plays somewhere else, or your watched tabs are gone.
 function renderLeagueBanners(s) {
-  const lh = s.league_hint, b = $("league-banner");
+  const lh = s.league_hint, b = $("league-banner"), sw = s.league_switched;
+  if (sw && !lh) { // switched by itself (Settings: switch league automatically)
+    b.hidden = false;
+    const key = `switched:${sw.league}`;
+    if (b.dataset.key !== key) {
+      b.dataset.key = key;
+      const who = sw.character ? ` (${esc(sw.character)}${sw.level ? `, level ${sw.level}` : ""})` : "";
+      b.innerHTML = `<span><b>Switched to ${esc(sw.league)}.</b> Your newest character${who} plays there; ` +
+        `poefire tracked ${esc(sw.previous)} before. Loot, stash tabs, prices and the Overview follow it.</span>` +
+        '<button type="button" class="btn" data-act="ok">OK</button>';
+    }
+    return;
+  }
   b.hidden = !lh;
   if (lh && b.dataset.key !== lh.league) {
     b.dataset.key = lh.league;
@@ -181,6 +193,12 @@ function renderLeagueBanners(s) {
 $("league-banner").addEventListener("click", async (e) => {
   const act = e.target.closest("button[data-act]")?.dataset.act;
   const lh = status?.league_hint;
+  if (act === "ok") {
+    $("league-banner").hidden = true;
+    await api("/api/league/switched/dismiss", { method: "POST" }).catch(() => {});
+    await pollStatus();
+    return;
+  }
   if (!act || !lh) return;
   try {
     if (act === "switch") {

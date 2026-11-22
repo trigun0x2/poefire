@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -162,5 +163,58 @@ def test_switching_league_watches_that_leagues_tabs(tmp_path: Path) -> None:
         assert snapshotter.wanted == ["1", "2"] and snapshotter.league == "Newleague"
         rt.set_league("Keepers")
         assert snapshotter.wanted == ["Dump"]  # no picks of its own: stash_tabs
+    finally:
+        rt.stop()
+
+
+def test_league_switches_by_itself_when_asked(tmp_path: Path) -> None:
+    cfg = Config(db_path=tmp_path / "db", league="Keepers", stash_tabs=["Dump"],
+                 league_autoswitch=True)  # fmt: skip
+    rt = AppRuntime(cfg, recorder=None, log_path=tmp_path / "Client.txt")
+    rt.refresh_prices = lambda force=False: None  # type: ignore[method-assign]
+    snapshotter = Snapshotter(Account(), "Keepers", ["Dump"])
+    rt.recorder = SimpleNamespace(snapshotter=snapshotter, stop=lambda: None)  # type: ignore[assignment]
+    client = TestClient(create_app(rt))
+    client.headers["host"] = "127.0.0.1:8460"
+    try:
+        rt.check_league()  # "Fresh" plays in Newleague
+        st = client.get("/api/status").json()
+        assert rt.league == "Newleague" and snapshotter.league == "Newleague"
+        assert st["league_hint"] is None
+        assert st["league_switched"] == {"league": "Newleague", "previous": "Keepers",
+                                         "character": "Fresh", "level": 12}  # fmt: skip
+        client.post("/api/league/switched/dismiss", headers=H)
+        assert client.get("/api/status").json()["league_switched"] is None
+    finally:
+        rt.stop()
+
+
+def test_mapping_checks_the_league_again(tmp_path: Path) -> None:
+    from poefire.loot.recorder import LootResult, Trigger
+    from poefire.loot.snapshot import OTHER_LEAGUE
+
+    rt = AppRuntime(Config(db_path=tmp_path / "db", league="Keepers"), recorder=None,
+                    log_path=tmp_path / "Client.txt")  # fmt: skip
+    try:
+        now = rt._league_check_now
+        rt._league_checked_at = time.monotonic()  # just checked
+        rt._on_loot(LootResult(Trigger.RUN_START, "r1", 1, True, True))
+        assert not now.is_set()
+        rt._league_checked_at -= 11 * 60  # a map starts 10+ minutes later: checked again
+        rt._on_loot(LootResult(Trigger.RUN_START, "r2", 2, True, True))
+        assert now.is_set()
+        now.clear()
+        rt._league_checked_at = time.monotonic() - 3 * 60
+        rt._on_loot(
+            LootResult(
+                Trigger.RUN_RETURN,
+                "r2",
+                3,
+                False,
+                False,
+                error=f"character Fresh is in Newleague, not Keepers{OTHER_LEAGUE}",
+            )
+        )
+        assert now.is_set()  # the character plays elsewhere: checked at once
     finally:
         rt.stop()

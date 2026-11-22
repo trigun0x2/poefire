@@ -109,6 +109,9 @@ class Config:
     # take trade sales' payments out of map loot (reads the website's trade history: more
     # requests, and the trade site rate-limits hard), off by default
     trade_sales: bool = False
+    # switch the league by itself when your newest character plays in another one (else a
+    # banner suggests it)
+    league_autoswitch: bool = False
     # "per_map": snapshots around each map (loot per map); "interval": one every 10 minutes
     # while mapping, far fewer requests, only the session's total
     loot_mode: str = "per_map"

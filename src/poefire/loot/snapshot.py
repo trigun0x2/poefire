@@ -129,6 +129,10 @@ def collect_items(stash: Json) -> Iterator[Json]:
         yield from collect_items(child)
 
 
+# ends the error of an inventory read whose character plays in another league
+OTHER_LEAGUE = " (another league)"
+
+
 class Snapshotter:
     def __init__(
         self,
@@ -272,6 +276,7 @@ class Snapshotter:
         if char.get("league") not in (None, self.league):
             raise SnapshotError(
                 f"character {char.get('name')} is in {char.get('league')}, not {self.league}"
+                f"{OTHER_LEAGUE}"
             )
         return [
             ItemEntry.from_api(i, INVENTORY_SOURCE)
