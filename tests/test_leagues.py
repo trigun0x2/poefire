@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from poefire.api.session import SessionStore
 from poefire.config import Config
-from poefire.leagues import default_price_league, is_private, latest_league
+from poefire.leagues import default_price_league, is_private, is_ssf, latest_league, trade_league
 from poefire.pricing.ninja import NinjaClient, NinjaError, PriceLine
 from poefire.pricing.service import PriceService
 from poefire.store import Store
@@ -121,3 +121,17 @@ def test_ninja_league_list_is_cached(env: tuple[TestClient, AppRuntime]) -> None
     for _ in range(5):
         client.get("/api/leagues")
     assert rt.prices.client.league_calls == 1  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("league", "trade"),
+    [("SSF Keepers", "Keepers"), ("HC SSF Keepers", "Hardcore Keepers"),
+     ("Hardcore SSF Keepers", "Hardcore Keepers"), ("SSF Hardcore Keepers", "Hardcore Keepers"),
+     ("SSF Standard", "Standard"), ("SSF Hardcore", "Hardcore"), ("Solo Self-Found", "Standard"),
+     ("SSF Ruthless Keepers", "Ruthless Keepers"), ("Keepers", "Keepers"),
+     ("Hardcore Keepers", "Hardcore Keepers")],
+)  # fmt: skip
+def test_ssf_leagues_price_from_their_trade_league(league: str, trade: str) -> None:
+    assert is_ssf(league) is (league != trade)
+    assert trade_league(league) == trade
+    assert default_price_league(league, NINJA) == trade

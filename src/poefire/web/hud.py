@@ -58,7 +58,7 @@ def overlay_state(rt: AppRuntime, store: Store) -> Json:
 
     book = rt.prices.book(rt.price_league)
     cpd = book.chaos_per_divine
-    span = sessions.find(store, None)
+    span = sessions.find(store, None, rt.league)
     rows = (
         views.run_rows(store, book, sessions.runs_of(store, span), now, rt.values) if span else []
     )

@@ -158,7 +158,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
         book = rt.prices.book(rt.price_league)
         cpd = book.chaos_per_divine
         with store() as s:
-            span = sessions.find(s, session)
+            span = sessions.find(s, session, rt.league)
             if span is None:
                 raise HTTPException(404, "no such session")
             rows = views.run_rows(s, book, sessions.runs_of(s, span), now, rt.values)
@@ -167,6 +167,7 @@ def create_app(rt: AppRuntime) -> FastAPI:
             )
         return {
             "chaos_per_divine": cpd,
+            "league": rt.league,  # each league has its own sessions
             "runs": [r.to_json(cpd) for r in rows[: min(limit, 2000)]],
             "session": {
                 **views.session_summary(rows, cpd, now),
@@ -187,14 +188,16 @@ def create_app(rt: AppRuntime) -> FastAPI:
         book = rt.prices.book(rt.price_league)
         with store() as s:
             return {"chaos_per_divine": book.chaos_per_divine,
-                    "sessions": sessions.history(s, book, rt.now(), rt.values)}  # fmt: skip
+                    "league": rt.league,
+                    "sessions": sessions.history(s, book, rt.now(), rt.values,
+                                                 league=rt.league)}  # fmt: skip
 
     @app.get("/api/sessions/{session_id}/loot")
     def session_loot(session_id: int) -> dict[str, Any]:
         """Everything a session's maps gained, per item kind (the past session's page)."""
         book = rt.prices.book(rt.price_league)
         with store() as s:
-            span = sessions.find(s, session_id)
+            span = sessions.find(s, session_id, rt.league)
             if span is None:
                 raise HTTPException(404, "no such session")
             rows = views.run_rows(s, book, sessions.runs_of(s, span), rt.now(), rt.values)

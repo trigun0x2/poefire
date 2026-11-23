@@ -43,8 +43,10 @@ class TrackerService:
         log_path: Path,
         rules: ZoneRules | None = None,
         characters: Iterable[str] = (),
+        league: Callable[[], str | None] = lambda: None,
     ) -> None:
         self.store = store
+        self.league = league  # the selected league: a new run is recorded in it
         self.log_path = log_path
         self.rules = rules or ZoneRules()
         self.characters = tuple(characters)
@@ -160,7 +162,7 @@ class TrackerService:
     def _apply_notices(self, notices: list[Notice]) -> None:
         for n in notices:
             if isinstance(n, RunNotice):
-                self.store.upsert_run(n.run)
+                self.store.upsert_run(n.run, self.league())
 
     def run_forever(self, stop: threading.Event, interval: float = 0.5) -> None:
         if self.tailer is None:

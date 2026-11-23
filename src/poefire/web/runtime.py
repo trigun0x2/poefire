@@ -33,7 +33,7 @@ from poefire.gameinput import (
     search_strings,
 )
 from poefire.hotkey import GlobalHotkey, HotkeyError, beep, normalize
-from poefire.leagues import default_price_league, is_private, latest_league
+from poefire.leagues import default_price_league, is_private, is_ssf, latest_league
 from poefire.loot import sales
 from poefire.loot.items import ItemEntry
 from poefire.loot.recorder import INTERVAL, LootRecorder, LootResult, Trigger
@@ -204,9 +204,12 @@ class AppRuntime:
         self._ninja_leagues: list[str] = []
         self._ninja_leagues_at = float("-inf")
         self._account_leagues: list[str] = []
-        sessions.ensure_session(self._store, SESSION_GAP)
         stored = self._store.get_json(LEAGUE_KEY)
         self._league: str = stored or cfg.league or FALLBACK_LEAGUES[0]
+        sessions.ensure_session(self._store, SESSION_GAP, self._league)
+        if self._store.claim_unlabeled(self._league):
+            log.info("maps and sessions from before leagues were recorded: put in %s",
+                     self._league)  # fmt: skip
         # nobody picked a league yet: the newest one on poe.ninja, once it's been asked
         self._league_chosen = bool(stored or cfg.league)
 
@@ -249,7 +252,11 @@ class AppRuntime:
                      "found" if self.log_path.exists() else "doesn't exist yet")  # fmt: skip
         if self.log_path is not None:
             self.service = TrackerService(
-                self._store, self.log_path, self.cfg.zone_rules(), self.cfg.characters
+                self._store,
+                self.log_path,
+                self.cfg.zone_rules(),
+                self.cfg.characters,
+                league=lambda: self.league,
             )
             self.service.handlers.append(self._dispatch)
             self.service.line_observers.append(self.campaign.handle)
@@ -421,12 +428,17 @@ class AppRuntime:
     @property
     def price_league(self) -> str:
         """The league prices come from: the configured one, else the played league, or for a
-        private league the challenge league it's most likely based on."""
+        private league the challenge league it's most likely based on, for an SSF league its
+        trade league."""
         if self.cfg.price_league:
             return self.cfg.price_league
-        if not is_private(self._league):
+        if not is_private(self._league) and not is_ssf(self._league):
             return self._league
         return default_price_league(self._league, self.ninja_leagues())
+
+    @property
+    def is_ssf(self) -> bool:
+        return is_ssf(self._league)
 
     # --- live state ---
 
@@ -500,12 +512,12 @@ class AppRuntime:
             live = self.service.tracker.run if self.service is not None else None
             if live is not None and live.status is RunStatus.ACTIVE:
                 start = min(start, live.started_at)
-            return self._store.add_session(start)
+            return self._store.add_session(start, self.league)
 
     def delete_session(self, session_id: int) -> None:
         """Delete a past session and its maps. Raises LookupError / ValueError."""
         with self._lock:
-            span = sessions.find(self._store, session_id)
+            span = sessions.find(self._store, session_id, self.league)
             if span is None:
                 raise LookupError(session_id)
             if span.current:

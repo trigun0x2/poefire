@@ -2,6 +2,8 @@
 
 Runs belong to the session they started in. Runs from before the first explicit session form
 an implicit session (id 0), so nothing recorded earlier is lost from the history.
+
+Each league has its own sessions: a league's maps, from its "New session" to its next one.
 """
 
 from __future__ import annotations
@@ -25,13 +27,14 @@ class Span:
     id: int
     start: datetime | None  # None: from the beginning (the implicit first session)
     end: datetime | None  # the next session's start; None for the current one
+    league: str | None = None  # whose sessions (None: every league's)
 
     @property
     def current(self) -> bool:
         return self.end is None
 
 
-def ensure_session(store: Store, gap: timedelta) -> None:
+def ensure_session(store: Store, gap: timedelta, league: str | None = None) -> None:
     """First start with sessions: open one where the current play session began (runs no
     more than `gap` apart, as before). With no runs yet, the implicit first session (from the
     beginning) stays the current one."""
@@ -45,30 +48,30 @@ def ensure_session(store: Store, gap: timedelta) -> None:
         start, newer = run.started_at, run
     with store.transaction():
         if start is not None:
-            store.add_session(start)
+            store.add_session(start, league)
         store.set_json(INIT_KEY, True)
 
 
-def spans(store: Store) -> list[Span]:
-    """Oldest first; the last one is the current session."""
-    rows = store.list_sessions()
+def spans(store: Store, league: str | None = None) -> list[Span]:
+    """`league`'s sessions, oldest first; the last one is the current session."""
+    rows = store.list_sessions(league)
     if not rows:
-        return [Span(0, None, None)]
-    out = [Span(0, None, rows[0][1])]
+        return [Span(0, None, None, league)]
+    out = [Span(0, None, rows[0][1], league)]
     for i, (sid, start) in enumerate(rows):
-        out.append(Span(sid, start, rows[i + 1][1] if i + 1 < len(rows) else None))
+        out.append(Span(sid, start, rows[i + 1][1] if i + 1 < len(rows) else None, league))
     return out
 
 
-def find(store: Store, session_id: int | None) -> Span | None:
-    all_spans = spans(store)
+def find(store: Store, session_id: int | None, league: str | None = None) -> Span | None:
+    all_spans = spans(store, league)
     if session_id is None:
         return all_spans[-1]
     return next((s for s in all_spans if s.id == session_id), None)
 
 
 def runs_of(store: Store, span: Span) -> list[Run]:
-    return store.list_runs_between(span.start, span.end)
+    return store.list_runs_between(span.start, span.end, span.league)
 
 
 def summary(span: Span, rows: list[RunRow], chaos_per_divine: float | None, now: datetime) -> Json:
@@ -104,14 +107,14 @@ def summary(span: Span, rows: list[RunRow], chaos_per_divine: float | None, now:
     }
 
 
-def history(store: Store, book: PriceBook, now: datetime,
-            cache: BookCache | None = None) -> list[Json]:  # fmt: skip
-    """Every session with at least one map (and the current one), newest first. A past
-    session's summary is kept in `cache` once all its maps have settled: it only changes
+def history(store: Store, book: PriceBook, now: datetime, cache: BookCache | None = None,
+            league: str | None = None) -> list[Json]:  # fmt: skip
+    """Every session of `league` with at least one map (and the current one), newest first. A
+    past session's summary is kept in `cache` once all its maps have settled: it only changes
     with the prices."""
     out = []
-    for span in reversed(spans(store)):
-        key = ("session", span.id, span.start, span.end)
+    for span in reversed(spans(store, league)):
+        key = ("session", span.league, span.id, span.start, span.end)
         if cache is not None and not span.current:
             hit = cache.get(book, key)
             if hit is not None:
@@ -145,7 +148,7 @@ def interval_totals(store: Store, book: PriceBook, span: Span, rows: list[RunRow
     maps done, and per map / per hour from those. `rows` newest first."""
     from poefire.pricing.valuation import value_deltas
 
-    deltas, changes = store.loot_between("interval", span.start, span.end)
+    deltas, changes = store.loot_between("interval", span.start, span.end, span.league)
     v = value_deltas(deltas, book)
     done = [r for r in rows if r.run.status is RunStatus.FINISHED]
     maps = len(done)
@@ -177,7 +180,7 @@ def loot_summary(store: Store, book: PriceBook, span: Span, rows: list[RunRow],
     the session's total loot. In the "every 10 minutes" mode: the session's net change."""
     cpd = book.chaos_per_divine
     if interval:
-        deltas, _ = store.loot_between("interval", span.start, span.end)
+        deltas, _ = store.loot_between("interval", span.start, span.end, span.league)
         return {**valuation_json(value_deltas(deltas, book), cpd), "maps": len(rows)}
     tracked = [r.run.id for r in rows if r.tracked]
     gained: dict[str, ItemDelta] = {}

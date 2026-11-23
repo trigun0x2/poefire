@@ -485,11 +485,17 @@ let viewSession = null; // a past session's id; null = the current session
 let sessionLoot = null; // the shown past session's loot summary
 let currentRuns = null; // the current session (the sidebar always shows it)
 let sessionsData = null;
+let runsLeague = null; // the league whose sessions are shown
 
 /** Refreshes the Session page. The session history is only fetched when it can have changed
  * (a map ended, sessions changed, the page was opened), not on the 15 s timer. */
 async function pollRuns({ sessions = true } = {}) {
   currentRuns = await api("/api/runs?limit=200");
+  if (runsLeague !== null && currentRuns.league !== runsLeague) { // another league's sessions
+    viewSession = null;
+    sessions = true;
+  }
+  runsLeague = currentRuns.league;
   runsData = viewSession == null ? currentRuns : await api(`/api/runs?session=${viewSession}&limit=500`);
   sessionLoot = viewSession == null ? null : await api(`/api/sessions/${viewSession}/loot`);
   renderSession();
@@ -512,6 +518,7 @@ const sessionsSort = loadSort("sessions", { key: "started_at", dir: -1 });
 function renderSessions() {
   const rows = sortRows(sessionsData.sessions, sessionsSort.key, sessionsSort.dir);
   const shown = runsData?.session?.id;
+  $("sessions-league").textContent = sessionsData.league ? ` · ${sessionsData.league}` : "";
   $("sessions-empty").hidden = rows.length > 0;
   $("sessions-body").innerHTML = rows.map((s) => {
     const live = s.current ? '<span class="live-dot" title="current session"></span>' : "";

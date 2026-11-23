@@ -252,6 +252,9 @@ def test_older_snapshots_get_the_league_of_their_value(tmp_path: Path) -> None:
     conn.execute("UPDATE snapshots SET league = NULL")
     conn.execute("PRAGMA user_version = 13")
     conn.execute("ALTER TABLE snapshots DROP COLUMN league")
+    conn.execute("DROP INDEX runs_league_started")
+    conn.execute("ALTER TABLE runs DROP COLUMN league")
+    conn.execute("ALTER TABLE sessions DROP COLUMN league")
     conn.commit()
     conn.close()
     with Store(db) as s:

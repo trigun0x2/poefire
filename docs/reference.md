@@ -233,6 +233,11 @@ mode, the session's net change), or delete it (with its maps) with ✕. On the f
 sessions, the maps you played in the last sitting (no more than 30 minutes apart) form the
 current session.
 
+Each league has its own sessions: the page shows the selected league's, and **New session**
+only starts one in that league. A map belongs to the league selected when it started; maps
+from before leagues were recorded get the league of their loot snapshots, or else the league
+selected when the upgraded app first starts.
+
 ## Campaign tracker
 
 The **Campaign** tab times campaign runs from `Client.txt`, the way a LiveSplit auto-splitter does
@@ -386,7 +391,15 @@ read finds the character in another league (one character list request each time
 own rate limit). When it's another league, a banner offers to switch ("Not now" stops
 suggesting that league). With **Switch league automatically** (Settings → Loot tracking,
 `league_autoswitch` in config.toml) it switches by itself and a banner says so. Loot, the
-watched tabs (each league keeps its own picks), prices and the Overview follow the league.
+watched tabs (each league keeps its own picks), prices, the Overview and the sessions follow
+the league.
+
+### SSF leagues
+
+Solo Self-Found leagues (`SSF Covens`, `HC SSF Covens`, `SSF Standard`...) are detected by
+name. poe.ninja has no SSF prices, so they're priced from their trade league: `SSF Covens`
+from `Covens`, `HC SSF Covens` from `Hardcore Covens`, `SSF Hardcore` from `Hardcore`. **Prices
+from** can still override it, but not with an SSF league.
 
 ### Private leagues
 

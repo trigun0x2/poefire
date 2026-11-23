@@ -128,3 +128,61 @@ def test_a_past_sessions_loot_summary(app: TestClient) -> None:  # noqa: F811
     assert [(i["name"], i["quantity"]) for i in loot["items"]] == [("Divine Orb", 1),
                                                                     ("Chaos Orb", 20)]  # fmt: skip
     assert app.get("/api/sessions/99/loot").status_code == 404
+
+
+def test_each_league_has_its_own_sessions(app: TestClient) -> None:  # noqa: F811
+    keepers = app.get("/api/sessions").json()
+    assert keepers["league"] == "Keepers" and keepers["sessions"][0]["maps"] == 5
+    app.post("/api/league", headers=HEADERS, json={"league": "Hardcore Keepers"})
+    hc = app.get("/api/sessions").json()
+    assert hc["league"] == "Hardcore Keepers"
+    assert [(h["id"], h["maps"]) for h in hc["sessions"]] == [(0, 0)]  # no maps there yet
+    assert app.get("/api/runs").json()["runs"] == []
+    new_id = app.post("/api/sessions/new", headers=HEADERS).json()["id"]
+    assert app.get("/api/runs").json()["session"]["id"] == new_id
+    # Keepers' sessions didn't change: its current session is still the first one
+    app.post("/api/league", headers=HEADERS, json={"league": "Keepers"})
+    again = app.get("/api/sessions").json()["sessions"]
+    assert [(h["id"], h["current"], h["maps"]) for h in again] == [(0, True, 5)]
+    assert app.get(f"/api/runs?session={new_id}").status_code == 404  # another league's
+
+
+def test_runs_keep_the_league_they_started_in(tmp_path: Path) -> None:
+    t = datetime(2026, 11, 1, 12)
+    with Store(tmp_path / "db") as s, s.transaction():
+        s.upsert_run(mkrun("a", t, 5), "Covens")
+        s.upsert_run(mkrun("a", t, 6), "Hardcore Covens")  # saved again after a switch
+        s.upsert_run(mkrun("b", t + timedelta(hours=1), 5), "Hardcore Covens")
+        assert [r.id for r in s.list_runs_between(None, None, "Covens")] == ["a"]
+        assert [r.id for r in s.list_runs_between(None, None, "Hardcore Covens")] == ["b"]
+        assert [r.id for r in s.list_runs_between(None, None)] == ["b", "a"]
+
+
+def test_older_maps_and_sessions_get_a_league_on_upgrade(tmp_path: Path) -> None:
+    import sqlite3
+
+    from poefire.loot.snapshot import Snapshot
+
+    db = tmp_path / "db"
+    t = datetime(2026, 11, 1, 12)
+    with Store(db) as s, s.transaction():
+        s.upsert_run(mkrun("a", t, 5))
+        s.upsert_run(mkrun("b", t + timedelta(hours=2), 5))
+        s.add_snapshot(Snapshot(t, league="Hardcore Covens"), "run_start", "b")
+        s.add_session(t + timedelta(hours=1))
+        s.add_session(t + timedelta(hours=3))
+    conn = sqlite3.connect(db)  # as a version before maps recorded their league left it
+    conn.execute("PRAGMA user_version = 14")
+    conn.execute("DROP INDEX runs_league_started")
+    conn.execute("ALTER TABLE runs DROP COLUMN league")
+    conn.execute("ALTER TABLE sessions DROP COLUMN league")
+    conn.commit()
+    conn.close()
+    with Store(db) as s:
+        leagues = dict(s.conn.execute("SELECT id, league FROM runs").fetchall())
+        assert leagues == {"a": None, "b": "Hardcore Covens"}  # from its loot snapshot
+        assert [r[0] for r in s.conn.execute("SELECT league FROM sessions ORDER BY id")] == [
+            "Hardcore Covens", None]  # its first map's; none after the last map  # fmt: skip
+        assert s.claim_unlabeled("Covens") == 2
+        assert [r.id for r in s.list_runs_between(None, None, "Covens")] == ["a"]
+        assert len(s.list_sessions("Hardcore Covens")) == len(s.list_sessions("Covens")) == 1

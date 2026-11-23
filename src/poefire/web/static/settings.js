@@ -80,16 +80,31 @@ async function loadSettings() {
 }
 
 const PRIVATE_RE = /\(PL\d+\)\s*$/;
+const SSF_RE = /\b(?:SSF|Solo Self-Found)\b\s*/i;
+
+/** An SSF league's trade league, as poefire.leagues.trade_league names it. */
+function tradeLeague(league) {
+  let rest = league.replace(new RegExp(SSF_RE.source, "gi"), " ").split(/\s+/).filter(Boolean).join(" ");
+  const hc = /^(?:HC|Hardcore)\b\s*/i;
+  const hardcore = hc.test(rest);
+  rest = rest.replace(hc, "").trim();
+  if (!rest || /^(standard|hardcore)$/i.test(rest)) {
+    return hardcore || /^hardcore$/i.test(rest) ? "Hardcore" : "Standard";
+  }
+  return hardcore ? `Hardcore ${rest}` : rest;
+}
 
 function renderLeagueHints() {
   const league = $("set-league").value.trim();
   const priv = PRIVATE_RE.test(league);
   const chars = account?.characters || [];
   const current = chars.find((c) => c.current);
+  const ssf = !priv && SSF_RE.test(league);
   let hint = priv ? "Private league: stash and inventory are read from it as usual. " : "";
+  if (ssf) hint += `SSF league: priced from its trade league, ${esc(tradeLeague(league))}. `;
   if (current && current.league && current.league !== league) {
     hint += `Your current character ${esc(current.name)} is in <a href="#" id="set-league-use">${esc(current.league)}</a>.`;
-  } else if (!priv) {
+  } else if (!priv && !ssf) {
     hint += 'For a private league, enter its full name, e.g. <code>My League (PL12345)</code>.';
   }
   $("set-league-hint").innerHTML = hint;
@@ -102,7 +117,9 @@ function renderLeagueHints() {
   $("set-price-hint").innerHTML = priv
     ? "poe.ninja has no prices for private leagues. Leave empty to use the current challenge league, " +
       "or pick the league yours is based on (e.g. the hardcore one for a hardcore private league)."
-    : "Leave empty to price from the league you play.";
+    : ssf
+      ? `poe.ninja has no prices for SSF leagues. Leave empty to price from ${esc(tradeLeague(league))}.`
+      : "Leave empty to price from the league you play.";
 }
 
 function renderDeathNames() {

@@ -24,7 +24,7 @@ from poefire.tracker import Run, RunStatus, Segment
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 _SCHEMA_V1 = """
 CREATE TABLE runs (
@@ -222,6 +222,22 @@ UPDATE snapshots SET league = (SELECT v.league FROM snapshot_values v
                                WHERE v.snapshot_id = snapshots.id)
 """
 
+_SCHEMA_V15 = """
+-- The league a map was run in, and a session was started in: each league has its own
+-- sessions. Older maps get the league of their loot snapshots, older sessions the league of
+-- their first map (the rest: the league selected when the app next starts, see
+-- Store.claim_unlabeled).
+ALTER TABLE runs ADD COLUMN league TEXT;
+ALTER TABLE sessions ADD COLUMN league TEXT;
+UPDATE runs SET league = (SELECT s.league FROM snapshots s
+                          WHERE s.run_id = runs.id AND s.league IS NOT NULL
+                          ORDER BY s.id DESC LIMIT 1);
+UPDATE sessions SET league = (SELECT r.league FROM runs r
+                              WHERE r.started_at >= sessions.started_at AND r.league IS NOT NULL
+                              ORDER BY r.started_at LIMIT 1);
+CREATE INDEX runs_league_started ON runs(league, started_at)
+"""
+
 _MIGRATIONS = (
     _SCHEMA_V1,
     _SCHEMA_V2,
@@ -237,6 +253,7 @@ _MIGRATIONS = (
     _SCHEMA_V12,
     _SCHEMA_V13,
     _SCHEMA_V14,
+    _SCHEMA_V15,
 )  # index i upgrades schema version i -> i + 1
 
 
@@ -314,20 +331,22 @@ class Store:
 
     # --- runs ---
 
-    def upsert_run(self, run: Run) -> None:
+    def upsert_run(self, run: Run, league: str | None = None) -> None:
+        """Save a run; `league` (the one selected) is recorded when it's first saved."""
         self.conn.execute(
             """
             INSERT INTO runs (id, area_id, map_name, area_level, seed, started_at, ended_at,
-                              status, active_seconds, deaths)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              status, active_seconds, deaths, league)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 ended_at = excluded.ended_at, status = excluded.status,
-                active_seconds = excluded.active_seconds, deaths = excluded.deaths
+                active_seconds = excluded.active_seconds, deaths = excluded.deaths,
+                league = COALESCE(runs.league, excluded.league)
             """,
             (
                 run.id, run.area_id, run.map_name, run.area_level, run.seed,
                 _dt(run.started_at), _dt(run.ended_at), run.status.value,
-                run.active_seconds(), run.deaths,
+                run.active_seconds(), run.deaths, league,
             ),
         )  # fmt: skip
         self.conn.execute("DELETE FROM run_segments WHERE run_id = ?", (run.id,))
@@ -582,11 +601,14 @@ class Store:
             deltas.sort(key=lambda d: (-d.quantity, d.name))
         return out
 
-    def loot_between(self, kind: str, start: datetime | None,
-                     end: datetime | None) -> tuple[list[ItemDelta], int]:  # fmt: skip
+    def loot_between(self, kind: str, start: datetime | None, end: datetime | None,
+                     league: str | None = None) -> tuple[list[ItemDelta], int]:  # fmt: skip
         """Net change of `kind` loot (e.g. "interval") whose closing snapshot was taken in
-        [start, end), summed per item kind; and how many changes that is."""
+        [start, end) (in `league`, when given), summed per item kind; and how many changes
+        that is."""
         cond, args = "l.kind = ?", [kind]
+        if league is not None:
+            cond, args = cond + " AND s.league = ?", [*args, league]
         if start is not None:
             cond, args = cond + " AND s.taken_at >= ?", [*args, start.isoformat()]
         if end is not None:
@@ -809,21 +831,43 @@ class Store:
 
     # --- sessions ---
 
-    def add_session(self, started_at: datetime) -> int:
-        cur = self.conn.execute("INSERT INTO sessions (started_at) VALUES (?)", (_dt(started_at),))
+    def add_session(self, started_at: datetime, league: str | None = None) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO sessions (started_at, league) VALUES (?, ?)", (_dt(started_at), league)
+        )
         return int(cur.lastrowid or 0)
 
-    def list_sessions(self) -> list[tuple[int, datetime]]:
-        """(id, started_at), oldest first."""
-        rows = self.conn.execute("SELECT id, started_at FROM sessions ORDER BY started_at, id")
+    def list_sessions(self, league: str | None = None) -> list[tuple[int, datetime]]:
+        """(id, started_at) of `league`'s sessions (every league's, when None), oldest first."""
+        sql, args = "SELECT id, started_at FROM sessions", []
+        if league is not None:
+            sql, args = sql + " WHERE league = ?", [league]
+        rows = self.conn.execute(sql + " ORDER BY started_at, id", args)
         return [(r["id"], datetime.fromisoformat(r["started_at"])) for r in rows]
+
+    def claim_unlabeled(self, league: str) -> int:
+        """Give `league` to the maps, sessions and snapshots saved before they recorded one
+        (and not matched to one by the upgrade); how many there were."""
+        n = 0
+        for table in ("runs", "sessions", "snapshots"):
+            cur = self.conn.execute(
+                f"UPDATE {table} SET league = ? WHERE league IS NULL", (league,)
+            )
+            n += cur.rowcount
+        return n
 
     def delete_session(self, session_id: int) -> None:
         self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
-    def list_runs_between(self, start: datetime | None, end: datetime | None) -> list[Run]:
-        """Runs that started in [start, end), newest first; None = unbounded."""
-        where, args = [], []
+    def list_runs_between(self, start: datetime | None, end: datetime | None,
+                          league: str | None = None) -> list[Run]:  # fmt: skip
+        """Runs that started in [start, end) (in `league`, when given), newest first; None =
+        unbounded."""
+        where: list[str] = []
+        args: list[str | None] = []
+        if league is not None:
+            where.append("league = ?")
+            args.append(league)
         if start is not None:
             where.append("started_at >= ?")
             args.append(_dt(start))

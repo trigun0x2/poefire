@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from poefire import gameinput, hotkey
 from poefire.api.session import LeagueError, SessionExpiredError, SessionStore
 from poefire.config import WINDOWS_LOG_CANDIDATES, Config, newest_existing
-from poefire.leagues import is_private
+from poefire.leagues import is_private, is_ssf
 from poefire.store import Store
 from poefire.web.runtime import AppRuntime
 
@@ -165,6 +165,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "auth": cfg.auth,
         "league": rt.league,
         "league_is_private": rt.is_private,
+        "league_is_ssf": rt.is_ssf,
         "price_league": cfg.price_league or "",
         "price_league_effective": rt.price_league,
         "ninja_leagues": rt.ninja_leagues(),
@@ -339,6 +340,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
             raise SettingsError("price league name is too long")
         if price and is_private(price):
             raise SettingsError("poe.ninja has no prices for private leagues; pick a public one")
+        if price and is_ssf(price):
+            raise SettingsError("poe.ninja has no prices for SSF leagues; pick a trade league")
         changes["price_league"] = price or None
     if body.character is not None:
         changes["character"] = body.character.strip() or None
