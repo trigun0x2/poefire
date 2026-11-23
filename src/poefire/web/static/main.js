@@ -32,6 +32,7 @@ async function route() {
   }
   $("content").scrollTop = 0;
   renderSessionBanner(status?.loot.session);
+  if (status) renderSetupBanner(status.loot);
   if (name === "settings") showSettingsTab(sub);
   if (name === "settings") loadSettings().catch((e) => setStatus("set-save-status", `✗ ${e.message}`, "bad"));
   if (name === "overview") loadOverview().catch(() => {});

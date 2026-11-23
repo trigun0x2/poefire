@@ -53,7 +53,9 @@ function renderOverview() {
       ? `${sign}${ovUnit === "divine" ? money(null, abs) : money(abs, null)} in ${ovRange === "all" ? "total" : ovRange}`
       : "";
   } else {
-    $("ov-total").textContent = ovTabs.size === 0 && ovItems.total_chaos != null ? money(ovItems.total_chaos, ovItems.total_divine) : "—";
+    // no recorded values: the latest read's total, when it held anything
+    $("ov-total").textContent = ovTabs.size === 0 && ovItems.items.length && ovItems.total_chaos != null
+      ? money(ovItems.total_chaos, ovItems.total_divine) : "—";
     $("ov-change").textContent = "";
   }
   renderChart(pts);
@@ -73,8 +75,8 @@ function renderChart(pts) {
       ? 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a> to record values.'
       : ovHistory.points.length && ovUnit === "divine"
         ? "No divine price yet for these snapshots. Switch to chaos, or wait for poe.ninja prices."
-        : "No values recorded in this range yet. A value is recorded when the watched tabs are read: about every 30 minutes while you map, and when you press Snapshot now.";
-    box.innerHTML = `<div class="chart-empty">${why}</div>`;
+        : "No values recorded in this range yet. A value is recorded when the watched tabs are read: about every 30 minutes while you map, and when you press Read stash now.";
+    box.innerHTML = `<div class="chart-empty"><div>${why}</div></div>`;
     return;
   }
   const W = box.clientWidth || 800, H = box.clientHeight || 280;
@@ -167,14 +169,15 @@ function renderHoldings() {
   const cpd = d.chaos_per_divine;
   const hiddenNote = d.hidden ? ` · ${d.hidden} with no price or ~0c hidden` : "";
   $("ov-league").textContent = d.league ? ` in ${d.league}` : ""; // each league has its own
-  $("ov-asof").textContent = d.taken_at ? `· as of ${new Date(d.taken_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, current prices${hiddenNote}` : "";
+  $("ov-asof").textContent = d.taken_at && d.items.length ? `· as of ${new Date(d.taken_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, current prices${hiddenNote}` : "";
   const chips = [`<button type="button" data-tab=""${ovTabs.size === 0 ? ' class="on"' : ""}>All tabs</button>`]
     .concat(d.tabs.map((t) => `<button type="button" data-tab="${esc(t.id)}"${ovTabs.has(t.id) ? ' class="on"' : ""}>${esc(t.name)}<span class="v">${money(t.chaos, cpd ? t.chaos / cpd : null)}</span></button>`));
   $("ov-tabs").innerHTML = d.tabs.length ? chips.join("") : "";
   $("ov-items-empty").hidden = d.items.length > 0;
   $("ov-items-empty").innerHTML = !d.taken_at
-    ? (d.loot_enabled ? `No snapshot in ${esc(d.league || "this league")} yet. Press Snapshot now, or start a map.` : 'Loot tracking is off. Set up your account in <a href="#settings/general">Settings</a>.')
-    : "No items in the selected tabs.";
+    ? (d.loot_enabled ? `No read of your stash in ${esc(d.league || "this league")} yet. Press Read stash now, or start a map.` : 'Loot tracking is off. <a href="#settings/general">Set it up</a> to see what you hold.')
+    : ovTabs.size ? "No items in the selected tabs."
+      : `Nothing priced in your watched tabs or inventory at the last read (${new Date(d.taken_at).toLocaleDateString([], { month: "short", day: "numeric" })}).`;
   $("ov-items-body").innerHTML = sortRows(d.items, itemsSort.key, itemsSort.dir).map((i) => {
     const icon = i.icon
       ? `<img src="${esc(i.icon)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noicon'}))">`
@@ -217,9 +220,9 @@ $("ov-tabs").addEventListener("click", (e) => {
 async function requestSnapshot(button) {
   if (!status?.loot.enabled) { location.hash = "#settings/general"; return; }
   button.disabled = true;
-  button.textContent = "Snapshot requested…";
+  button.textContent = "Reading…";
   await api("/api/snapshot", { method: "POST" }).catch(() => {});
-  setTimeout(() => { button.disabled = false; button.textContent = "Snapshot now"; }, 4000);
+  setTimeout(() => { button.disabled = !status?.loot.enabled; button.textContent = "Read stash now"; }, 4000);
 }
 $("ov-snapshot").addEventListener("click", () => requestSnapshot($("ov-snapshot")));
 $("side-snapshot").addEventListener("click", () => requestSnapshot($("side-snapshot")));

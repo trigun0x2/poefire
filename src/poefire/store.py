@@ -880,6 +880,15 @@ class Store:
         rows = self.conn.execute(sql + " ORDER BY started_at DESC, rowid DESC", args).fetchall()
         return self._rows_to_runs(rows)
 
+    def latest_run_before(self, when: datetime, league: str | None = None) -> Run | None:
+        """The newest run (of `league`, when given) that started before `when`."""
+        sql, args = "SELECT * FROM runs WHERE started_at < ?", [_dt(when)]
+        if league is not None:
+            sql, args = sql + " AND league = ?", [*args, league]
+        row = self.conn.execute(sql + " ORDER BY started_at DESC, rowid DESC LIMIT 1",
+                                args).fetchone()  # fmt: skip
+        return self._rows_to_runs([row])[0] if row else None
+
     def delete_runs(self, run_ids: list[str]) -> None:
         """Remove runs with their loot; their snapshots and log events are kept, unlinked."""
         for i in range(0, len(run_ids), 500):

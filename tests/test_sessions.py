@@ -186,3 +186,36 @@ def test_older_maps_and_sessions_get_a_league_on_upgrade(tmp_path: Path) -> None
         assert s.claim_unlabeled("Covens") == 2
         assert [r.id for r in s.list_runs_between(None, None, "Covens")] == ["a"]
         assert len(s.list_sessions("Hardcore Covens")) == len(s.list_sessions("Covens")) == 1
+
+
+def test_a_map_after_a_break_opens_a_new_session(tmp_path: Path) -> None:
+    from test_web import OfflineNinja
+
+    from poefire.config import Config
+    from poefire.pricing.service import PriceService
+    from poefire.web.runtime import AppRuntime
+
+    db = tmp_path / "db"
+    t = datetime(2026, 11, 1, 12)
+    with Store(db) as s:
+        s.upsert_run(mkrun("a", t, 5), "Keepers")
+    prices = PriceService(OfflineNinja(), lambda: Store(db))
+    rt = AppRuntime(Config(db_path=db, league="Keepers"), prices, recorder=None,
+                    log_path=tmp_path / "none.txt")  # fmt: skip
+    store = rt._store
+    assert [start for _, start in store.list_sessions("Keepers")] == [t]  # the first start's
+    soon, later = mkrun("b", t + timedelta(hours=1), 5), mkrun("c", t + timedelta(hours=4), 5)
+    rt._new_session_after_break(soon)  # an hour's break: the same session
+    store.upsert_run(soon, "Keepers")
+    assert len(store.list_sessions("Keepers")) == 1
+    rt._new_session_after_break(later)  # three hours: a new one, from that map
+    store.upsert_run(later, "Keepers")
+    assert [start for _, start in store.list_sessions("Keepers")] == [t, later.started_at]
+    # "New session" pressed during the break: no second one
+    store.add_session(t + timedelta(hours=6), "Keepers")
+    rt._new_session_after_break(mkrun("d", t + timedelta(hours=7), 5))
+    assert len(store.list_sessions("Keepers")) == 3
+    # 0 turns it off
+    rt.cfg.session_break_hours = 0
+    rt._new_session_after_break(mkrun("e", t + timedelta(hours=20), 5))
+    assert len(store.list_sessions("Keepers")) == 3

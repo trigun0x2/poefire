@@ -105,7 +105,7 @@ a hideout trip is another pair of reads, and the map's loot adds up over its tri
 | as you go into a map (or back into it) | the starting point of that stay |
 | when you're back in your hideout or town | that stay's loot: what came into the inventory |
 | about every 30 minutes while you map, with the watched tabs | the Overview: what you hold, and its value over time |
-| when you press Snapshot now, with the watched tabs | the same, at once |
+| when you press Read stash now, with the watched tabs | the same, at once |
 
 The website shows your inventory as the game last saved your character, which it does at
 every zone change. A read between two zone changes sees the inventory as it was when you
@@ -233,6 +233,12 @@ mode, the session's net change), or delete it (with its maps) with ✕. On the f
 sessions, the maps you played in the last sitting (no more than 30 minutes apart) form the
 current session.
 
+A map started after a break of 2 hours or more (no map in between) also starts a new session,
+so a session covers one sitting; set the break in Settings → General → **Sessions**
+(`session_break_hours`, 0 = only **New session** starts one). Tiles whose loot comes from
+under half the session's maps are dimmed and say how many maps that is; with no loot data at
+all they show —.
+
 Each league has its own sessions: the page shows the selected league's, and **New session**
 only starts one in that league. A map belongs to the league selected when it started; maps
 from before leagues were recorded get the league of their loot snapshots, or else the league
@@ -349,7 +355,7 @@ are ringed, and a line lists the slots, new gems and passive points.
   while catching up on the log after a restart never trigger a snapshot (the website only has
   the build as it is now).
 - Each snapshot stores the website's item and passive-tree data, compressed. The tab shows a
-  level slider with the gear, gem links and passive counts at each level; **Snapshot now**
+  level slider with the gear, gem links and passive counts at each level; **Save build now**
   captures the current build on demand.
 - **Copy PoB code** copies the level's build as a Path of Building code: in PoB, open
   *Import/Export Build* and paste it under *Import from code*. The code holds the gear (with
@@ -458,8 +464,9 @@ selector. The sidebar switches between three tabs and stays visible from any tab
 - **Now:** the current map, elapsed time, level and deaths.
 - **Recent stats:** the last map's loot, your average per map (last 10), maps this session and
   your total value.
-- **Snapshot now**, and the status of prices and the last snapshot. Click either status line
-  to refresh it.
+- **Read stash now** (your inventory and watched tabs), and the status of prices and the last
+  snapshot. Click either status line to refresh it, or, while loot tracking is off, to set it
+  up. A banner on every page says why it's off (**Not now** hides it until the reason changes).
 
 **Session**
 - the last map, front and center: loot value, time, deaths, how it compares with your average

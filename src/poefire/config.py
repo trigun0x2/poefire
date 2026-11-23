@@ -106,6 +106,9 @@ class Config:
     # from level 80: a snapshot after this many hours without one, kept only if the build
     # changed (0 = off)
     build_stale_hours: int = 24
+    # a map started after a break this long (hours, no map in between) opens a new session;
+    # 0 = only "New session" does
+    session_break_hours: float = 2.0
     # take trade sales' payments out of map loot (reads the website's trade history: more
     # requests, and the trade site rate-limits hard), off by default
     trade_sales: bool = False

@@ -43,7 +43,7 @@ from poefire.pricing.service import PriceService
 from poefire.pricing.valuation import value_holdings
 from poefire.service import TrackerService
 from poefire.store import Store
-from poefire.tracker import Notice, RunStatus, TrackerState
+from poefire.tracker import Notice, Run, RunStatus, TrackerState
 from poefire.updater import (
     ReleaseGoneError,
     UpdateError,
@@ -258,6 +258,7 @@ class AppRuntime:
                 self.cfg.characters,
                 league=lambda: self.league,
             )
+            self.service.before_new_run = self._new_session_after_break
             self.service.handlers.append(self._dispatch)
             self.service.line_observers.append(self.campaign.handle)
             self.service.line_observers.append(self.builds.handle)
@@ -513,6 +514,24 @@ class AppRuntime:
             if live is not None and live.status is RunStatus.ACTIVE:
                 start = min(start, live.started_at)
             return self._store.add_session(start, self.league)
+
+    def _new_session_after_break(self, run: Run) -> None:
+        """A map started after a break of session_break_hours (no map of this league in
+        between) opens a new session, unless one was started during the break. Runs on the
+        tail thread, under its lock and transaction."""
+        hours = self.cfg.session_break_hours
+        if hours <= 0:
+            return
+        league = self.league
+        prev = self._store.latest_run_before(run.started_at, league)
+        if prev is None or run.started_at - prev.last_activity < timedelta(hours=hours):
+            return
+        current = sessions.spans(self._store, league)[-1]
+        if current.start is not None and current.start > prev.last_activity:
+            return  # "New session" was pressed during the break
+        log.info("new session: %s started after a break of %s", run.map_name,
+                 run.started_at - prev.last_activity)  # fmt: skip
+        self._store.add_session(run.started_at, league)
 
     def delete_session(self, session_id: int) -> None:
         """Delete a past session and its maps. Raises LookupError / ValueError."""

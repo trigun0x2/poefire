@@ -18,7 +18,7 @@ function bdStatus() {
   const el = $("bd-status");
   let text = "", cls = "hint";
   if (!d.enabled) { text = "Build snapshots are off (Settings → Builds)."; cls += " warn"; }
-  else if (!d.connected) { text = `Not connected to your account${d.reason ? `: ${d.reason}` : ""}. Snapshots use the connection set up for loot in Settings.`; cls += " warn"; }
+  else if (!d.connected) { text = `Not connected to your account${d.reason ? `. ${lootReason(d.reason)}` : ""}. Build snapshots use the account set up for loot in Settings → General.`; cls += " warn"; }
   else if (d.pending.length) text = `Waiting for a zone change to capture: ${d.pending.map((p) => `${p.character} level ${p.level}`).join(", ")}.`;
   else if (d.last_error) { text = `Last snapshot failed: ${d.last_error}`; cls += " bad"; }
   else text = "Snapshots are taken at levels 5 and 10, then every level from 15, at your next zone change after the level-up" +

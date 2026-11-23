@@ -17,9 +17,19 @@ const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximum
 function duration(sec) {
   if (sec == null) return "—";
   sec = Math.max(0, Math.floor(sec));
+  if (sec >= 86400) { // a day or more: 16d 13h
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600);
+    return h ? `${d}d ${h}h` : `${d}d`;
+  }
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
   const mm = String(m).padStart(2, "0"), ss = String(s).padStart(2, "0");
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+/** Why loot tracking is off, for the app (the server's text also names CLI commands). */
+function lootReason(reason) {
+  const r = String(reason || "").replace(/\s*\(or run `[^`]*`\)/g, "").replace(/;?\s*run `poefire-cli [^`]*`/g, "")
+    .replace(/^set account_name in config\.toml/, "enter your account name in Settings").trim();
+  return r ? r[0].toUpperCase() + r.slice(1) : "";
 }
 // Amounts of 200 chaos or more show in divines (at poe.ninja's rate), throughout the app.
 const DIVINE_FROM = 200;

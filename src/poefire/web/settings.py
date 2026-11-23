@@ -71,6 +71,7 @@ class SettingsIn(BaseModel):
     campaign_hotkey: str | None = None
     build_snapshots: bool | None = None
     build_stale_hours: int | None = Field(default=None, ge=0, le=24 * 30)
+    session_break_hours: float | None = Field(default=None, ge=0, le=24 * 7)
     trade_sales: bool | None = None
     league_autoswitch: bool | None = None
     loot_mode: Literal["per_map", "interval"] | None = None
@@ -182,6 +183,7 @@ def settings_json(rt: AppRuntime) -> dict[str, Any]:
         "campaign_hotkey": cfg.campaign_hotkey,
         "build_snapshots": cfg.build_snapshots,
         "build_stale_hours": cfg.build_stale_hours,
+        "session_break_hours": cfg.session_break_hours,
         "chat_commands": [
             {"key": c.key, "text": c.text} for c in gameinput.chat_commands(cfg.chat_commands)
         ],
@@ -401,6 +403,8 @@ def update_settings(rt: AppRuntime, body: SettingsIn) -> list[str]:
         changes["build_snapshots"] = body.build_snapshots
     if body.build_stale_hours is not None:
         changes["build_stale_hours"] = body.build_stale_hours
+    if body.session_break_hours is not None:
+        changes["session_break_hours"] = body.session_break_hours
     if body.trade_sales is not None:
         changes["trade_sales"] = body.trade_sales
     if body.league_autoswitch is not None:

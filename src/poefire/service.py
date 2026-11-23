@@ -19,6 +19,8 @@ from poefire.store import Store
 from poefire.tailer import LogTailer, TailLine, find_last_line_offset, head_fingerprint
 from poefire.tracker import (
     Notice,
+    NoticeKind,
+    Run,
     RunNotice,
     RunTracker,
     state_from_dict,
@@ -47,6 +49,8 @@ class TrackerService:
     ) -> None:
         self.store = store
         self.league = league  # the selected league: a new run is recorded in it
+        # called with each new run before it's saved (in the same transaction)
+        self.before_new_run: Callable[[Run], None] | None = None
         self.log_path = log_path
         self.rules = rules or ZoneRules()
         self.characters = tuple(characters)
@@ -162,6 +166,8 @@ class TrackerService:
     def _apply_notices(self, notices: list[Notice]) -> None:
         for n in notices:
             if isinstance(n, RunNotice):
+                if n.kind is NoticeKind.STARTED and self.before_new_run is not None:
+                    self.before_new_run(n.run)
                 self.store.upsert_run(n.run, self.league())
 
     def run_forever(self, stop: threading.Event, interval: float = 0.5) -> None:

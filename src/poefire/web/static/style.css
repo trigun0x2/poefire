@@ -149,6 +149,8 @@ main {
 .tile .sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile.hero { background: var(--accent-soft); }
 .tile.hero .value { color: var(--accent); }
+.tile.partial .value { color: var(--muted); }
+.tile.partial .sub { color: var(--warn); }
 
 /* --- table --- */
 .table-wrap { overflow: auto; max-height: 520px; }
@@ -319,6 +321,9 @@ th[aria-sort="descending"] .sort-ind::after { content: "▼"; }
   font-size: 13px; line-height: 1.45;
 }
 .banner .btn { margin-left: auto; }
+.banner .btn + .btn { margin-left: 0; }
+.banner a.btn { text-decoration: none; }
+.banner.setup { border-color: rgba(255, 122, 47, 0.45); background: var(--accent-soft); }
 .chip.bad { background: rgba(239, 93, 93, 0.15); color: var(--bad); }
 
 /* update available */

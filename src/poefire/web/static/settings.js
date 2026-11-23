@@ -67,6 +67,7 @@ async function loadSettings() {
   $("set-overlay-opacity-value").textContent = `${$("set-overlay-opacity").value}%`;
   $("set-build-snapshots").checked = s.build_snapshots;
   $("set-build-stale").value = String(s.build_stale_hours ?? 24);
+  $("set-session-break").value = String(s.session_break_hours ?? 2);
   renderShortcuts(s.chat_commands || [], s.search_strings || []);
   $("set-regex-hotkey").value = s.regex_hotkey || "";
   renderRegexes(s.regexes || [], s.regex_active || "");
@@ -76,7 +77,8 @@ async function loadSettings() {
   $("set-deaths").value = s.characters.join(", ");
   renderDeathNames();
   renderAccountPickers();
-  setStatus("set-save-status", s.loot.enabled ? "Loot tracking is on." : `Loot tracking is off: ${s.loot.reason}`, s.loot.enabled ? "ok" : "warn");
+  setStatus("set-save-status", "");
+  showLootState(s.loot);
 }
 
 const PRIVATE_RE = /\(PL\d+\)\s*$/;
@@ -241,7 +243,14 @@ async function checkAccount() {
 function showWarnings(r, okText) {
   const w = r.warnings || [];
   if (w.length) setStatus("set-save-status", `Saved. ${w.join(" ")}`, "warn");
-  else setStatus("set-save-status", r.loot.enabled ? okText : `${okText} Loot tracking is off: ${r.loot.reason}`, r.loot.enabled ? "ok" : "warn");
+  else setStatus("set-save-status", okText, "ok");
+  showLootState(r.loot);
+}
+
+/** Loot tracking on or off (and why), under Check connection. */
+function showLootState(loot) {
+  setStatus("set-check-result", loot.enabled ? "✓ Loot tracking is on." : `Loot tracking is off. ${lootReason(loot.reason)}.`,
+    loot.enabled ? "ok" : "warn");
 }
 
 $("set-log-use").addEventListener("click", () => { $("set-log").value = settings.log_path_detected; });
@@ -342,6 +351,7 @@ function settingsBody() {
     debug_logging: $("set-debug-logging").checked,
     build_snapshots: $("set-build-snapshots").checked,
     build_stale_hours: Math.max(0, Math.round(Number($("set-build-stale").value) || 0)),
+    session_break_hours: Math.min(168, Math.max(0, Number($("set-session-break").value) || 0)),
     update_channel: $("set-update-channel").value,
   };
 }
@@ -361,6 +371,7 @@ const SETTING_FIELDS = {
   overlay_move_hotkey: ["set-overlay-move", "Overlay move hotkey"],
   build_snapshots: ["set-build-snapshots", "Build snapshots"],
   build_stale_hours: ["set-build-stale", "Stale-level snapshots"],
+  session_break_hours: ["set-session-break", "New session after a break"],
   chat_commands: ["set-chat-rows", "Chat commands"], search_strings: ["set-search-rows", "Searches"],
   regexes: ["set-regex-rows", "Regexes"], regex_active: ["set-regex-rows", "Active regex"],
   regex_hotkey: ["set-regex-hotkey", "Regex hotkey"], update_channel: ["set-update-channel", "Update channel"],

@@ -30,7 +30,7 @@ function renderStatus() {
         : l.last ? `Snapshot ${timeOf(l.last.at)}${l.last.complete ? "" : " failed"}` : "Loot tracking on";
   $("loot-pill").title = expired
     ? "The website rejected your POESESSID. Click to paste a new one in Settings."
-    : !l.enabled ? `${l.reason} (click to open Settings)`
+    : !l.enabled ? `${lootReason(l.reason)}. Click to set it up.`
       : limited ? "pathofexile.com is limiting how often poefire may read your stash" : l.last?.error || "Take a snapshot now";
   $("rate-banner").hidden = !limited;
   if (limited) {
@@ -40,7 +40,13 @@ function renderStatus() {
         : "Reads of your inventory wait until then: a map you've left again by then has no loot data.</span>");
   }
   renderSessionBanner(l.session);
+  renderSetupBanner(l);
   renderLeagueBanners(s);
+  for (const id of ["side-snapshot", "ov-snapshot"]) {
+    const b = $(id);
+    if (b.textContent !== "Reading…") b.disabled = !l.enabled;
+    b.title = l.enabled ? "Read your inventory and watched stash tabs now" : "Loot tracking is off: set it up in Settings first";
+  }
   renderUpdate(s.update);
   $("last-empty").innerHTML = s.log_path
     ? "No map finished yet. Stats appear when you're back in your hideout."
@@ -224,6 +230,29 @@ function renderSessionBanner(h) {
     '<a class="btn primary" href="#settings/general">Update in Settings</a>';
 }
 
+const SETUP_DISMISS_KEY = "poefire.setupBannerDismissed";
+
+/** Loot tracking is off (and not because the cookie expired: that has its own banner): one
+ * banner that says why and leads to the fix, on every page but Settings. */
+function renderSetupBanner(l) {
+  const b = $("setup-banner");
+  const reason = lootReason(l.reason);
+  let dismissed = null;
+  try { dismissed = localStorage.getItem(SETUP_DISMISS_KEY); } catch { /* storage blocked */ }
+  const show = !l.enabled && !l.session?.expired && !location.hash.startsWith("#settings") && dismissed !== reason;
+  b.hidden = !show;
+  if (!show || b.dataset.key === reason) return;
+  b.dataset.key = reason;
+  b.innerHTML = `<span><b>Loot tracking is off.</b> ${esc(reason)}. Maps are still timed; their loot isn't counted.</span>` +
+    '<a class="btn primary" href="#settings/general">Set up loot tracking</a>' +
+    '<button type="button" class="btn" data-act="later">Not now</button>';
+}
+$("setup-banner").addEventListener("click", (e) => {
+  if (!e.target.closest("button[data-act=later]")) return;
+  try { localStorage.setItem(SETUP_DISMISS_KEY, $("setup-banner").dataset.key || ""); } catch { /* storage blocked */ }
+  $("setup-banner").hidden = true;
+});
+
 function renderSidebarStats() {
   const d = currentRuns || runsData;
   const m = d.last_map, r = d.recent;
@@ -272,9 +301,9 @@ function renderLastMap() {
     </li>`).join("");
 }
 
-function tile(label, value, sub = "", hero = false) {
-  return `<div class="tile${hero ? " hero" : ""}"><div class="label">${label}</div>` +
-    `<div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+function tile(label, value, sub = "", hero = false, partial = "") {
+  return `<div class="tile${hero ? " hero" : ""}${partial ? " partial" : ""}"${partial ? ` title="${esc(partial)}"` : ""}>` +
+    `<div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
 }
 
 /** The "every 10 minutes" mode: the session's net loot and maps, no per-map loot. */
@@ -331,21 +360,24 @@ function renderSession() {
     return;
   }
   const tracked = s.loot_tracked_runs;
-  const lootSub = tracked < s.runs ? `${tracked} of ${s.runs} runs with loot data` : "loot value";
+  // Loot numbers from under half the maps are shown dimmed, with how many they come from.
+  const none = !tracked, thin = tracked > 0 && tracked * 2 < s.runs;
+  const partial = thin ? `Only ${tracked} of ${s.runs} maps have loot data (loot tracking was off, or a read was missed): loot numbers come from those maps.` : "";
+  const unit = (v) => (v != null && otherUnit(v) ? `${otherUnit(v)} · ` : "");
+  const lootSub = tracked < s.runs ? `${tracked}/${s.runs} maps tracked` : "loot value";
   const recentSub = !r.maps ? "no finished maps yet"
-    : (otherUnit(r.avg_chaos) ? `${otherUnit(r.avg_chaos)} · ` : "") +
-      (r.maps < r.of || past ? `over ${r.maps} map${r.maps === 1 ? "" : "s"}` : `last ${r.of} maps`);
+    : unit(r.avg_chaos) + (r.maps < r.of || past ? `over ${r.maps} map${r.maps === 1 ? "" : "s"}` : `last ${r.of} maps`);
+  const noData = "no loot data";
   $("tiles").innerHTML = [
-    tile("Avg loot / map", r.maps ? money0(r.avg_chaos) : "—", recentSub, true),
+    tile("Avg loot / map", r.maps && !none ? money0(r.avg_chaos) : "—", none ? noData : recentSub, !none && !thin, partial),
     tile("Avg map time", r.maps ? duration(r.avg_seconds) : "—", r.maps ? `${nf1.format(r.avg_deaths)} deaths / map` : ""),
-    tile("Total loot", money0(s.chaos),
-      s.chaos == null || !otherUnit(s.chaos) ? lootSub : `${otherUnit(s.chaos)} · ${lootSub}`),
-    tile("Best run", s.best_run ? money0(s.best_run.chaos) : "—", s.best_run ? esc(s.best_run.map_name) : ""),
+    tile("Total loot", none ? "—" : money0(s.chaos), none ? noData : unit(s.chaos) + lootSub, false, partial),
+    tile("Best run", s.best_run ? money0(s.best_run.chaos) : "—", s.best_run ? esc(s.best_run.map_name) : none ? noData : "", false, partial),
     tile("Runs", s.runs, `avg ${duration(s.avg_run_seconds)}`),
     tile("Map time", duration(s.active_seconds), `${duration(s.wall_seconds)} played`),
     tile("Deaths", s.deaths, s.runs ? `${nf1.format(s.deaths / s.runs)} per run` : ""),
-    tile("Loot / hour", money0(s.chaos_per_hour),
-      (otherUnit(s.chaos_per_hour) ? `${otherUnit(s.chaos_per_hour)} · ` : "") + "with hideout time"),
+    tile("Loot / hour", none ? "—" : money0(s.chaos_per_hour),
+      none ? noData : unit(s.chaos_per_hour) + (thin ? `estimate from ${tracked} map${tracked === 1 ? "" : "s"}` : "with hideout time"), false, partial),
   ].join("");
 }
 
@@ -444,7 +476,8 @@ async function renderDetail() {
   $("detail-title").textContent = `Run loot · ${d.map_name}`;
   if (!d.loot_tracked) {
     $("detail").innerHTML = `<div class="empty">No loot data for this run. ${
-      status?.loot.enabled ? "Your inventory is read as a map starts and when you're back in your hideout; one of those reads is missing (you left again before it could be made, or the website didn't answer)." : esc(status?.loot.reason || "")}</div>`;
+      status?.loot.enabled ? "Your inventory is read as a map starts and when you're back in your hideout; one of those reads is missing (you left again before it could be made, or the website didn't answer)."
+        : 'Loot tracking is off. <a href="#settings/general">Set it up</a> to count the loot of your next maps.'}</div>`;
     return;
   }
   const before = d.before.items.length

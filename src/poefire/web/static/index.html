@@ -68,7 +68,7 @@
         <div class="side-row"><span>Maps this session</span><b id="side-maps">—</b></div>
         <div class="side-row"><span>Total value</span><b id="side-value">—</b></div>
       </section>
-      <button type="button" class="btn side-snap" id="side-snapshot">Snapshot now</button>
+      <button type="button" class="btn side-snap" id="side-snapshot" title="Read your inventory and watched stash tabs now">Read stash now</button>
 
       <div class="nav-spacer"></div>
       <div class="side-status">
@@ -91,6 +91,7 @@
     <div class="content" id="content">
       <div class="banner update" id="update-banner" hidden role="status"></div>
       <div class="banner" id="session-banner" hidden role="alert"></div>
+      <div class="banner setup" id="setup-banner" hidden role="status"></div>
       <div class="banner league" id="league-banner" hidden role="status"></div>
       <div class="banner" id="tabs-banner" hidden role="status"></div>
       <div class="banner" id="rate-banner" hidden role="status"></div>
@@ -124,7 +125,7 @@
     <section class="card ov-items">
       <div class="ov-items-head">
         <div class="card-title">Most valuable items <span class="muted" id="ov-asof"></span></div>
-        <button type="button" class="btn" id="ov-snapshot">Snapshot now</button>
+        <button type="button" class="btn" id="ov-snapshot" title="Read your inventory and watched stash tabs now">Read stash now</button>
       </div>
       <div class="tab-filter" id="ov-tabs" role="group" aria-label="Filter by tab"></div>
       <div class="table-wrap">
@@ -247,7 +248,7 @@
           </div>
           <div class="bd-ticks" id="bd-ticks" aria-hidden="true"></div>
         </div>
-        <button type="button" class="btn" id="bd-now" title="Fetch this character's build as it is now">Snapshot now</button>
+        <button type="button" class="btn" id="bd-now" title="Save this character's gear, gems and passives as they are now">Save build now</button>
       </div>
       <div class="hint" id="bd-status"></div>
     </section>
@@ -334,6 +335,15 @@
           <button type="button" class="btn" id="set-check">Check connection</button>
           <span class="hint" id="set-check-result"></span>
         </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Sessions</div>
+        <label class="field">
+          <span>Start a new session when you map again after a break of (hours)</span>
+          <input id="set-session-break" class="hours-input" type="number" min="0" max="168" step="0.5" inputmode="decimal">
+        </label>
+        <div class="hint">So the Session page and loot per hour cover one sitting. 0 = only the New session button starts one.</div>
       </section>
 
       <section class="card">
